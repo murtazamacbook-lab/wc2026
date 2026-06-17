@@ -42,7 +42,8 @@
     // ── COMPETITION SETTINGS ─────────────────────────────────────────
     window.__COMP_NAME  = 'WC26 Predictions Pool';   // Change to your competition name
     window.__COMP_ID    = 'wc26';                     // Short ID — Firestore namespace
-    window.__ADMIN_PW   = 'admin2026';                // Admin password (change this!)
+    window.__ADMIN_PW        = 'admin2026';   // Super-admin password (change this!)
+    window.__SUBADMIN_PW    = 'subadmin2026'; // Sub-admin password (change this!)
 
     // ── STEP 2: DEPLOY ───────────────────────────────────────────────
     // Option A: Vercel (free) — go to vercel.com, drag-drop this folder
@@ -65,7 +66,8 @@
   const FB_ON = window.__fbConfigured;
   const COMP_NAME = window.__COMP_NAME || 'WC26 Predictions Pool';
   const NS        = window.__COMP_ID   || 'wc26';
-  const ADMIN_PW  = window.__ADMIN_PW  || 'admin2026';
+  const DEFAULT_SUPER_PW  = window.__ADMIN_PW     || 'admin2026';
+  const DEFAULT_SUB_PW    = window.__SUBADMIN_PW  || 'subadmin2026';
 
   // ── STORAGE (Firebase + localStorage fallback) ──────────────────
   const storage = {
@@ -190,6 +192,23 @@
     'Qatar':55,'Iraq':57,'South Africa':60,'Saudi Arabia':61,'Jordan':63,
     'Bosnia & Herz.':65,'Cape Verde':69,'Ghana':74,'Curacao':82,'Haiti':83,'New Zealand':85,
   };
+
+  // Maps FIFA WC 2026 Live Data API team names → app team names
+  const API_HOST = 'fifa-world-cup-2026-live-data.p.rapidapi.com';
+  const API_TEAM_MAP = {
+    'Korea Republic':'South Korea','USA':'United States','United States':'United States',
+    "Côte d'Ivoire":'Ivory Coast',"Cote d'Ivoire":'Ivory Coast','Ivory Coast':'Ivory Coast',
+    'Cabo Verde':'Cape Verde','Cape Verde':'Cape Verde',
+    'Türkiye':'Turkiye','Turkey':'Turkiye','Turkiye':'Turkiye',
+    'Bosnia and Herzegovina':'Bosnia & Herz.','Bosnia':'Bosnia & Herz.','Bosnia & Herz.':'Bosnia & Herz.',
+    'Congo DR':'DR Congo','DR Congo':'DR Congo','Democratic Republic of Congo':'DR Congo',
+    'Iran':'Iran','IR Iran':'Iran','Islamic Republic of Iran':'Iran',
+    'Curaçao':'Curacao','Curacao':'Curacao',
+    'Czechia':'Czech Republic','Czech Republic':'Czech Republic',
+    'South Korea':'South Korea','South Africa':'South Africa',
+    'Saudi Arabia':'Saudi Arabia','New Zealand':'New Zealand',
+  };
+  const normTeam = n => n ? (API_TEAM_MAP[n] || n) : n;
 
   const getUnderdog = (h, a) => {
     const hr=FIFA_RANKINGS[h], ar=FIFA_RANKINGS[a];
@@ -1143,11 +1162,21 @@
   const RulesView = () => (
     <div>
       <SectionHeader kicker="How it works" title="Rules & Scoring"/>
+
+      {/* Quick summary */}
+      <div className="card" style={{padding:18,marginTop:14,background:'linear-gradient(135deg,rgba(159,27,27,.04) 0%,var(--paper) 60%)',borderColor:'var(--burgundy)'}}>
+        <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>📋 Quick Summary</h3>
+        <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:0}}>
+          Predict the score of every group stage match, then pick your knockout bracket. Points are awarded for correct goals, results, and exact scores. A <strong>Joker multiplier</strong> can double or triple your points on chosen matches. Bonus picks (Winner, Runner-Up, 3rd Place, Golden Boot) are worth 10 pts each. The player with the most points at the end wins! 🏆
+        </p>
+      </div>
+
+      {/* Scoring tables */}
       {[
         {title:'Per Match — Group Stage',rows:[['Correct home goals','+1'],['Correct away goals','+1'],['Correct result (win/loss)','+1'],['Correct draw result','+2'],['Exact score bonus','+1'],['Underdog win (team ranked 20+ spots lower wins)','+2']]},
-        {title:'Per Match — Knockout',rows:[['Correct home goals','+1'],['Correct away goals','+1'],['Correct result','+1 / +2 draw'],['Exact score bonus','+1']]},
-        {title:'Bracket Team Bonuses (per team per round)',rows:[['Round of 32','+4'],['Round of 16','+4'],['Quarter-Finals','+6'],['Semi-Finals','+8'],['Final','+10'],['3rd Place','+4'],['Half points if team reaches round but in wrong position','÷2']]},
-        {title:'Bonus Picks',rows:[['World Cup Winner (team)','+10'],['Runner-Up (team)','+10'],['3rd Place (team)','+10'],['Golden Boot (player name)','+10']]},
+        {title:'Per Match — Knockout Stage',rows:[['Correct home goals','+1'],['Correct away goals','+1'],['Correct result (win/loss)','+1'],['Correct draw result','+2'],['Exact score bonus','+1']]},
+        {title:'Bracket Bonuses — per team correctly placed per round',rows:[['Round of 32 (correct team in this round)','+4'],['Round of 16','+4'],['Quarter-Finals','+6'],['Semi-Finals','+8'],['Final','+10'],['3rd Place Play-off','+4'],['Team reaches round but picked on wrong side of bracket','÷2 (half points)']]},
+        {title:'Bonus Picks — 10 pts each',rows:[['World Cup Winner (team)','+10'],['Runner-Up (team)','+10'],['3rd Place (team)','+10'],['Golden Boot (player name)','+10'],['Tie-break: time of first goal in the Final (MM:SS)','Breaks ties only']]},
       ].map(({title,rows})=>(
         <div key={title} className="card" style={{padding:18,marginTop:14}}>
           <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 12px'}}>{title}</h3>
@@ -1156,27 +1185,64 @@
               {rows.map(([label,pts])=>(
                 <tr key={label} style={{borderBottom:'1px solid var(--line)'}}>
                   <td style={{padding:'9px 0',color:'var(--ink)'}}>{label}</td>
-                  <td style={{padding:'9px 0',textAlign:'right',fontWeight:700,color:'var(--forest)'}} className="mono">{pts}</td>
+                  <td style={{padding:'9px 0',textAlign:'right',fontWeight:700,color:'var(--forest)',whiteSpace:'nowrap'}} className="mono">{pts}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ))}
-      <div className="card" style={{padding:18,marginTop:14}}>
-        <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>🃏 Joker Multipliers</h3>
-        <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 10px'}}>Pick one Joker Team and one Joker Group at the top of the Group Stage tab. Multiplies points from group stage matches only.</p>
-        <table style={{width:'100%',fontSize:14,borderCollapse:'collapse'}}>
-          <tbody>
-            {[['Match involves Joker Team','2×'],['Match is in Joker Group','2×'],['Joker Team match AND in Joker Group (team must be in that group)','3×']].map(([l,p])=>(
-              <tr key={l} style={{borderBottom:'1px solid var(--line)'}}><td style={{padding:'9px 0'}}>{l}</td><td style={{padding:'9px 0',textAlign:'right',fontWeight:800,color:'var(--amber)'}} className="mono">{p}</td></tr>
-            ))}
-          </tbody>
-        </table>
+
+      {/* Joker — detailed */}
+      <div className="card" style={{padding:18,marginTop:14,borderColor:'var(--amber)',background:'linear-gradient(135deg,rgba(214,137,42,.06) 0%,var(--paper) 60%)'}}>
+        <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 6px'}}>🃏 Joker Picks — How They Work</h3>
+        <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 14px',lineHeight:1.7}}>
+          Before the tournament starts, pick one <strong>Joker Team</strong> and one <strong>Joker Group</strong>. These multiply your points for group stage matches only — no effect on knockouts.
+        </p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:10,marginBottom:16}}>
+          {[
+            {label:'Normal match',sub:'No connection to your jokers',mult:'1×',color:'var(--ink-soft)',bg:'var(--cream2)'},
+            {label:'Joker Team match',sub:'Your picked team is playing',mult:'2×',color:'var(--amber)',bg:'rgba(214,137,42,.1)'},
+            {label:'Joker Group match',sub:'Match is in your picked group',mult:'2×',color:'var(--amber)',bg:'rgba(214,137,42,.1)'},
+            {label:'Joker Team + Group',sub:'Team plays in that group (must match)',mult:'3×',color:'var(--burgundy)',bg:'rgba(159,27,27,.08)'},
+          ].map(({label,sub,mult,color,bg})=>(
+            <div key={label} style={{padding:'12px 14px',borderRadius:6,background:bg,border:`1px solid ${color}30`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:13,color:'var(--ink)'}}>{label}</div>
+                <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:2}}>{sub}</div>
+              </div>
+              <div style={{fontFamily:'JetBrains Mono,monospace',fontSize:22,fontWeight:800,color,flexShrink:0}}>{mult}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:'var(--cream2)',borderRadius:6,padding:'12px 14px',marginBottom:12}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>Example:</div>
+          <p style={{fontSize:13,margin:'0 0 6px',lineHeight:1.7}}>You pick <strong>Brazil 🇧🇷</strong> as Joker Team and <strong>Group C</strong> as Joker Group. (Brazil is in Group C.)</p>
+          <ul style={{fontSize:13,margin:0,padding:'0 0 0 18px',lineHeight:2,color:'var(--ink)'}}>
+            <li><strong>Brazil vs Morocco</strong> (Group C) → <span style={{fontWeight:800,color:'var(--burgundy)'}}>3× points</span> — team match AND group match</li>
+            <li><strong>Brazil vs Haiti</strong> (Group C) → <span style={{fontWeight:800,color:'var(--burgundy)'}}>3× points</span></li>
+            <li><strong>Morocco vs Scotland</strong> (Group C, no Joker Team) → <span style={{fontWeight:800,color:'var(--amber)'}}>2× points</span></li>
+            <li><strong>Germany vs Curaçao</strong> (Group E) → <span style={{fontWeight:500,color:'var(--ink-soft)'}}>1× normal points</span></li>
+          </ul>
+        </div>
+        <div style={{padding:'10px 14px',background:'rgba(159,27,27,.06)',border:'1px solid var(--burgundy)',borderRadius:6}}>
+          <div style={{fontWeight:700,fontSize:12,color:'var(--burgundy)',marginBottom:3}}>💡 Strategic Tip</div>
+          <div style={{fontSize:12,color:'var(--ink)',lineHeight:1.6}}>Pick a Joker Team you're confident about <em>and</em> set your Joker Group to their group — you'll get 3× on all their matches instead of just 2×.</div>
+        </div>
       </div>
+
+      {/* Bracket logic */}
       <div className="card" style={{padding:18,marginTop:14}}>
-        <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>Bracket Logic</h3>
-        <p style={{fontSize:13,color:'var(--ink-soft)',margin:0}}>The 48-team format has top 2 from each group plus 8 best 3rd-placed teams advancing to a Round of 32. The bracket follows FIFA's official R32 placeholder rules. All your KO predictions auto-populate from your group stage scores.</p>
+        <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>🏟 Bracket Logic</h3>
+        <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:'0 0 8px'}}>The 2026 World Cup has <strong>48 teams</strong>. Top 2 from each of 12 groups plus the 8 best 3rd-placed teams advance to the <strong>Round of 32</strong>.</p>
+        <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:'0 0 8px'}}>Your knockout bracket <strong>auto-populates</strong> from your group stage score predictions — you don't pick teams for the bracket manually. Instead, you predict the <em>scores</em> in each KO match once the teams are known.</p>
+        <p style={{fontSize:13,color:'var(--ink-soft)',lineHeight:1.7,margin:0}}>Bracket placement bonuses reward you for correctly predicting which teams reach each round, even if you have them on the wrong side of the bracket (half points).</p>
+      </div>
+
+      {/* Tiebreak */}
+      <div className="card" style={{padding:18,marginTop:14}}>
+        <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>⏱ Tie-Break Rule</h3>
+        <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:0}}>If two or more players finish with the same total points, the tie is broken by whose <strong>time of first goal in the Final</strong> (MM:SS) is closest to the actual time. Set this in the Bonus Picks tab.</p>
       </div>
     </div>
   );
@@ -1249,12 +1315,167 @@
   };
 
   // ── ADMIN VIEW ───────────────────────────────────────────────────
-  const AdminView = ({results,onSave,config,setConfig,participants,setParticipants,userPins,setUserPins,allPredictions,setAllPredictions}) => {
+  const AdminView = ({results,onSave,config,setConfig,participants,setParticipants,userPins,setUserPins,allPredictions,setAllPredictions,adminRole,adminPws,saveAdminPws}) => {
+    const isSuperAdmin=adminRole==='superadmin';
+    const isSubAdmin=adminRole==='subadmin';
     const[section,setSection]=useState('group');
+    const[newPwFields,setNewPwFields]=useState({super:'',superConfirm:'',sub:'',subConfirm:''});
     const[openGroup,setOpenGroup]=useState('A');
     const[newName,setNewName]=useState('');
     const[newPin,setNewPin]=useState('');
     const[resetPins,setResetPins]=useState({});
+    const[renameTarget,setRenameTarget]=useState(null); // name being renamed
+    const[renameValue,setRenameValue]=useState('');
+    const[syncKey,setSyncKey]=useState(()=>{ try{return localStorage.getItem('wc26_synckey')||'';}catch{return '';} });
+    const[syncing,setSyncing]=useState(false);
+    const[syncLog,setSyncLog]=useState('');
+    const[syncPreview,setSyncPreview]=useState(null);
+    const[liveStandings,setLiveStandings]=useState(null);
+    const[standingsLoading,setStandingsLoading]=useState(false);
+
+    const handleFetchStandings=async()=>{
+      if(!syncKey.trim()){alert('Paste your API key first.');return;}
+      setStandingsLoading(true);setLiveStandings(null);
+      try{
+        localStorage.setItem('wc26_synckey',syncKey.trim());
+        const hdrs={'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST};
+        // First try /standings without params — may return all groups
+        const r=await fetch('https://'+API_HOST+'/standings',{headers:hdrs});
+        const data=await r.json();
+        if(data.status==='error'||data.error) throw new Error(data.message||data.error||'API error');
+        let groups=data?.data?.groups||data?.data||data?.groups||{};
+        // Guard: groups must be an object keyed by group name with array values
+        if(Array.isArray(groups)) groups={};
+        const isGrouped=Object.values(groups).every(v=>Array.isArray(v));
+        if(!isGrouped) groups={};
+        // Check if all groups have real data (points sum > 0 across all groups)
+        const totalPts=Object.values(groups).flat().reduce((s,t)=>s+(t.points||0),0);
+        if(totalPts===0||Object.keys(groups).length<2){
+          // Fallback: fetch each group individually
+          setSyncLog('⏳ Fetching each group individually (A–L)…');
+          const allGroups={};
+          const letters=['A','B','C','D','E','F','G','H','I','J','K','L'];
+          for(const letter of letters){
+            try{
+              const gr=await fetch('https://'+API_HOST+'/standings?group='+letter,{headers:hdrs});
+              const gd=await gr.json();
+              const gArr=gd?.data?.groups?.['Group '+letter]
+                ||gd?.data?.['Group '+letter]
+                ||gd?.data
+                ||gd?.groups?.['Group '+letter]
+                ||null;
+              if(gArr&&Array.isArray(gArr)&&gArr.length>0){
+                allGroups['Group '+letter]=gArr;
+              }
+            }catch(e2){}
+          }
+          if(Object.keys(allGroups).length>0) groups=allGroups;
+        }
+        setLiveStandings(groups);
+      }catch(e){alert('Standings fetch failed: '+e.message);}
+      setStandingsLoading(false);
+    };
+
+    const handleSync=async(confirm=false)=>{
+      if(confirm&&syncPreview){
+        await onSave({...results,group:syncPreview.newGroupResults,ko:syncPreview.newKoResults});
+        const ok=syncPreview.log.filter(l=>l.startsWith('✅')).length;
+        setSyncLog('✅ Done! '+ok+' results imported.\n\n'+syncPreview.log.join('\n'));
+        setSyncPreview(null); return;
+      }
+      if(!syncKey.trim()){alert('Paste your API key first.');return;}
+      setSyncing(true);setSyncLog('⏳ Finding the right endpoint…');setSyncPreview(null);
+      try{
+        localStorage.setItem('wc26_synckey',syncKey.trim());
+        const hdrs={'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST};
+        const ENDPOINTS=['/results','/fixtures','/matches','/group-results','/group-matches','/scores','/games','/all-matches'];
+        let all=null,usedEndpoint='';
+        for(const ep of ENDPOINTS){
+          setSyncLog('⏳ Trying '+ep+'…');
+          try{
+            const r=await fetch('https://'+API_HOST+ep,{headers:hdrs});
+            const d=await r.json();
+            if(d.message&&d.message.includes('does not exist')) continue;
+            if(d.status==='error'||d.error) continue;
+            // Flatten whatever shape the API returns, tagging each match with its group key
+            const flattenGrouped=(obj)=>{
+              if(!obj) return [];
+              if(Array.isArray(obj)) return obj;
+              const result=[];
+              Object.entries(obj).forEach(([k,v])=>{
+                if(Array.isArray(v)) v.forEach(m=>result.push({...m,_groupKey:k}));
+              });
+              return result;
+            };
+            // Try all candidate paths and pick the one with the MOST records
+            const candidates=[
+              d?.data?.groups, d?.data?.matches, d?.data?.results, d?.data,
+              d?.groups, d?.matches, d?.results, d?.fixtures, d?.games,
+            ];
+            let best=[];
+            for(const c of candidates){
+              if(!c) continue;
+              const flat=flattenGrouped(c);
+              if(flat.length>best.length) best=flat;
+            }
+            if(best.length>0){all=best;usedEndpoint=ep;break;}
+          }catch(e2){}
+        }
+        if(!all){
+          const r=await fetch('https://'+API_HOST+'/results',{headers:hdrs});
+          const d=await r.json();
+          setSyncLog('❌ Could not find a matches endpoint.\nTried: '+ENDPOINTS.join(', ')+'\n\nRaw /results response:\n'+JSON.stringify(d).slice(0,500)+'\n\nLook at the Endpoints tab on rapidapi.com for the correct path.');
+          setSyncing(false);return;
+        }
+        const DONE=['ft','aet','pen','finished','completed','full-time','full time'];
+        // Also treat a match as finished if it has scores even without a clear status
+        const finished=all.filter(m=>{
+          const s=(m.status||m.matchStatus||m.state||'').toLowerCase();
+          const hasScore=(m.homeScore??m.home_score??m.goalsHome??m.homeGoals)!=null;
+          return DONE.some(d=>s.includes(d))||hasScore;
+        });
+        const groupBreakdown=Object.entries(all.reduce((acc,m)=>{const g=m._groupKey||m.group||'?';acc[g]=(acc[g]||0)+1;return acc;},{})).map(([g,n])=>g+':'+n).join(', ');
+        setSyncLog('📡 Endpoint '+usedEndpoint+': '+all.length+' total ('+groupBreakdown+'), '+finished.length+' finished. Mapping…');
+        if(finished.length===0&&all.length>0){
+          setSyncLog('⚠️ Found '+all.length+' matches but 0 finished.\nSample: '+JSON.stringify(all[0]).slice(0,300)+'\nStatuses: '+[...new Set(all.map(m=>m.status||m.matchStatus||m.state||'?'))].join(', '));
+          setSyncing(false);return;
+        }
+        const log=[],newGroupResults={...results.group},newKoResults={...results.ko};
+        finished.forEach(f=>{
+          const apiH=f.home||f.homeTeam||f.team_home||f.homeName||f.home_team;
+          const apiA=f.away||f.awayTeam||f.team_away||f.awayName||f.away_team;
+          const hG=f.homeScore??f.home_score??f.score_home??f.goals_home??f.goalsHome??f.homeGoals;
+          const aG=f.awayScore??f.away_score??f.score_away??f.goals_away??f.goalsAway??f.awayGoals;
+          const home=normTeam(apiH),away=normTeam(apiA);
+          if(hG==null||hG===''||aG==null||aG===''){log.push('⚠️ No score: '+apiH+' vs '+apiA+' (keys:'+Object.keys(f).join(',')+')');return;}
+          const roundRaw=(f.round||f.stage||f.group||f.matchday||'').toLowerCase();
+          const isPen=(f.status||f.matchStatus||'').toLowerCase().includes('pen');
+          const pkHome=f.penaltyHome??f.penalty_home??f.homePenalty;
+          const pkAway=f.penaltyAway??f.penalty_away??f.awayPenalty;
+          const isGroup=!!(f._groupKey)||roundRaw.includes('group')||!!(f.group)||roundRaw.includes('matchday')||!!(roundRaw.match(/md\s*\d/));
+          if(isGroup){
+            const m=GROUP_MATCHES.find(m=>(m.home===home&&m.away===away)||(m.home===away&&m.away===home));
+            if(m){const swap=m.home===away;newGroupResults[m.id]={h:String(swap?aG:hG),a:String(swap?hG:aG)};log.push('✅ [Group '+m.group+'] '+m.home+' '+(swap?aG:hG)+'–'+(swap?hG:aG)+' '+m.away);
+            }else log.push('⚠️ Unmatched group: "'+apiH+'"→'+home+' vs "'+apiA+'"→'+away);
+          }else{
+            let matched=false;
+            for(let mId=73;mId<=104;mId++){
+              const m=bracket[mId];if(!m?.home||!m?.away) continue;
+              if((m.home===home&&m.away===away)||(m.home===away&&m.away===home)){
+                const swap=m.home===away,pk=isPen?(pkHome>pkAway?home:away):null;
+                newKoResults[mId]={h:String(swap?aG:hG),a:String(swap?hG:aG),homeTeam:m.home,awayTeam:m.away,pkWinner:pk||undefined};
+                log.push('✅ [KO M'+mId+'] '+m.home+' '+(swap?aG:hG)+'–'+(swap?hG:aG)+' '+m.away+(pk?' (PK:'+pk+')':''));
+                matched=true;break;
+              }
+            }
+            if(!matched) log.push('⚠️ Unmatched KO: "'+apiH+'"→'+home+' vs "'+apiA+'"→'+away);
+          }
+        });
+        setSyncPreview({newGroupResults,newKoResults,log});
+        setSyncLog('Preview ready — '+log.filter(l=>l.startsWith('✅')).length+'/'+finished.length+' matched via '+usedEndpoint+'.');
+      }catch(e){setSyncLog('❌ '+e.message);}
+      setSyncing(false);
+    };
 
     const handleAddUser=async()=>{
       const n=newName.trim();
@@ -1279,6 +1500,27 @@
       await storage.setJSON('pins',npins,true);
       setResetPins(p=>({...p,[name]:''}));alert(`PIN reset for ${name}.`);
     };
+    const handleRenameUser=async(oldName)=>{
+      const newN=renameValue.trim();
+      if(!newN){alert('Enter a new name.');return;}
+      if(newN===oldName){setRenameTarget(null);return;}
+      if(participants.includes(newN)){alert('That name already exists.');return;}
+      // Update participants list
+      const np=participants.map(p=>p===oldName?newN:p);
+      // Move pin
+      const npins={...userPins,[newN]:userPins[oldName]};delete npins[oldName];
+      // Move predictions
+      const oldPreds=await storage.getJSON(`pred-${oldName}`,true);
+      if(oldPreds) await storage.setJSON(`pred-${newN}`,oldPreds,true);
+      // Update allPredictions
+      const na={...allPredictions};
+      if(na[oldName]){na[newN]=na[oldName];delete na[oldName];}
+      setParticipants(np);setUserPins(npins);setAllPredictions(na);
+      await storage.setJSON('participants',np,true);
+      await storage.setJSON('pins',npins,true);
+      setRenameTarget(null);setRenameValue('');
+      alert(`Renamed "${oldName}" → "${newN}"`);
+    };
     const scores=useMemo(()=>participants.map(p=>{const s=computeUserScore(allPredictions[p]||{},results.group||{},results.ko||{},results.bonus||{});return{name:p,total:s.total,groupPts:s.groupPoints,koPts:s.koPoints+s.bracketPoints,bonusPts:s.bonusPoints};}).sort((a,b)=>b.total-a.total),[participants,allPredictions,results]);
     const setGroupResult=(mId,side,val)=>{
       if(val!==''&&(isNaN(parseInt(val))||parseInt(val)<0||parseInt(val)>20)) return;
@@ -1297,9 +1539,16 @@
     const koRounds=[{ids:range(73,88),label:'Round of 32'},{ids:range(89,96),label:'Round of 16'},{ids:range(97,100),label:'Quarter-Finals'},{ids:[101,102],label:'Semi-Finals'},{ids:[103],label:'3rd Place'},{ids:[104],label:'Final'}];
     return(
       <div>
-        <SectionHeader kicker="Admin" title="Admin Console" subtitle="Enter actual results to drive scoring and leaderboard."/>
+        <SectionHeader kicker={isSuperAdmin?'👑 Super Admin':'🔧 Sub Admin'} title="Admin Console" subtitle={isSuperAdmin?'Full access — results, users, sync, settings.':'Limited access — enter results only.'}/>
         <div style={{display:'flex',gap:4,marginTop:16,flexWrap:'wrap'}}>
-          {[['group','Group Results'],['ko','Knockout Results'],['bonus','Bonus Results'],['users',`Users (${participants.length})`],['settings','Settings']].map(([k,l])=>(
+          {[
+            ['group','Group Results',true],
+            ['ko','Knockout Results',true],
+            ['bonus','Bonus Results',true],
+            ['sync','🔄 Auto-Sync',true],
+            ['users',`Users (${participants.length})`,isSuperAdmin],
+            ['settings','Settings',isSuperAdmin],
+          ].filter(([,, allowed])=>allowed).map(([k,l])=>(
             <button key={k} className="tab-btn" style={{padding:'6px 14px',borderRadius:4,border:'1px solid var(--line)',background:section===k?'var(--ink)':'transparent',color:section===k?'var(--cream)':'var(--ink)',fontSize:12,fontWeight:600}} onClick={()=>setSection(k)}>{l}</button>
           ))}
         </div>
@@ -1410,6 +1659,124 @@
             </div>
           </div>
         )}
+        {section==='sync'&&(
+          <div style={{marginTop:16,maxWidth:640}}>
+            {/* How to get key */}
+            <div className="card" style={{padding:18,marginBottom:14,background:'rgba(214,137,42,.06)',borderColor:'var(--amber)'}}>
+              <div className="display" style={{fontWeight:700,fontSize:16,marginBottom:10}}>How to set up (free, 2 min)</div>
+              <ol style={{fontSize:13,margin:0,padding:'0 0 0 18px',lineHeight:2,color:'var(--ink)'}}>
+                <li>Go to <a href="https://rapidapi.com/search/fifa-world-cup-2026-live-data" target="_blank">rapidapi.com</a> → search <strong>"FIFA World Cup 2026 Live Data"</strong></li>
+                <li>Subscribe (free tier available) → go to <strong>Endpoints</strong> tab</li>
+                <li>Copy your <strong>X-RapidAPI-Key</strong> from the code snippet on the right</li>
+                <li>Paste below → click <strong>Fetch & Preview</strong> to import results</li>
+              </ol>
+            </div>
+            {/* API Key input */}
+            <div className="card" style={{padding:18,marginBottom:14}}>
+              <div className="micro-caps" style={{marginBottom:6}}>Your RapidAPI Key</div>
+              <div style={{display:'flex',gap:8}}>
+                <input type="password" value={syncKey} onChange={e=>setSyncKey(e.target.value)} placeholder="Paste key here…" style={{flex:1,padding:'10px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'JetBrains Mono,monospace',background:'white',color:'var(--ink)'}}/>
+                <button className="btn" onClick={()=>handleSync(false)} disabled={syncing||!syncKey.trim()} style={{whiteSpace:'nowrap',background:'var(--forest)'}}>
+                  {syncing?'⏳ Fetching…':'🔄 Fetch & Preview'}
+                </button>
+              </div>
+              <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:6}}>Key is saved in your browser only — never sent anywhere except api-football.com.</div>
+            </div>
+            {/* Preview */}
+            {syncPreview&&(
+              <div className="card fadein" style={{padding:18,marginBottom:14,borderColor:'var(--forest)'}}>
+                <div className="display" style={{fontWeight:700,fontSize:16,marginBottom:4,color:'var(--forest)'}}>Preview — {syncPreview.log.filter(l=>l.startsWith('✅')).length} results ready to import</div>
+                <div className="scrollbar" style={{maxHeight:200,overflowY:'auto',background:'var(--cream2)',borderRadius:4,padding:'10px 12px',marginBottom:12,fontFamily:'JetBrains Mono,monospace',fontSize:11,lineHeight:1.8,whiteSpace:'pre-wrap'}}>
+                  {syncPreview.log.join('\n')||'No matches found.'}
+                </div>
+                <div style={{display:'flex',gap:8}}>
+                  <button className="btn btn-green" onClick={()=>handleSync(true)} disabled={syncing}>✅ Import All Results</button>
+                  <button className="btn btn-ghost" onClick={()=>setSyncPreview(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {/* Log */}
+            {syncLog&&!syncPreview&&(
+              <div className="card" style={{padding:14,background:'var(--cream2)'}}>
+                <div style={{fontFamily:'JetBrains Mono,monospace',fontSize:12,lineHeight:1.7,whiteSpace:'pre-wrap',color:syncLog.startsWith('❌')?'var(--burgundy)':syncLog.startsWith('✅')?'var(--forest)':'var(--ink)'}}>{syncLog}</div>
+              </div>
+            )}
+            <div style={{marginTop:12,fontSize:12,color:'var(--ink-soft)'}}>
+              <strong>Tip:</strong> Run this once after every matchday. The free plan (100 req/day) is more than enough — each sync uses 1 request.
+            </div>
+            {/* ── LIVE STANDINGS ───────────────────────────── */}
+            <div style={{marginTop:24}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                <div>
+                  <div className="display" style={{fontSize:20,fontWeight:700}}>📊 Live FIFA Standings</div>
+                  <div style={{fontSize:12,color:'var(--ink-soft)'}}>Fetched directly from api-football.com — read only, does not import results.</div>
+                </div>
+                <button className="btn" onClick={handleFetchStandings} disabled={standingsLoading||!syncKey.trim()} style={{background:'var(--burgundy)',whiteSpace:'nowrap'}}>
+                  {standingsLoading?'⏳ Loading…':'📡 Fetch Standings'}
+                </button>
+              </div>
+              {!liveStandings&&!standingsLoading&&(
+                <div className="card" style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic'}}>
+                  Enter your API key above and click Fetch Standings.
+                </div>
+              )}
+              {standingsLoading&&(
+                <div className="card" style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13}}>⏳ Fetching from API…</div>
+              )}
+              {liveStandings&&(
+                <>
+                <div style={{fontSize:11,color:'var(--ink-soft)',marginBottom:8,fontFamily:'JetBrains Mono,monospace',padding:'6px 10px',background:'var(--cream2)',borderRadius:4}}>
+                  Sample fields from API: {Object.keys(Object.values(liveStandings)[0]?.[0]||{}).join(', ')||'none'}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:12}}>
+                  {Object.entries(liveStandings).map(([groupName,groupArr])=>{
+                    const letter=groupName.replace('Group ','');
+                    return(
+                      <div key={groupName} className="card" style={{overflow:'hidden'}}>
+                        <div style={{padding:'8px 14px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'flex',alignItems:'center',gap:10}}>
+                          <span className="group-letter" style={{fontSize:28,lineHeight:1}}>{letter}</span>
+                          <span style={{fontWeight:700,fontSize:13}}>{groupName}</span>
+                        </div>
+                        <div style={{overflowX:'auto'}}>
+                          <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                            <thead><tr style={{borderBottom:'1px solid var(--line)'}}>
+                              {['#','Team','P','W','D','L','GF','GA','GD','Pts'].map(h=>(
+                                <th key={h} style={{padding:'4px 6px',fontSize:10,color:'var(--ink-soft)',fontWeight:700,textAlign:h==='Team'?'left':'center',whiteSpace:'nowrap'}}>{h}</th>
+                              ))}
+                            </tr></thead>
+                            <tbody>
+                              {groupArr.map((t,i)=>{
+                                // API shape: {team, played, won, drawn, lost, gf, ga, gd, points, flag}
+                                const name=normTeam(t.team);
+                                const appName=name; // mapped to our team names
+                                return(
+                                  <tr key={t.team} style={{borderBottom:'1px solid var(--line-soft)',background:i<2?'rgba(27,94,63,.04)':i===2?'rgba(214,137,42,.04)':'transparent'}}>
+                                    <td style={{padding:'6px',textAlign:'center',fontWeight:700,color:i<2?'var(--forest)':'var(--ink-soft)'}}>{i+1}</td>
+                                    <td style={{padding:'6px',whiteSpace:'nowrap'}}>
+                                      <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                        <Flag team={appName} size={14}/>
+                                        <span style={{fontWeight:i<2?700:400}}>{appName}</span>
+                                      </div>
+                                    </td>
+                                    {[t.played??t.matchesPlayed,t.won??t.wins,t.drawn??t.draws??t.tied,t.lost??t.losses,t.gf??t.goalsFor??t.goals_for,t.ga??t.goalsAgainst??t.goals_against,t.gd??t.goalDiff??t.goal_difference].map((v,j)=>(
+                                      <td key={j} className="mono" style={{padding:'6px',textAlign:'center',fontSize:11}}>{v==null?<span style={{color:'var(--line)'}}>—</span>:j===6&&v>0?'+'+v:v}</td>
+                                    ))}
+                                    <td className="mono" style={{padding:'6px',textAlign:'center',fontWeight:800,color:i<2?'var(--forest)':'var(--ink)'}}>{t.points??t.pts??t.point??<span style={{color:'var(--line)'}}>—</span>}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
         {section==='users'&&(
           <div style={{marginTop:16}}>
             {/* Add user */}
@@ -1429,12 +1796,12 @@
             </div>
             {/* User list */}
             <div className="card" style={{overflow:'hidden'}}>
-              <div style={{padding:'10px 16px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 120px',gap:8,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em'}}>
-                <span>Name</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Group</span><span style={{textAlign:'right'}}>KO</span><span>Reset PIN</span><span>Actions</span>
+              <div style={{padding:'10px 16px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 100px',gap:8,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em'}}>
+                <span>Name</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Group</span><span style={{textAlign:'right'}}>KO</span><span>Reset PIN</span><span>Rename</span><span>Actions</span>
               </div>
               {scores.length===0&&<div style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic'}}>No participants yet.</div>}
               {scores.map((s,i)=>(
-                <div key={s.name} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 120px',gap:8,alignItems:'center',background:i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
+                <div key={s.name} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 100px',gap:8,alignItems:'center',background:i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <span style={{fontSize:14}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':'👤'}</span>
                     <span style={{fontWeight:600,fontSize:13}}>{s.name}</span>
@@ -1447,6 +1814,17 @@
                     <input type="password" placeholder="New PIN" value={resetPins[s.name]||''} onChange={e=>setResetPins(p=>({...p,[s.name]:e.target.value}))} style={{flex:1,padding:'5px 7px',fontSize:11,border:'1px solid var(--line)',borderRadius:3,fontFamily:'inherit',width:0}}/>
                     <button onClick={()=>handleResetPin(s.name)} style={{background:'var(--amber)',color:'white',border:'none',borderRadius:3,padding:'5px 8px',fontSize:10,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Reset</button>
                   </div>
+                  <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                    {renameTarget===s.name ? (
+                      <>
+                        <input autoFocus value={renameValue} onChange={e=>setRenameValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')handleRenameUser(s.name);if(e.key==='Escape'){setRenameTarget(null);setRenameValue('');}}} placeholder={s.name} style={{flex:1,padding:'5px 7px',fontSize:11,border:'1px solid var(--forest)',borderRadius:3,fontFamily:'inherit',width:0}}/>
+                        <button onClick={()=>handleRenameUser(s.name)} style={{background:'var(--forest)',color:'white',border:'none',borderRadius:3,padding:'5px 8px',fontSize:10,fontWeight:700,cursor:'pointer',flexShrink:0}}>✓</button>
+                        <button onClick={()=>{setRenameTarget(null);setRenameValue('');}} style={{background:'var(--line)',color:'var(--ink)',border:'none',borderRadius:3,padding:'5px 8px',fontSize:10,cursor:'pointer',flexShrink:0}}>✕</button>
+                      </>
+                    ) : (
+                      <button onClick={()=>{setRenameTarget(s.name);setRenameValue(s.name);}} style={{background:'var(--forest)',color:'white',border:'none',borderRadius:3,padding:'5px 10px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',width:'100%'}}>✏️ Rename</button>
+                    )}
+                  </div>
                   <div style={{display:'flex',gap:6}}>
                     <button onClick={()=>handleDeleteUser(s.name)} style={{background:'var(--burgundy)',color:'white',border:'none',borderRadius:3,padding:'5px 10px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>🗑 Delete</button>
                   </div>
@@ -1456,8 +1834,9 @@
           </div>
         )}
         {section==='settings'&&(
-          <div style={{marginTop:16}}>
-            <div className="card" style={{padding:20,maxWidth:480}}>
+          <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:14,maxWidth:520}}>
+            {/* Lock competition */}
+            <div className="card" style={{padding:20}}>
               <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>🔒 Lock Competition</h3>
               <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 14px'}}>When locked, participants cannot edit their predictions.</p>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderRadius:6,background:config.locked?'rgba(159,27,27,.07)':'rgba(27,94,63,.05)',border:`1px solid ${config.locked?'var(--burgundy)':'var(--forest)'}`}}>
@@ -1467,6 +1846,53 @@
                 </div>
                 <button className={`btn ${config.locked?'btn-green':'btn-danger'}`} onClick={()=>setConfig({...config,locked:!config.locked})}>{config.locked?'🔓 Unlock':'🔒 Lock'}</button>
               </div>
+            </div>
+            {/* Change Super Admin password */}
+            <div className="card" style={{padding:20,borderLeft:'3px solid var(--burgundy)'}}>
+              <h3 className="display" style={{fontSize:16,fontWeight:700,margin:'0 0 4px'}}>👑 Change Super-Admin Password</h3>
+              <p style={{fontSize:12,color:'var(--ink-soft)',margin:'0 0 14px'}}>Full access — results, users, sync, settings.</p>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <input type="password" placeholder="New password" value={newPwFields.super} onChange={e=>setNewPwFields(p=>({...p,super:e.target.value}))} style={{padding:'9px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                <input type="password" placeholder="Confirm new password" value={newPwFields.superConfirm} onChange={e=>setNewPwFields(p=>({...p,superConfirm:e.target.value}))} style={{padding:'9px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                <button className="btn btn-danger" style={{alignSelf:'flex-start'}} onClick={async()=>{
+                  const v=newPwFields.super.trim();
+                  if(!v||v.length<4){alert('Min 4 characters.');return;}
+                  if(v!==newPwFields.superConfirm){alert('Passwords do not match.');return;}
+                  await saveAdminPws({...adminPws,super:v});
+                  setNewPwFields(p=>({...p,super:'',superConfirm:''}));
+                  alert('Super-admin password updated!');
+                }}>Update Super-Admin Password</button>
+              </div>
+            </div>
+            {/* Change Sub-Admin password */}
+            <div className="card" style={{padding:20,borderLeft:'3px solid var(--forest)'}}>
+              <h3 className="display" style={{fontSize:16,fontWeight:700,margin:'0 0 4px'}}>🔧 Change Sub-Admin Password</h3>
+              <p style={{fontSize:12,color:'var(--ink-soft)',margin:'0 0 4px'}}>Limited access — can enter results only. Cannot access Users, Settings, or Sync.</p>
+              <p style={{fontSize:11,color:'var(--amber)',fontWeight:600,margin:'0 0 14px'}}>Share this password with trusted helpers to let them enter match results.</p>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <input type="password" placeholder="New sub-admin password" value={newPwFields.sub} onChange={e=>setNewPwFields(p=>({...p,sub:e.target.value}))} style={{padding:'9px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                <input type="password" placeholder="Confirm new password" value={newPwFields.subConfirm} onChange={e=>setNewPwFields(p=>({...p,subConfirm:e.target.value}))} style={{padding:'9px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                <button className="btn btn-green" style={{alignSelf:'flex-start'}} onClick={async()=>{
+                  const v=newPwFields.sub.trim();
+                  if(!v||v.length<4){alert('Min 4 characters.');return;}
+                  if(v!==newPwFields.subConfirm){alert('Passwords do not match.');return;}
+                  await saveAdminPws({...adminPws,sub:v});
+                  setNewPwFields(p=>({...p,sub:'',subConfirm:''}));
+                  alert('Sub-admin password updated!');
+                }}>Update Sub-Admin Password</button>
+              </div>
+            </div>
+            {/* Role summary */}
+            <div className="card" style={{padding:16,background:'var(--cream2)'}}>
+              <div className="micro-caps" style={{marginBottom:8}}>Role Comparison</div>
+              <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                <thead><tr><th style={{textAlign:'left',padding:'4px 8px',color:'var(--ink-soft)'}}>Feature</th><th style={{textAlign:'center',padding:'4px 8px'}}>👑 Super</th><th style={{textAlign:'center',padding:'4px 8px'}}>🔧 Sub</th></tr></thead>
+                <tbody>
+                  {[['Enter group results','✅','✅'],['Enter KO results','✅','✅'],['Enter bonus results','✅','✅'],['Auto-Sync from API','✅','✅'],['Manage users','✅','❌'],['Lock/unlock competition','✅','❌'],['Change passwords','✅','❌'],].map(([f,s,b])=>(
+                    <tr key={f} style={{borderBottom:'1px solid var(--line-soft)'}}><td style={{padding:'5px 8px'}}>{f}</td><td style={{textAlign:'center',padding:'5px 8px'}}>{s}</td><td style={{textAlign:'center',padding:'5px 8px'}}>{b}</td></tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -1584,6 +2010,112 @@
     </header>
   );
 
+  // ── WINNER POPUP ─────────────────────────────────────────────────
+  function WinnerPopup({notif, onClose}) {
+    const [visible, setVisible] = React.useState(false);
+    const [progress, setProgress] = React.useState(100);
+    const DURATION = 7000;
+
+    React.useEffect(()=>{
+      if(!notif) return;
+      setVisible(true);
+      setProgress(100);
+      const start = Date.now();
+      const interval = setInterval(()=>{
+        const elapsed = Date.now() - start;
+        const pct = Math.max(0, 100 - (elapsed / DURATION) * 100);
+        setProgress(pct);
+        if(pct === 0){ clearInterval(interval); handleClose(); }
+      }, 50);
+      return () => clearInterval(interval);
+    }, [notif]);
+
+    function handleClose(){ setVisible(false); setTimeout(onClose, 300); }
+
+    if(!notif) return null;
+
+    const isLeading = notif.pts > 0;
+    const popupStyle = {
+      position:'fixed',inset:0,zIndex:9999,
+      display:'flex',alignItems:'center',justifyContent:'center',
+      background:'rgba(0,0,0,.55)',backdropFilter:'blur(6px)',
+      opacity: visible ? 1 : 0,
+      transition:'opacity .3s ease',
+      padding:20,
+    };
+    const cardStyle = {
+      background:'var(--paper)',borderRadius:16,
+      boxShadow:'0 24px 80px rgba(0,0,0,.4)',
+      maxWidth:420,width:'100%',overflow:'hidden',
+      transform: visible ? 'translateY(0) scale(1)' : 'translateY(30px) scale(.95)',
+      transition:'transform .35s cubic-bezier(.34,1.56,.64,1)',
+    };
+
+    return (
+      <div style={popupStyle} onClick={e=>{if(e.target===e.currentTarget)handleClose();}}>
+        <div style={cardStyle}>
+          {/* Decorative header gradient */}
+          <div style={{
+            background:'linear-gradient(135deg, #9f1b1b 0%, #c0392b 40%, #e67e22 100%)',
+            padding:'28px 24px 20px',textAlign:'center',position:'relative',
+          }}>
+            {/* Close button */}
+            <button onClick={handleClose} style={{
+              position:'absolute',top:10,right:10,background:'rgba(255,255,255,.2)',
+              border:'none',borderRadius:20,width:28,height:28,cursor:'pointer',
+              color:'white',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',
+              lineHeight:1,padding:0,
+            }}>×</button>
+            {/* Sparkle row */}
+            <div style={{fontSize:22,letterSpacing:8,marginBottom:6,opacity:.9}}>✨⚽✨</div>
+            <div style={{fontSize:56,lineHeight:1,marginBottom:8,filter:'drop-shadow(0 4px 12px rgba(0,0,0,.3))'}}>🏆</div>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:3,textTransform:'uppercase',color:'rgba(255,255,255,.75)',marginBottom:4}}>
+              Current Leader
+            </div>
+            <div className="display" style={{fontSize:30,fontWeight:900,color:'white',letterSpacing:.5,textShadow:'0 2px 10px rgba(0,0,0,.3)'}}>
+              {notif.name}
+            </div>
+            {isLeading && (
+              <div style={{
+                display:'inline-flex',alignItems:'center',gap:6,
+                background:'rgba(255,255,255,.2)',borderRadius:20,
+                padding:'4px 14px',marginTop:10,
+                fontSize:14,fontWeight:700,color:'white',
+              }}>
+                <span className="mono">{notif.pts}</span>
+                <span style={{fontSize:12,opacity:.85}}>pts</span>
+              </div>
+            )}
+          </div>
+          {/* Body */}
+          <div style={{padding:'18px 24px 20px',textAlign:'center'}}>
+            {isLeading ? (
+              <p style={{fontSize:13,color:'var(--ink)',margin:'0 0 6px',lineHeight:1.6}}>
+                {notif.name} is currently in <strong>1st place</strong> on the leaderboard.
+                {notif.tied && <span style={{color:'var(--ink-soft)',fontSize:12}}> (tied)</span>}
+              </p>
+            ) : (
+              <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 6px',lineHeight:1.6}}>
+                No results have been entered yet. Be the first to predict! ⚽
+              </p>
+            )}
+            <p style={{fontSize:12,color:'var(--ink-soft)',margin:0}}>
+              Welcome back! Check the Leaderboard tab to see the full standings.
+            </p>
+          </div>
+          {/* Progress bar */}
+          <div style={{height:3,background:'var(--line)'}}>
+            <div style={{
+              height:'100%',background:'linear-gradient(90deg,#9f1b1b,#e67e22)',
+              width:`${progress}%`,transition:'width .05s linear',
+              borderRadius:'0 2px 2px 0',
+            }}/>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── MAIN APP ─────────────────────────────────────────────────────
   function App() {
     const[currentUser,setCurrentUser]=useState(null);
@@ -1597,21 +2129,42 @@
     const[saveStatus,setSaveStatus]=useState('');
     const[allPredictions,setAllPredictions]=useState({});
     const[adminAuthed,setAdminAuthed]=useState(false);
+    const[adminRole,setAdminRole]=useState(null); // 'superadmin' | 'subadmin'
+    const[adminPws,setAdminPws]=useState({super:DEFAULT_SUPER_PW,sub:DEFAULT_SUB_PW});
+    const[winnerNotif,setWinnerNotif]=useState(null);
+
+    // Show winner popup on login (track previous user to detect login event)
+    const prevUserRef = React.useRef(null);
+    useEffect(()=>{
+      const prev = prevUserRef.current;
+      prevUserRef.current = currentUser;
+      // Only fire when transitioning from null → logged-in name (actual login)
+      if(!prev && currentUser && currentUser!=='__guest__'){
+        const allParts = participants.length>0 ? participants : [];
+        const scores = allParts.map(p=>{
+          const s = computeUserScore(allPredictions[p]||{},results.group||{},results.ko||{},results.bonus||{});
+          return {name:p, total:s.total};
+        }).sort((a,b)=>b.total-a.total);
+        const top = scores[0];
+        if(top && top.total>0){
+          const tied = scores.filter(s=>s.total===top.total).length>1;
+          setWinnerNotif({name:top.name, pts:top.total, tied});
+        } else {
+          setWinnerNotif({name:'Nobody yet', pts:0, tied:false});
+        }
+      }
+    },[currentUser]);
 
     useEffect(()=>{
       (async()=>{
         try{
-          const user=await storage.get('current-user',false);
           const partList=(await storage.getJSON('participants',true))||[];
           const pins=(await storage.getJSON('pins',true))||{};
           const res=(await storage.getJSON('results',true))||{group:{},ko:{},bonus:{}};
           const cfg=(await storage.getJSON('config',true))||{locked:false};
+          const storedPws=(await storage.getJSON('admin-pws',true))||{};
+          if(storedPws.super||storedPws.sub) setAdminPws(p=>({...p,...storedPws}));
           setParticipants(partList); setUserPins(pins); setResults(res); setConfig(cfg);
-          if(user){
-            setCurrentUser(user);
-            const p=(await storage.getJSON(`pred-${user}`,true))||{group:{},ko:{},bonus:{},joker:{}};
-            setPredictions(p);
-          }
           const predResults=await Promise.all(partList.map(async p=>({p,data:await storage.getJSON(`pred-${p}`,true)})));
           const all={};
           predResults.forEach(({p,data})=>{if(data) all[p]=data;});
@@ -1634,7 +2187,14 @@
     const saveResults=useCallback(async newRes=>{
       setResults(newRes);
       await storage.setJSON('results',newRes,true);
-    },[]);
+      // Refresh allPredictions so leaderboard scores are always current
+      try{
+        const predResults=await Promise.all(participants.map(async p=>({p,data:await storage.getJSON(`pred-${p}`,true)})));
+        const all={};
+        predResults.forEach(({p,data})=>{if(data) all[p]=data;});
+        setAllPredictions(all);
+      }catch(e){}
+    },[participants]);
 
     const saveConfig=useCallback(async newCfg=>{
       setConfig(newCfg);
@@ -1655,7 +2215,6 @@
         await storage.setJSON('pins',newPins,true);
       }
       setCurrentUser(name);
-      await storage.set('current-user',name,false);
       const p=(await storage.getJSON(`pred-${name}`,true))||{group:{},ko:{},bonus:{},joker:{}};
       setPredictions(p);
       setView('predictions');
@@ -1663,13 +2222,18 @@
 
     const handleLogout=useCallback(async()=>{
       setCurrentUser(null);
-      await storage.set('current-user',null,false);
       setView('predictions');
     },[]);
 
     const handleAdminLogin=useCallback(pw=>{
-      if(pw===ADMIN_PW){setAdminAuthed(true);setView('admin');}
+      if(!pw) return;
+      if(pw===adminPws.super){setAdminAuthed(true);setAdminRole('superadmin');setView('admin');}
+      else if(pw===adminPws.sub){setAdminAuthed(true);setAdminRole('subadmin');setView('admin');}
       else alert('Incorrect admin password.');
+    },[adminPws]);
+    const saveAdminPws=useCallback(async newPws=>{
+      setAdminPws(newPws);
+      await storage.setJSON('admin-pws',newPws,true);
     },[]);
 
     if(loading) return(
@@ -1692,10 +2256,11 @@
     if(view==='admin'&&!adminAuthed) return(
       <div className="app" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}}>
         <style>{CSS}</style>
-        <div className="card" style={{padding:28,maxWidth:360,width:'100%'}}>
-          <h2 className="display" style={{fontSize:22,fontWeight:700,margin:'0 0 16px'}}>🔐 Admin Access</h2>
-          <input type="password" placeholder="Admin password" autoFocus style={{width:'100%',padding:'10px 12px',fontSize:14,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit',marginBottom:12}} onKeyDown={e=>e.key==='Enter'&&handleAdminLogin(e.target.value)}/>
-          <button className="btn" style={{width:'100%',justifyContent:'center'}} onClick={e=>handleAdminLogin(e.target.previousSibling.value)}>Enter</button>
+        <div className="card" style={{padding:28,maxWidth:380,width:'100%'}}>
+          <h2 className="display" style={{fontSize:22,fontWeight:700,margin:'0 0 6px'}}>🔐 Admin Access</h2>
+          <p style={{fontSize:12,color:'var(--ink-soft)',margin:'0 0 18px'}}>Enter Super-admin or Sub-admin password</p>
+          <input id="adminPwInput" type="password" placeholder="Password" autoFocus style={{width:'100%',padding:'10px 12px',fontSize:14,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit',marginBottom:12,boxSizing:'border-box'}} onKeyDown={e=>e.key==='Enter'&&handleAdminLogin(document.getElementById('adminPwInput').value)}/>
+          <button className="btn" style={{width:'100%',justifyContent:'center'}} onClick={()=>handleAdminLogin(document.getElementById('adminPwInput').value)}>Enter</button>
           <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center',marginTop:8}} onClick={()=>setView('leaderboard')}>← Back</button>
         </div>
       </div>
@@ -1717,11 +2282,12 @@
           {view==='leaderboard'&&<LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/>}
           {view==='browse'&&<BrowseView participants={participants} allPredictions={allPredictions} results={results}/>}
           {view==='rules'&&<RulesView/>}
-          {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions}/>}
+          {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws}/>}
         </main>
         <footer style={{borderTop:'1px solid var(--line)',padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>
           {COMP_NAME} · FIFA World Cup 2026 · Built with ❤️
         </footer>
+        <WinnerPopup notif={winnerNotif} onClose={()=>setWinnerNotif(null)}/>
       </div>
     );
   }
