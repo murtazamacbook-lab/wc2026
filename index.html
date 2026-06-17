@@ -1249,9 +1249,37 @@
   };
 
   // ── ADMIN VIEW ───────────────────────────────────────────────────
-  const AdminView = ({results,onSave,config,setConfig,participants,allPredictions}) => {
+  const AdminView = ({results,onSave,config,setConfig,participants,setParticipants,userPins,setUserPins,allPredictions,setAllPredictions}) => {
     const[section,setSection]=useState('group');
     const[openGroup,setOpenGroup]=useState('A');
+    const[newName,setNewName]=useState('');
+    const[newPin,setNewPin]=useState('');
+    const[resetPins,setResetPins]=useState({});
+
+    const handleAddUser=async()=>{
+      const n=newName.trim();
+      if(!n||participants.includes(n)){alert(n?'Name already exists.':'Enter a name.');return;}
+      if(!newPin||newPin.length<3){alert('Enter at least a 3-character PIN.');return;}
+      const np=[...participants,n],npins={...userPins,[n]:newPin};
+      setParticipants(np);setUserPins(npins);
+      await storage.setJSON('participants',np,true);await storage.setJSON('pins',npins,true);
+      setNewName('');setNewPin('');
+    };
+    const handleDeleteUser=async(name)=>{
+      if(!window.confirm(`Delete "${name}" and all their predictions? This cannot be undone.`)) return;
+      const np=participants.filter(p=>p!==name),npins={...userPins};delete npins[name];
+      setParticipants(np);setUserPins(npins);
+      const na={...allPredictions};delete na[name];setAllPredictions(na);
+      await storage.setJSON('participants',np,true);await storage.setJSON('pins',npins,true);
+    };
+    const handleResetPin=async(name)=>{
+      const pin=resetPins[name]||'';
+      if(!pin||pin.length<3){alert('Enter a new PIN (min 3 chars).');return;}
+      const npins={...userPins,[name]:pin};setUserPins(npins);
+      await storage.setJSON('pins',npins,true);
+      setResetPins(p=>({...p,[name]:''}));alert(`PIN reset for ${name}.`);
+    };
+    const scores=useMemo(()=>participants.map(p=>{const s=computeUserScore(allPredictions[p]||{},results.group||{},results.ko||{},results.bonus||{});return{name:p,total:s.total,groupPts:s.groupPoints,koPts:s.koPoints+s.bracketPoints,bonusPts:s.bonusPoints};}).sort((a,b)=>b.total-a.total),[participants,allPredictions,results]);
     const setGroupResult=(mId,side,val)=>{
       if(val!==''&&(isNaN(parseInt(val))||parseInt(val)<0||parseInt(val)>20)) return;
       onSave({...results,group:{...results.group,[mId]:{...results.group?.[mId],[side]:val}}});
@@ -1271,7 +1299,7 @@
       <div>
         <SectionHeader kicker="Admin" title="Admin Console" subtitle="Enter actual results to drive scoring and leaderboard."/>
         <div style={{display:'flex',gap:4,marginTop:16,flexWrap:'wrap'}}>
-          {[['group','Group Results'],['ko','Knockout Results'],['bonus','Bonus Results'],['settings','Settings']].map(([k,l])=>(
+          {[['group','Group Results'],['ko','Knockout Results'],['bonus','Bonus Results'],['users',`Users (${participants.length})`],['settings','Settings']].map(([k,l])=>(
             <button key={k} className="tab-btn" style={{padding:'6px 14px',borderRadius:4,border:'1px solid var(--line)',background:section===k?'var(--ink)':'transparent',color:section===k?'var(--cream)':'var(--ink)',fontSize:12,fontWeight:600}} onClick={()=>setSection(k)}>{l}</button>
           ))}
         </div>
@@ -1377,6 +1405,51 @@
                 <div key={k} style={{marginBottom:14}}>
                   <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>{l}</div>
                   <input value={results.bonus?.[k]||''} onChange={e=>setBonus(k,e.target.value)} placeholder="Enter actual answer…" style={{width:'100%',padding:'9px 12px',fontSize:14,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {section==='users'&&(
+          <div style={{marginTop:16}}>
+            {/* Add user */}
+            <div className="card" style={{padding:18,marginBottom:16,maxWidth:520}}>
+              <div className="display" style={{fontWeight:700,fontSize:16,marginBottom:12}}>➕ Pre-register a User</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end'}}>
+                <div>
+                  <div className="micro-caps" style={{marginBottom:4}}>Name</div>
+                  <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleAddUser()} placeholder="Full name" style={{width:'100%',padding:'9px 10px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                </div>
+                <div>
+                  <div className="micro-caps" style={{marginBottom:4}}>PIN</div>
+                  <input type="password" value={newPin} onChange={e=>setNewPin(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleAddUser()} placeholder="Set PIN" style={{width:'100%',padding:'9px 10px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                </div>
+                <button className="btn btn-green" onClick={handleAddUser} style={{whiteSpace:'nowrap'}}>Add User</button>
+              </div>
+            </div>
+            {/* User list */}
+            <div className="card" style={{overflow:'hidden'}}>
+              <div style={{padding:'10px 16px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 120px',gap:8,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em'}}>
+                <span>Name</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Group</span><span style={{textAlign:'right'}}>KO</span><span>Reset PIN</span><span>Actions</span>
+              </div>
+              {scores.length===0&&<div style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic'}}>No participants yet.</div>}
+              {scores.map((s,i)=>(
+                <div key={s.name} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 120px',gap:8,alignItems:'center',background:i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:14}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':'👤'}</span>
+                    <span style={{fontWeight:600,fontSize:13}}>{s.name}</span>
+                    {allPredictions[s.name]?<span className="pill pill-success" style={{fontSize:9}}>has picks</span>:<span className="pill" style={{fontSize:9,color:'var(--ink-soft)'}}>no picks</span>}
+                  </div>
+                  <span className="mono" style={{textAlign:'right',fontWeight:700,fontSize:13}}>{s.total}</span>
+                  <span className="mono" style={{textAlign:'right',fontSize:12,color:'var(--ink-soft)'}}>{s.groupPts}</span>
+                  <span className="mono" style={{textAlign:'right',fontSize:12,color:'var(--ink-soft)'}}>{s.koPts}</span>
+                  <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                    <input type="password" placeholder="New PIN" value={resetPins[s.name]||''} onChange={e=>setResetPins(p=>({...p,[s.name]:e.target.value}))} style={{flex:1,padding:'5px 7px',fontSize:11,border:'1px solid var(--line)',borderRadius:3,fontFamily:'inherit',width:0}}/>
+                    <button onClick={()=>handleResetPin(s.name)} style={{background:'var(--amber)',color:'white',border:'none',borderRadius:3,padding:'5px 8px',fontSize:10,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>Reset</button>
+                  </div>
+                  <div style={{display:'flex',gap:6'}}>
+                    <button onClick={()=>handleDeleteUser(s.name)} style={{background:'var(--burgundy)',color:'white',border:'none',borderRadius:3,padding:'5px 10px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>🗑 Delete</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1644,7 +1717,7 @@
           {view==='leaderboard'&&<LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/>}
           {view==='browse'&&<BrowseView participants={participants} allPredictions={allPredictions} results={results}/>}
           {view==='rules'&&<RulesView/>}
-          {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} allPredictions={allPredictions}/>}
+          {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions}/>}
         </main>
         <footer style={{borderTop:'1px solid var(--line)',padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>
           {COMP_NAME} · FIFA World Cup 2026 · Built with ❤️
