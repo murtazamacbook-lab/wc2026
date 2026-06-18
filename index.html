@@ -569,9 +569,8 @@
     BONUS_KEYS.forEach(k=>{
       const actual=actualBonus[k],pick=userBonus[k];
       if(!actual||!pick) return;
-      if(actual.trim().toLowerCase()===pick.trim().toLowerCase()||
-         actual.trim().toLowerCase().includes(pick.trim().toLowerCase())||
-         pick.trim().toLowerCase().includes(actual.trim().toLowerCase())){
+      const a=String(actual).trim().toLowerCase(), p=String(pick).trim().toLowerCase();
+      if(a===p||a.includes(p)||p.includes(a)){
         bonusPoints+=SCORING.bonusPick;
       }
     });
@@ -1330,22 +1329,26 @@
   const LeaderboardView = React.memo(({participants,allPredictions,results}) => {
     const actualTiebreakSecs=parseTiebreakTime(results.bonus?.tiebreak);
     const scores=useMemo(()=>{
-      const rows=participants.map(p=>{
-        const preds=allPredictions[p]||{group:{},ko:{}};
-        const score=computeUserScore(preds,results.group||{},results.ko||{},results.bonus||{});
-        return{name:p,...score};
-      });
-      rows.sort((a,b)=>{
-        if(b.total!==a.total) return b.total-a.total;
-        // Tiebreak: closest guess to actual first-goal time in the Final
-        if(actualTiebreakSecs!=null){
-          const aDiff=a.tiebreakSecs!=null?Math.abs(a.tiebreakSecs-actualTiebreakSecs):Infinity;
-          const bDiff=b.tiebreakSecs!=null?Math.abs(b.tiebreakSecs-actualTiebreakSecs):Infinity;
-          if(aDiff!==bDiff) return aDiff-bDiff;
-        }
-        return 0;
-      });
-      return rows;
+      try{
+        const rows=participants.map(p=>{
+          try{
+            const preds=allPredictions[p]||{group:{},ko:{}};
+            const score=computeUserScore(preds,results.group||{},results.ko||{},results.bonus||{});
+            return{name:p,...score};
+          }catch(e){ console.warn('Score error for',p,e); return{name:p,total:0,groupPoints:0,koPoints:0,bracketPoints:0,bonusPoints:0,tiebreakSecs:null,detail:{exactScores:0,correctResults:0,correctDraws:0,underdogWins:0,matches:0},sectionPts:{}}; }
+        });
+        rows.sort((a,b)=>{
+          if(b.total!==a.total) return b.total-a.total;
+          // Tiebreak: closest guess to actual first-goal time in the Final
+          if(actualTiebreakSecs!=null){
+            const aDiff=a.tiebreakSecs!=null?Math.abs(a.tiebreakSecs-actualTiebreakSecs):Infinity;
+            const bDiff=b.tiebreakSecs!=null?Math.abs(b.tiebreakSecs-actualTiebreakSecs):Infinity;
+            if(aDiff!==bDiff) return aDiff-bDiff;
+          }
+          return 0;
+        });
+        return rows;
+      }catch(e){ console.warn('Leaderboard scores error:',e); return []; }
     },[participants,allPredictions,results,actualTiebreakSecs]);
     const maxScore=Math.max(...scores.map(s=>s.total),1);
     const matchesDone=Object.values(results.group||{}).filter(r=>r&&r.h!==''&&r.h!=null).length;
@@ -1499,6 +1502,30 @@
         <div style={{padding:'10px 14px',background:'rgba(214,137,42,.08)',border:'1px solid rgba(214,137,42,.3)',borderRadius:6,fontSize:12,color:'var(--ink)',lineHeight:1.6}}>
           <strong>Edge cases:</strong> Players who don't enter a tiebreak time are ranked below those who do. If two players are equally close, their order remains the same. The tiebreak only activates when the admin has set the actual Final time.
         </div>
+      </div>
+
+      {/* FAQ */}
+      <div className="card" style={{padding:18,marginTop:14}}>
+        <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 14px'}}>❓ Frequently Asked Questions</h3>
+        {[
+          {q:'I forgot my PIN — what do I do?',a:'Contact the admin. They can reset your PIN from the Admin panel.'},
+          {q:'Can I change my predictions after submitting?',a:'Yes — predictions save automatically and can be changed any time until a match kicks off (it locks automatically 🔴) or until the admin locks that phase.'},
+          {q:'Why is a match showing as 🔴 LIVE / LOCKED?',a:'That match has kicked off. The lock is automatic and fair for all players. You cannot change predictions once a match starts.'},
+          {q:'Why can\'t I see the Bracket tab?',a:'The Bracket tab is only available during the Knockout phase. It opens after all 48 group matches are complete and the admin switches the phase.'},
+          {q:'I selected a Joker but didn\'t click Submit — did I lose it?',a:'Your joker selection is saved but not locked. Without submitting, it could be changed before matches start. Always click "🔒 Submit Joker for Today" before the first match of the day. The amber ⚠️ warning in the app reminds you.'},
+          {q:'What does the Tiebreak field do?',a:'It only activates if you tie on total points with someone else. Whoever\'s guess for the first-goal time in the Final is closest wins the tie. Enter it in Bonus Picks → Tiebreak (format: MM:SS).'},
+          {q:'Do I need to pick a Penalty Winner in KO matches?',a:'Yes — if you predict a draw in a knockout match, you must also pick which team wins the shootout. Without it your prediction is incomplete.'},
+          {q:'Does exact score in a KO draw count if it goes to extra time?',a:'Scoring is based on 90-minute score only. A 1–1 prediction is correct if the match ends 1–1 regardless of what happens in extra time or penalties.'},
+          {q:'Can I see what others have predicted?',a:'Yes — use the Browse Picks tab. Select any participant\'s name to see their full group, bracket, bonus and joker selections.'},
+          {q:'The app showed "Something went wrong" — did I lose my predictions?',a:'No — all predictions are saved to the cloud automatically. Click 🔄 Refresh Page and everything will be restored.'},
+        ].map(({q,a},i)=>(
+          <details key={i} style={{borderBottom:'1px solid var(--line-soft)',padding:'10px 0'}}>
+            <summary style={{fontWeight:700,fontSize:13,cursor:'pointer',color:'var(--ink)',listStyle:'none',display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:11,color:'var(--ink-soft)',flexShrink:0}}>Q</span>{q}
+            </summary>
+            <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:'8px 0 2px 18px'}}>{a}</p>
+          </details>
+        ))}
       </div>
     </div>
   );
@@ -2625,6 +2652,7 @@
             ['liveoverride','🔴 Live Override',true],
             ['users',`Users (${participants.length})`,isSuperAdmin],
             ['settings','Settings',isSuperAdmin],
+            ['faq','❓ Admin FAQ',true],
           ].filter(([,, allowed])=>allowed).map(([k,l])=>(
             <button key={k} className="tab-btn" style={{padding:'6px 14px',borderRadius:4,border:'1px solid var(--line)',background:section===k?'var(--ink)':'transparent',color:section===k?'var(--cream)':'var(--ink)',fontSize:12,fontWeight:600}} onClick={()=>setSection(k)}>{l}</button>
           ))}
@@ -3225,17 +3253,33 @@
         )}
         {section==='settings'&&(
           <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:14,maxWidth:520}}>
-            {/* Lock competition */}
+            {/* Tournament Phase */}
             <div className="card" style={{padding:20}}>
-              <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>🔒 Lock Competition</h3>
-              <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 14px'}}>When locked, participants cannot edit their predictions.</p>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderRadius:6,background:config.locked?'rgba(159,27,27,.07)':'rgba(27,94,63,.05)',border:`1px solid ${config.locked?'var(--burgundy)':'var(--forest)'}`}}>
-                <div>
-                  <div style={{fontWeight:700,color:config.locked?'var(--burgundy)':'var(--forest)'}}>{config.locked?'🔒 LOCKED — entries closed':'🔓 OPEN — entries accepted'}</div>
-                  <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:2}}>{config.locked?'Click to reopen':'Click to lock all predictions'}</div>
-                </div>
-                <button className={`btn ${config.locked?'btn-green':'btn-danger'}`} onClick={()=>setConfig({...config,locked:!config.locked})}>{config.locked?'🔓 Unlock':'🔒 Lock'}</button>
-              </div>
+              <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 6px'}}>🏟 Tournament Phase</h3>
+              <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 16px'}}>Controls which predictions are open. Switch phase as the tournament progresses.</p>
+              {(()=>{
+                const ph=config.phase||(config.locked?'complete':'group');
+                const phases=[
+                  {k:'group', label:'🏟 Group Stage', sub:'Group predictions open · Bracket locked', bg:'rgba(27,94,63,.07)', border:'var(--forest)', tc:'var(--forest)'},
+                  {k:'ko',    label:'⚡ Knockout Open', sub:'Group locked · Bracket + Bonus open', bg:'rgba(30,132,73,.08)', border:'#1e8449', tc:'#1e8449'},
+                  {k:'complete', label:'🏆 Complete',  sub:'All predictions locked · Tournament over', bg:'rgba(159,27,27,.07)', border:'var(--burgundy)', tc:'var(--burgundy)'},
+                ];
+                return(
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    {phases.map(({k,label,sub,bg,border,tc})=>(
+                      <div key={k} onClick={()=>setConfig({...config,phase:k,locked:k==='complete'})} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderRadius:8,background:ph===k?bg:'var(--cream2)',border:`1.5px solid ${ph===k?border:'var(--line)'}`,cursor:'pointer',transition:'all .15s'}}>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:13,color:ph===k?tc:'var(--ink)'}}>{label}</div>
+                          <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:2}}>{sub}</div>
+                        </div>
+                        <div style={{width:18,height:18,borderRadius:'50%',border:`2px solid ${ph===k?border:'var(--line)'}`,background:ph===k?border:'transparent',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                          {ph===k&&<div style={{width:8,height:8,borderRadius:'50%',background:'white'}}/>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             {/* Change Super Admin password */}
             <div className="card" style={{padding:20,borderLeft:'3px solid var(--burgundy)'}}>
@@ -3286,11 +3330,60 @@
             </div>
           </div>
         )}
+        {section==='faq'&&(
+          <div style={{marginTop:16,maxWidth:680}}>
+            <div className="card" style={{padding:20,marginBottom:14,background:'linear-gradient(135deg,rgba(159,27,27,.04) 0%,var(--paper) 60%)',borderColor:'var(--burgundy)'}}>
+              <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 4px'}}>❓ Admin FAQ</h3>
+              <p style={{fontSize:13,color:'var(--ink-soft)',margin:0}}>Common questions and answers for running the pool.</p>
+            </div>
+            {[
+              {cat:'Results',qs:[
+                {q:'I entered a wrong score — can I fix it?',a:'Yes. Go to Group Results or Knockout Results, find the match, and edit the score. The leaderboard recalculates instantly for all players.'},
+                {q:'When should I enter KO results?',a:'After each match finishes (90-min score, not AET). For draws in KO, also select the Penalty Winner. The bracket auto-advances the winning team.'},
+                {q:'Does auto-sync overwrite results I manually entered?',a:'No. Auto-sync only writes results for matches with a final status from the API. It will not touch matches you have already scored manually.'},
+                {q:'What score do I enter for a KO match that went to extra time?',a:'Enter the 90-minute score (e.g. 1–1). Then select the team that won the penalty shootout in the Penalty Winner field.'},
+              ]},
+              {cat:'Phase & Locking',qs:[
+                {q:'When do I switch to "Knockout Open"?',a:'After all 48 group stage matches are complete and results entered. The R32 bracket auto-populates. Switch phase — players will see the green banner and can start predicting KO matches.'},
+                {q:'I switched phase too early — how do I undo?',a:'Go to Settings → Tournament Phase and select 🏟 Group Stage. Group predictions reopen immediately. No data is lost.'},
+                {q:'Can I reopen after setting Complete?',a:'Yes — select any phase at any time from Settings → Tournament Phase. There is no permanent lock.'},
+                {q:'Can players still see the leaderboard when locked?',a:'Yes. Leaderboard, Browse Picks, Live Data, and Rules are always accessible regardless of phase.'},
+              ]},
+              {cat:'Players & PINs',qs:[
+                {q:'A player forgot their PIN — how do I reset it?',a:'Go to Admin → Users, find the player, and click Reset PIN. They will be prompted to set a new PIN on their next login.'},
+                {q:'A player wants to be removed from the pool.',a:'Go to Admin → Users and click Delete next to their name. Their predictions remain in the database but they disappear from the leaderboard and participant list.'},
+                {q:'Can two admins be logged in at the same time?',a:'Yes. Sub-admin and Super-admin sessions are independent. Both can enter results simultaneously.'},
+                {q:'A player says their predictions were not saved.',a:'All predictions auto-save to Firestore instantly. Check Browse Picks to see their actual saved data. The "Saved ✓" indicator in the top-right confirms each save.'},
+              ]},
+              {cat:'Scoring & Bonus',qs:[
+                {q:'When should I enter bonus results?',a:'Any time after each event is decided — Winner/Runner-Up/3rd after the Final, Golden Boot when announced, Tiebreak time immediately after the first goal of the Final.'},
+                {q:'What format is the Tiebreak time?',a:'MM:SS — e.g. 34:12 for the 34th minute and 12 seconds. Extra time also counts (e.g. 96:03). The field validates in real-time and shows ✅ when correct.'},
+                {q:'A player says their bonus pick is correct but shows 0 pts.',a:'Confirm the answer is entered in Bonus Results. For teams, use the dropdown (no typos). For Golden Boot, the app uses a case-insensitive substring match — "Mbappe" matches "Kylian Mbappe".'},
+                {q:'Does the tiebreak re-rank automatically?',a:'Yes. The moment you save the actual tiebreak time, the leaderboard re-sorts tied players. No manual action needed.'},
+              ]},
+              {cat:'Auto-Sync & Live Data',qs:[
+                {q:'Auto-sync is not importing results — what do I check?',a:'1) Confirm your RapidAPI key is in the Live Data tab. 2) Check your API quota — you may have hit the daily limit. 3) Try a manual fetch via "Fetch & Import Results". 4) Check the browser console for errors.'},
+                {q:'The live match banner is missing a match that is in progress.',a:'The banner refreshes every 5 minutes from ESPN. Wait up to 5 minutes or reload the page. The app handles STATUS_FIRST_HALF, STATUS_SECOND_HALF, STATUS_HALFTIME, STATUS_EXTRA_TIME, and STATUS_PENALTY.'},
+                {q:'How often does auto-sync run?',a:'Once per hour, triggered in the background when an admin is logged in. A toast notification appears for all players when results are imported.'},
+              ]},
+            ].map(({cat,qs})=>(
+              <div key={cat} className="card" style={{padding:18,marginBottom:12}}>
+                <div className="micro-caps" style={{marginBottom:12,color:'var(--burgundy)'}}>{cat}</div>
+                {qs.map(({q,a},i)=>(
+                  <details key={i} style={{borderBottom:'1px solid var(--line-soft)',padding:'9px 0'}}>
+                    <summary style={{fontWeight:700,fontSize:13,cursor:'pointer',color:'var(--ink)',listStyle:'none',display:'flex',alignItems:'flex-start',gap:8}}>
+                      <span style={{fontSize:11,color:'var(--ink-soft)',flexShrink:0,marginTop:1}}>Q</span>{q}
+                    </summary>
+                    <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:'8px 0 2px 18px'}}>{a}</p>
+                  </details>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
-
-  // ── LOGIN SCREEN ─────────────────────────────────────────────────
   const LoginScreen = ({onLogin,onGuest,participants,locked}) => {
     const[name,setName]=useState('');
     const[pin,setPin]=useState('');
@@ -4192,13 +4285,17 @@
     useEffect(()=>{
       if(!FB_ON||!currentUser) return;
       const unsub=db.collection('wc26').doc('presence').onSnapshot(snap=>{
-        if(!snap.exists) return;
-        const {name,type:loginType,ts}=snap.data();
-        // Ignore events that predate this session or are from ourselves
-        if(!ts||ts<presenceSessionStart.current) return;
-        if(name===currentUser) return;
-        addToast('presence',{name,loginType});
-      });
+        try{
+          if(!snap.exists) return;
+          const data=snap.data();
+          if(!data) return; // guard: Firestore can return null on reconnect
+          const {name,type:loginType,ts}=data;
+          // Ignore events that predate this session or are from ourselves
+          if(!ts||ts<presenceSessionStart.current) return;
+          if(!name||name===currentUser) return;
+          addToast('presence',{name,loginType});
+        }catch(e){ console.warn('Presence listener error:',e); }
+      },err=>console.warn('Presence onSnapshot error:',err));
       return()=>unsub();
     },[currentUser]);
 
@@ -4229,10 +4326,17 @@
     );
 
     if(!currentUser) return(
-      <LoginScreen onLogin={handleLogin} onGuest={()=>{setCurrentUser('__guest__');setView('leaderboard');}} participants={participants} locked={!!config.locked}/>
+      <LoginScreen onLogin={handleLogin} onGuest={()=>{setCurrentUser('__guest__');setView('leaderboard');}} participants={participants} locked={config.phase==='complete'||(config.phase==null&&!!config.locked)}/>
     );
 
-    const locked=!!config.locked;
+    // ── PHASE-BASED LOCKS ────────────────────────────────────────────
+    // phase: 'group' = group predictions open, KO locked
+    //        'ko'    = group locked, KO + bonus open
+    //        'complete' = everything locked
+    const phase=config.phase||(config.locked?'complete':'group');
+    const groupLocked=phase==='ko'||phase==='complete';
+    const koLocked=phase==='group'||phase==='complete';
+    const locked=phase==='complete'; // used for login screen + hard-lock banner
     const isGuest=currentUser==='__guest__';
 
     if(view==='admin'&&!adminAuthed) return(
@@ -4253,15 +4357,20 @@
         <style>{CSS}</style>
         <Header user={currentUser} onLogout={handleLogout} view={view} setView={v=>{if(v==='admin'&&!adminAuthed&&v!==view){handleAdminLogin(prompt('Admin password:'));return;}setView(v);}} saveStatus={saveStatus} locked={locked}/>
         <LiveMatchBanner matches={mergedLiveMatches} loading={liveLoading} onTeamClick={handleBannerTeamClick}/>
-        {locked&&view!=='admin'&&(
+        {phase==='ko'&&view!=='admin'&&(
+          <div style={{background:'linear-gradient(90deg,#1a6b3c,#1e8449)',color:'white',textAlign:'center',padding:'9px 16px',fontSize:13,fontWeight:700,letterSpacing:'0.02em'}}>
+            ⚽ Group Stage Complete — 🏆 Knockout Bracket predictions are now open!
+          </div>
+        )}
+        {phase==='complete'&&view!=='admin'&&(
           <div style={{background:'var(--burgundy)',color:'white',textAlign:'center',padding:'7px 16px',fontSize:12,fontWeight:600}}>
             🔒 COMPETITION LOCKED — predictions are now closed. Good luck!
           </div>
         )}
         <main style={{maxWidth:1100,margin:'0 auto',padding:'24px 16px 80px'}}>
-          {view==='predictions'&&!isGuest&&<PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={locked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup}/>}
-          {view==='bracket'&&!isGuest&&<BracketView predictions={predictions} onSave={savePredictions} results={results} locked={locked}/>}
-          {view==='bonus'&&!isGuest&&<BonusView predictions={predictions} onSave={savePredictions} results={results} locked={locked}/>}
+          {view==='predictions'&&!isGuest&&<PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={groupLocked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup}/>}
+          {view==='bracket'&&!isGuest&&<BracketView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/>}
+          {view==='bonus'&&!isGuest&&<BonusView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/>}
           {view==='leaderboard'&&<LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/>}
           {view==='browse'&&<BrowseView participants={participants} allPredictions={allPredictions} results={results}/>}
           {view==='live'&&<LiveDataView adminRole={adminRole}/>}
@@ -4323,8 +4432,8 @@
 
   // ── MOUNT ────────────────────────────────────────────────────────
   class ErrorBoundary extends React.Component {
-    constructor(props){ super(props); this.state={crashed:false,error:null}; }
-    static getDerivedStateFromError(e){ return{crashed:true,error:e}; }
+    constructor(props){ super(props); this.state={crashed:false,error:null,ts:null}; }
+    static getDerivedStateFromError(e){ return{crashed:true,error:e,ts:new Date().toLocaleTimeString()}; }
     componentDidCatch(e,info){ console.error('App crashed:',e,info); }
     render(){
       if(!this.state.crashed) return this.props.children;
@@ -4333,9 +4442,12 @@
           <div style={{maxWidth:420,textAlign:'center'}}>
             <div style={{fontSize:48,marginBottom:16}}>⚽</div>
             <div style={{fontSize:22,fontWeight:700,marginBottom:8}}>Something went wrong</div>
-            <div style={{fontSize:14,color:'#6B635B',marginBottom:24,lineHeight:1.6}}>The app hit an unexpected error. Your predictions are safe — they're saved automatically. Just refresh the page to continue.</div>
-            <button onClick={()=>window.location.reload()} style={{padding:'10px 28px',background:'#9F1B1B',color:'white',border:'none',borderRadius:6,fontSize:14,fontWeight:700,cursor:'pointer'}}>🔄 Refresh Page</button>
-            {this.state.error&&<div style={{marginTop:16,fontSize:10,color:'#aaa',fontFamily:'monospace',wordBreak:'break-all'}}>{String(this.state.error)}</div>}
+            <div style={{fontSize:14,color:'#6B635B',marginBottom:24,lineHeight:1.6}}>The app hit an unexpected error. Your predictions are safe — they're saved automatically.</div>
+            <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+              <button onClick={()=>this.setState({crashed:false,error:null,ts:null})} style={{padding:'10px 22px',background:'#1a6b3c',color:'white',border:'none',borderRadius:6,fontSize:14,fontWeight:700,cursor:'pointer'}}>↩ Try Again</button>
+              <button onClick={()=>window.location.reload()} style={{padding:'10px 22px',background:'#9F1B1B',color:'white',border:'none',borderRadius:6,fontSize:14,fontWeight:700,cursor:'pointer'}}>🔄 Refresh Page</button>
+            </div>
+            {this.state.error&&<div style={{marginTop:20,fontSize:10,color:'#aaa',fontFamily:'monospace',wordBreak:'break-all',textAlign:'left',background:'#f5f5f5',padding:'8px 10px',borderRadius:4}}>{this.state.ts&&<span style={{color:'#999'}}>[{this.state.ts}] </span>}{String(this.state.error)}</div>}
           </div>
         </div>
       );
