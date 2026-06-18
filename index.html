@@ -4193,11 +4193,11 @@
       if(!FB_ON||!currentUser) return;
       const unsub=db.collection('wc26').doc('presence').onSnapshot(snap=>{
         if(!snap.exists) return;
-        const {name,type,ts}=snap.data();
+        const {name,type:loginType,ts}=snap.data();
         // Ignore events that predate this session or are from ourselves
         if(!ts||ts<presenceSessionStart.current) return;
         if(name===currentUser) return;
-        addToast('presence',{name,type});
+        addToast('presence',{name,loginType});
       });
       return()=>unsub();
     },[currentUser]);
@@ -4275,19 +4275,40 @@
         <BalloonPopup notif={balloonNotif} onClose={()=>setBalloonNotif(null)}/>
         <WinnerPopup notif={balloonNotif?null:winnerNotif} onClose={()=>setWinnerNotif(null)}/>
         {/* Unified notification stack — bottom-right */}
-        <div style={{position:'fixed',bottom:24,right:24,zIndex:9997,display:'flex',flexDirection:'column',gap:8,alignItems:'flex-end',pointerEvents:'none'}}>
+        <div style={{position:'fixed',bottom:24,right:24,zIndex:9997,display:'flex',flexDirection:'column',gap:10,alignItems:'flex-end',pointerEvents:'none'}}>
           {toasts.map(t=>(
-            <div key={t.id} style={{background:'white',border:'1px solid var(--line)',borderRadius:12,padding:'10px 14px',boxShadow:'0 8px 32px rgba(0,0,0,.16)',animation:'presenceSlide .35s cubic-bezier(.34,1.56,.64,1)',display:'flex',alignItems:'center',gap:10,maxWidth:280,minWidth:200}}>
+            <div key={t.id} style={{
+              background:t.type==='presence'&&t.loginType==='join'?'linear-gradient(135deg,#fffde7 0%,#fff 70%)':'white',
+              border:'1px solid var(--line)',
+              borderRadius:14,
+              padding:'14px 16px 12px',
+              boxShadow:'0 12px 40px rgba(0,0,0,.22)',
+              animation:'presenceSlide .4s cubic-bezier(.34,1.56,.64,1)',
+              display:'flex',alignItems:'center',gap:12,
+              maxWidth:300,minWidth:240,
+              position:'relative',overflow:'hidden',
+            }}>
+              {/* coloured top accent strip */}
+              {t.type==='presence'&&<div style={{position:'absolute',top:0,left:0,right:0,height:4,borderRadius:'14px 14px 0 0',background:t.loginType==='join'?'linear-gradient(90deg,#27ae60,#f9a825)':'linear-gradient(90deg,#9F1B1B,#e67e22)'}}/>}
               {t.type==='presence'&&(
-                <><Avatar name={t.name} size={32}/>
-                <div style={{minWidth:0}}>
-                  <div style={{fontWeight:700,fontSize:12,color:'var(--ink)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.name}</div>
-                  <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:1}}>{t.type==='join'?'🎉 just joined the pool!':'👋 just logged in'}</div>
-                </div>
-                <div style={{fontSize:16,flexShrink:0}}>{t.type==='join'?'🎈':'⚽'}</div></>
+                <>
+                  <div style={{position:'relative',flexShrink:0,marginTop:2}}>
+                    <Avatar name={t.name} size={48}/>
+                    <div style={{position:'absolute',bottom:-4,right:-4,fontSize:18,lineHeight:1,filter:'drop-shadow(0 1px 3px rgba(0,0,0,.35))'}}>
+                      {t.loginType==='join'?'🎉':'⚽'}
+                    </div>
+                  </div>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontWeight:800,fontSize:15,color:'var(--ink)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:'-0.01em'}}>{t.name}</div>
+                    <div style={{fontSize:12,fontWeight:600,marginTop:4,color:t.loginType==='join'?'#27ae60':'#9F1B1B',lineHeight:1.3}}>
+                      {t.loginType==='join'?'🎊 Just joined the pool!':'👋 Just logged in!'}
+                    </div>
+                  </div>
+                  <div style={{fontSize:26,flexShrink:0,marginTop:2}}>{t.loginType==='join'?'🎈':'🏆'}</div>
+                </>
               )}
               {t.type==='sync'&&(
-                <><span style={{fontSize:16}}>🔄</span>
+                <><span style={{fontSize:18}}>🔄</span>
                 <div style={{minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:12,color:'var(--ink)'}}>{t.count} result{t.count!==1?'s':''} auto-imported</div>
                   <div style={{fontSize:10,color:'var(--ink-soft)',fontFamily:'monospace',marginTop:1}}>{t.time}</div>
