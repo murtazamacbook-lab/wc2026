@@ -3290,6 +3290,9 @@
     const[liveMatches,setLiveMatches]=useState([]); // live + today's upcoming matches
     const[liveLoading,setLiveLoading]=useState(false);
     const[jumpToGroup,setJumpToGroup]=useState(null); // group letter to jump to in PredictionsView
+    // Tick every 30 s so lockedMatchIds recomputes near kickoff even if liveMatches hasn't changed
+    const[nowMs,setNowMs]=useState(()=>Date.now());
+    useEffect(()=>{ const t=setInterval(()=>setNowMs(Date.now()),30000); return()=>clearInterval(t); },[]);
     const[toasts,setToasts]=useState([]); // unified notification stack
     const toastIdRef=useRef(0);
 
@@ -3437,9 +3440,8 @@
     // ── FETCH LIVE MATCHES ON MOUNT ───────────────────────────────────
     useEffect(()=>{
       const savedKey=(() => { try{ return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||''; }catch{ return window.__RAPID_KEY||''; } })();
-      if(!savedKey && !FUNC_BASE) return; // skip silently if no key
-      setLiveLoading(true);
       const hdrs = savedKey ? {'X-RapidAPI-Key':savedKey,'X-RapidAPI-Host':API_HOST} : null;
+      const normDt=s=>{if(!s)return null;let v=String(s).trim();if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v))v=v.replace(' ','T');if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v))v+='+05:00';return v;};
       const tryFetch = async (ep, params='') => {
         try {
           const url = FUNC_BASE ? `${FUNC_BASE}/proxy?ep=${ep}${params?'&'+params:''}` : `https://${API_HOST}/${ep}${params?'?'+params:''}`;
@@ -3452,9 +3454,26 @@
             for(const c of candidates) { if(Array.isArray(c)&&c.length>0) return c; }
             return [];
           };
-          return flatten(d);
+          return flatten(d).map(m=>({...m,_kickoffNorm:normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null)}));
         } catch{ return []; }
       };
+      const loadFromCache=async()=>{
+        // Fallback: load from Firestore live-cache when no API key available
+        try{
+          const [cl,cu]=await Promise.all([
+            storage.getShared('live-cache-live').catch(()=>null),
+            storage.getShared('live-cache-upcoming').catch(()=>null),
+          ]);
+          const flat=obj=>{ if(!obj||!obj.data)return[]; const d=obj.data; if(Array.isArray(d))return d; const cands=[d?.data?.matches,d?.data?.live,d?.data?.upcoming,d?.data,d?.matches,d?.live,d?.upcoming]; for(const c of cands){if(Array.isArray(c)&&c.length>0)return c;} return[]; };
+          const all=[...flat(cl),...flat(cu)].map(m=>({...m,_kickoffNorm:normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null)}));
+          if(all.length>0) setLiveMatches(all);
+        }catch{}
+      };
+      setLiveLoading(true);
+      if(!savedKey && !FUNC_BASE){
+        loadFromCache().finally(()=>setLiveLoading(false));
+        return;
+      }
       (async()=>{
         const [live, upToday, upTomorrow] = await Promise.all([
           tryFetch('live'),
@@ -3463,6 +3482,7 @@
         ]);
         const all = [...live, ...upToday, ...upTomorrow];
         if(all.length>0) setLiveMatches(all);
+        else await loadFromCache(); // API returned nothing — use cache
         setLiveLoading(false);
       })();
     },[]);
@@ -3470,11 +3490,25 @@
     // ── BANNER AUTO-REFRESH every 5 minutes ──────────────────────────
     useEffect(()=>{
       const savedKey=()=>{ try{ return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||''; }catch{ return window.__RAPID_KEY||''; } };
+      const normDt=s=>{if(!s)return null;let v=String(s).trim();if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v))v=v.replace(' ','T');if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v))v+='+05:00';return v;};
       const refreshBanner=async()=>{
         const key=savedKey();
-        if(!key&&!FUNC_BASE) return;
         const hdrs=key?{'X-RapidAPI-Key':key,'X-RapidAPI-Host':API_HOST}:null;
         const flatG=obj=>{ if(!obj)return[]; if(Array.isArray(obj))return obj; const r=[]; Object.entries(obj).forEach(([k,v])=>{if(Array.isArray(v))v.forEach(m=>r.push({...m,_groupKey:k}));}); return r; };
+        const addNorm=arr=>arr.map(m=>({...m,_kickoffNorm:normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null)}));
+        if(!key&&!FUNC_BASE){
+          // No API key — silently refresh from Firestore cache
+          try{
+            const [cl,cu]=await Promise.all([
+              storage.getShared('live-cache-live').catch(()=>null),
+              storage.getShared('live-cache-upcoming').catch(()=>null),
+            ]);
+            const flat=obj=>{ if(!obj||!obj.data)return[]; const d=obj.data; if(Array.isArray(d))return d; const cands=[d?.data?.matches,d?.data?.live,d?.data?.upcoming,d?.data,d?.matches,d?.live,d?.upcoming]; for(const c of cands){if(Array.isArray(c)&&c.length>0)return c;} return[]; };
+            const combined=addNorm([...flat(cl),...flat(cu)]);
+            if(combined.length>0) setLiveMatches(combined);
+          }catch(e){}
+          return;
+        }
         try{
           const [lr,ur,ur2]=await Promise.all([
             fetch(FUNC_BASE?`${FUNC_BASE}/proxy?ep=live`:`https://${API_HOST}/live`,hdrs?{headers:hdrs}:{}).then(r=>r.json()).catch(()=>({})),
@@ -3484,7 +3518,7 @@
           const liveArr=flatG(lr?.data||lr?.live||lr)||[];
           const upArr=flatG(ur?.data?.upcoming||ur?.data||ur?.upcoming||ur)||[];
           const up2Arr=flatG(ur2?.data?.upcoming||ur2?.data||ur2?.upcoming||ur2)||[];
-          const combined=[...liveArr,...upArr,...up2Arr];
+          const combined=addNorm([...liveArr,...upArr,...up2Arr]);
           if(combined.length>0) setLiveMatches(combined);
         }catch(e){}
       };
@@ -3496,38 +3530,39 @@
     const lockedMatchIds = useMemo(()=>{
       const ids = new Set();
       const LIVE_STATUS=/^(1h|2h|ht|et|pen|live|in.?progress|playing)$/i;
-      const now = Date.now();
       const tn = v => { if(!v)return''; if(typeof v==='string')return normTeam(v)||v; if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;} return''; };
+      const normDt=s=>{if(!s)return null;let v=String(s).trim();if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v))v=v.replace(' ','T');if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v))v+='+05:00';return v;};
       liveMatches.forEach(m=>{
         const status=(m.status||m.matchStatus||m.state||'').toLowerCase().trim();
         const minute=m.minute??m.elapsed??m.time??null;
         const minuteNum=minute!=null&&minute!==''?Number(minute):NaN;
         const isLive = LIVE_STATUS.test(status) || (!isNaN(minuteNum) && minuteNum > 0);
-        const rawDt = m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null;
+        // Use pre-normalised field if available, else normalise now
+        const rawDt = m._kickoffNorm ?? normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null);
         let kicksOffSoon = false;
         if(rawDt){
           const kickoff = new Date(rawDt).getTime();
           if(!isNaN(kickoff)){
-            const minsUntil = (kickoff - now) / 60000;
+            const minsUntil = (kickoff - nowMs) / 60000;
             kicksOffSoon = minsUntil <= 5 && minsUntil > -200;
           }
         }
         if(!isLive && !kicksOffSoon) return;
         const h = tn(m.home||m.homeTeam||m.home_team||m.team_home);
         const a = tn(m.away||m.awayTeam||m.away_team||m.team_away);
-        // Match to the specific GROUP_MATCHES entry by both team names
         const gm = GROUP_MATCHES.find(x=>(x.home===h&&x.away===a)||(x.home===a&&x.away===h));
         if(gm) ids.add(gm.id);
       });
       return ids;
-    },[liveMatches]);
+    },[liveMatches, nowMs]); // nowMs re-triggers every 30 s near kickoff
 
     // Map: GROUP_MATCHES ID → kickoff timestamp (ms) — used for countdown timer
     const kickoffTimes = useMemo(()=>{
       const map = new Map();
       const tn = v => { if(!v)return''; if(typeof v==='string')return normTeam(v)||v; if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;} return''; };
+      const normDt=s=>{if(!s)return null;let v=String(s).trim();if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v))v=v.replace(' ','T');if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v))v+='+05:00';return v;};
       liveMatches.forEach(m=>{
-        const rawDt=m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null;
+        const rawDt=m._kickoffNorm??normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null);
         if(!rawDt) return;
         const kickoff=new Date(rawDt).getTime();
         if(isNaN(kickoff)) return;
