@@ -244,8 +244,14 @@
   // Parses various API datetime formats → local HH:MM + short date label
   const formatMatchTime = raw => {
     if(!raw) return {time:'TBD',date:'',local:false};
-    const s=String(raw);
-    // Try ISO parse first (handles 2026-06-17T20:00:00Z, 2026-06-17T20:00:00+00:00 etc)
+    let s=String(raw).trim();
+    // Normalise "YYYY-MM-DD HH:MM" (no T, no timezone) → treat as CEST (UTC+2)
+    // The RapidAPI provider stores kickoff times in Central European Summer Time
+    // e.g. "2026-06-19 00:00" CEST = 22:00 UTC = 6 PM EDT ✓
+    if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(s)){
+      s=s.replace(' ','T')+'+05:00';
+    }
+    // Try ISO parse (handles 2026-06-17T20:00:00Z, 2026-06-17T20:00:00+00:00, and normalised above)
     const d=new Date(s);
     if(!isNaN(d.getTime())){
       const now=new Date();
@@ -1730,7 +1736,12 @@
 
         {/* 📅 UPCOMING MATCHES */}
         {liveData.upcoming&&(()=>{
-          const arr=flatten(liveData.upcoming);
+          const now=Date.now();
+          const parseKickoff=raw=>{ if(!raw)return NaN; let s=String(raw).trim(); if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s))s=s.replace(' ','T')+'+05:00'; return new Date(s).getTime(); };
+          const all=flatten(liveData.upcoming);
+          const arr=all
+            .filter(m=>{ const ko=parseKickoff(m.kickoff??m.datetime??m.date??m.matchDate??m.time??''); return isNaN(ko)||(ko>now-7200000); }) // keep if no date or kickoff < 2hrs ago
+            .sort((a,b)=>{ const ka=parseKickoff(a.kickoff??a.datetime??a.date??a.matchDate??a.time??''); const kb=parseKickoff(b.kickoff??b.datetime??b.date??b.matchDate??b.time??''); return (isNaN(ka)?Infinity:ka)-(isNaN(kb)?Infinity:kb); });
           return(
             <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#d4890a'}}>
               <PanelHdr bg="#d4890a" title="📅 Upcoming Matches" count={arr.length} panelKey="upcoming"/>
@@ -1743,7 +1754,7 @@
                     <tbody>{arr.map((m,i)=>{
                       const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
                       const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
-                      const raw=m.date??m.matchDate??m.datetime??m.kickoff??m.time??'';
+                      const raw=m.kickoff??m.datetime??m.matchDate??m.date??m.time??'';
                       const {time,date,local}=formatMatchTime(raw);
                       const grp=m.group??m.round??'–';
                       return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
@@ -2497,7 +2508,12 @@
 
                   {/* 📅 UPCOMING MATCHES */}
                   {liveData.upcoming&&(()=>{
-                    const arr=flatten(liveData.upcoming);
+                    const now=Date.now();
+                    const parseKickoff=raw=>{ if(!raw)return NaN; let s=String(raw).trim(); if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s))s=s.replace(' ','T')+'+05:00'; return new Date(s).getTime(); };
+                    const all=flatten(liveData.upcoming);
+                    const arr=all
+                      .filter(m=>{ const ko=parseKickoff(m.kickoff??m.datetime??m.date??m.matchDate??m.time??''); return isNaN(ko)||(ko>now-7200000); })
+                      .sort((a,b)=>{ const ka=parseKickoff(a.kickoff??a.datetime??a.date??a.matchDate??a.time??''); const kb=parseKickoff(b.kickoff??b.datetime??b.date??b.matchDate??b.time??''); return (isNaN(ka)?Infinity:ka)-(isNaN(kb)?Infinity:kb); });
                     return(
                       <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#d4890a'}}>
                         <PanelHdr bg="#d4890a" title="📅 Upcoming Matches" count={arr.length} panelKey="upcoming"/>
@@ -2510,7 +2526,7 @@
                               <tbody>{arr.map((m,i)=>{
                                 const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
                                 const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
-                                const raw=m.date??m.matchDate??m.datetime??m.kickoff??m.time??'';
+                                const raw=m.kickoff??m.datetime??m.matchDate??m.date??m.time??'';
                                 const {time,date,local}=formatMatchTime(raw);
                                 const grp=m.group??m.round??'–';
                                 return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
@@ -2860,7 +2876,15 @@
       const s=(m.status||m.matchStatus||m.state||'').toLowerCase();
       return s.includes('live')||s.includes('1h')||s.includes('2h')||s.includes('ht')||s.includes('in progress')||(m.minute!=null&&m.elapsed!=null);
     });
-    const upcoming = matches.filter(m=>!live.includes(m));
+    // Filter upcoming: only show matches not yet started and not more than 30 min past kickoff
+    const now=Date.now();
+    const parseKo=raw=>{ if(!raw)return NaN; let s=String(raw).trim(); if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s))s=s.replace(' ','T')+'+05:00'; return new Date(s).getTime(); };
+    const upcoming = matches.filter(m=>{
+      if(live.includes(m)) return false;
+      const ko=parseKo(m.kickoff??m.datetime??m.matchDate??m.date??m.time??'');
+      if(isNaN(ko)) return true; // no date — include anyway
+      return ko > now - 1800000; // keep if kickoff < 30 min ago
+    });
     const tn=v=>{
       if(!v) return '?';
       if(typeof v==='string') return normTeam(v)||v;
@@ -2899,9 +2923,9 @@
               <span style={{fontSize:9,fontWeight:700,color:'#f0932b',letterSpacing:1,flexShrink:0}}>📅 TODAY</span>
               {upcoming.map((m,i)=>{
                 const h=tn(m.home||m.homeTeam||m.home_team), a=tn(m.away||m.awayTeam||m.away_team);
-                const dt=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'').slice(11,16)||'TBD';
-                const dtDate=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'').slice(0,10);
-                const {time:localTime,local:isLocal}=formatMatchTime(m.date??m.matchDate??m.datetime??m.kickoff??m.time);
+                const dt=String(m.kickoff??m.datetime??m.matchDate??m.date??m.time??'').slice(11,16)||'TBD';
+                const dtDate=String(m.kickoff??m.datetime??m.matchDate??m.date??m.time??'').slice(0,10);
+                const {time:localTime,local:isLocal}=formatMatchTime(m.kickoff??m.datetime??m.matchDate??m.date??m.time);
                 const displayTime=isLocal?localTime:dt;
                 const teamBtn=(name)=>(
                   <span onClick={()=>onTeamClick&&onTeamClick(name)} style={{fontWeight:600,cursor:onTeamClick?'pointer':'default',borderBottom:'1px dotted rgba(255,255,255,.35)',paddingBottom:1}} title={onTeamClick?`Go to ${name}'s group`:''}>{teamShort(name)}</span>
@@ -3268,14 +3292,40 @@
         } catch{ return []; }
       };
       (async()=>{
-        const [live, upcoming] = await Promise.all([
+        const [live, upToday, upTomorrow] = await Promise.all([
           tryFetch('live'),
           tryFetch('upcoming','day=today'),
+          tryFetch('upcoming','day=tomorrow'),
         ]);
-        const all = [...live, ...upcoming];
+        const all = [...live, ...upToday, ...upTomorrow];
         if(all.length>0) setLiveMatches(all);
         setLiveLoading(false);
       })();
+    },[]);
+
+    // ── BANNER AUTO-REFRESH every 5 minutes ──────────────────────────
+    useEffect(()=>{
+      const savedKey=()=>{ try{ return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||''; }catch{ return window.__RAPID_KEY||''; } };
+      const refreshBanner=async()=>{
+        const key=savedKey();
+        if(!key&&!FUNC_BASE) return;
+        const hdrs=key?{'X-RapidAPI-Key':key,'X-RapidAPI-Host':API_HOST}:null;
+        const flatG=obj=>{ if(!obj)return[]; if(Array.isArray(obj))return obj; const r=[]; Object.entries(obj).forEach(([k,v])=>{if(Array.isArray(v))v.forEach(m=>r.push({...m,_groupKey:k}));}); return r; };
+        try{
+          const [lr,ur,ur2]=await Promise.all([
+            fetch(FUNC_BASE?`${FUNC_BASE}/proxy?ep=live`:`https://${API_HOST}/live`,hdrs?{headers:hdrs}:{}).then(r=>r.json()).catch(()=>({})),
+            fetch(FUNC_BASE?`${FUNC_BASE}/proxy?ep=upcoming&day=today`:`https://${API_HOST}/upcoming?day=today`,hdrs?{headers:hdrs}:{}).then(r=>r.json()).catch(()=>({})),
+            fetch(FUNC_BASE?`${FUNC_BASE}/proxy?ep=upcoming&day=tomorrow`:`https://${API_HOST}/upcoming?day=tomorrow`,hdrs?{headers:hdrs}:{}).then(r=>r.json()).catch(()=>({})),
+          ]);
+          const liveArr=flatG(lr?.data||lr?.live||lr)||[];
+          const upArr=flatG(ur?.data?.upcoming||ur?.data||ur?.upcoming||ur)||[];
+          const up2Arr=flatG(ur2?.data?.upcoming||ur2?.data||ur2?.upcoming||ur2)||[];
+          const combined=[...liveArr,...upArr,...up2Arr];
+          if(combined.length>0) setLiveMatches(combined);
+        }catch(e){}
+      };
+      const t=setInterval(refreshBanner,300000); // every 5 minutes
+      return()=>clearInterval(t);
     },[]);
 
     // Set of GROUP_MATCHES IDs that are live or within 5 min of kickoff
@@ -3289,7 +3339,7 @@
         const minute=m.minute??m.elapsed??m.time??null;
         const minuteNum=minute!=null&&minute!==''?Number(minute):NaN;
         const isLive = LIVE_STATUS.test(status) || (!isNaN(minuteNum) && minuteNum > 0);
-        const rawDt = m.date??m.matchDate??m.datetime??m.kickoff??m.scheduled??null;
+        const rawDt = m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null;
         let kicksOffSoon = false;
         if(rawDt){
           const kickoff = new Date(rawDt).getTime();
@@ -3313,7 +3363,7 @@
       const map = new Map();
       const tn = v => { if(!v)return''; if(typeof v==='string')return normTeam(v)||v; if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;} return''; };
       liveMatches.forEach(m=>{
-        const rawDt=m.date??m.matchDate??m.datetime??m.kickoff??m.scheduled??null;
+        const rawDt=m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null;
         if(!rawDt) return;
         const kickoff=new Date(rawDt).getTime();
         if(isNaN(kickoff)) return;
@@ -3531,7 +3581,7 @@
           {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws}/>}
         </main>
         <footer style={{borderTop:'1px solid var(--line)',padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>
-          {COMP_NAME} · FIFA World Cup 2026 · Built with passion! 
+          {COMP_NAME} · FIFA World Cup 2026 · Built with ❤️
         </footer>
         <BalloonPopup notif={balloonNotif} onClose={()=>setBalloonNotif(null)}/>
         <WinnerPopup notif={balloonNotif?null:winnerNotif} onClose={()=>setWinnerNotif(null)}/>
