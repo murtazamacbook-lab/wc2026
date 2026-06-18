@@ -306,6 +306,25 @@
     return null;
   };
 
+  // Approximate last-kick-off times for each group-stage matchday (UTC+5).
+  // Used to snapshot which joker was active when a matchday was played.
+  const MATCHDAY_CUTOFFS = {
+    1: new Date('2026-06-17T23:59:59+05:00').getTime(),
+    2: new Date('2026-06-24T23:59:59+05:00').getTime(),
+    3: new Date('2026-07-02T23:59:59+05:00').getTime(),
+  };
+  // Returns the joker ({team,group}) that was active when matchday `md` was played.
+  // `history` is the jokerHistory array stored in predictions.
+  // Falls back to `fallback` when no history is available (old data).
+  const getJokerForMatchday = (history, md, fallback) => {
+    if(!history||!history.length) return fallback;
+    const cutoff=MATCHDAY_CUTOFFS[md];
+    if(!cutoff) return fallback;
+    const relevant=history.filter(e=>e.setAt<=cutoff);
+    if(!relevant.length) return {team:null,group:null}; // joker not set before this matchday
+    return relevant[relevant.length-1]; // last entry before cutoff
+  };
+
   const getJokerMultiplier = (match, jTeam, jGroup) => {
     if(!jTeam&&!jGroup) return 1;
     const tm = jTeam&&(match.home===jTeam||match.away===jTeam);
@@ -508,13 +527,15 @@
     const mdPts={1:0,2:0,3:0};
     const koRoundPts={R32:0,R16:0,QF:0,SF:0,'3rd':0,Final:0};
     const joker=userPreds.joker||{};
+    const jokerHistory=userPreds.jokerHistory||null;
     GROUP_MATCHES.forEach(m=>{
       const actual=actualGroupResults[m.id];
       if(!actual||actual.h===''||actual.a===''||actual.h==null) return;
       const pred=userPreds.group?.[m.id];
       if(!pred||pred.h===''||pred.a===''||pred.h==null) return;
       const{total,breakdown}=scoreMatch(pred,actual,m.home,m.away,true);
-      const mult=getJokerMultiplier(m,joker.team,joker.group);
+      const ej=getJokerForMatchday(jokerHistory,m.matchday,joker);
+      const mult=getJokerMultiplier(m,ej.team,ej.group);
       const pts=total*mult;
       groupPoints+=pts;mdPts[m.matchday]=(mdPts[m.matchday]||0)+pts;
       detail.matches++;
@@ -832,15 +853,20 @@
   };
 
   // ── GROUP CARD ───────────────────────────────────────────────────
-  const GroupCard = ({groupKey,isOpen,onToggle,predictions,actualResults,onSet,standings,progress,jokerTeam,jokerGroup,locked,lockedMatchIds=new Set(),kickoffTimes=new Map()}) => {
+  const GroupCard = ({groupKey,isOpen,onToggle,predictions,actualResults,onSet,standings,progress,jokerTeam,jokerGroup,jokerHistory=null,locked,lockedMatchIds=new Set(),kickoffTimes=new Map()}) => {
     const teams=GROUPS[groupKey];
     const matches=GROUP_MATCHES_BY_GROUP[groupKey]||[];
     const isJG=jokerGroup===groupKey,jTIG=jokerTeam&&teams.includes(jokerTeam);
+    // Returns the effective joker for a specific match, accounting for historical changes
+    const getMatchMult=(m)=>{
+      const ej=getJokerForMatchday(jokerHistory,m.matchday,{team:jokerTeam,group:jokerGroup});
+      return getJokerMultiplier(m,ej.team,ej.group);
+    };
     const anyResults=matches.some(m=>{const r=actualResults?.[m.id];return r&&r.h!==''&&r.h!=null;});
     const groupPts=matches.reduce((sum,m)=>{
       const a=actualResults?.[m.id]; if(!a||a.h===''||a.h==null) return sum;
       const p=predictions[m.id]; if(!p||p.h===''||p.h==null) return sum;
-      return sum+scoreMatch(p,a,m.home,m.away,true).total*getJokerMultiplier(m,jokerTeam,jokerGroup);
+      return sum+scoreMatch(p,a,m.home,m.away,true).total*getMatchMult(m);
     },0);
     const jColor=isJG&&jTIG?'var(--burgundy)':isJG||jTIG?'var(--amber)':null;
     return(
@@ -875,7 +901,7 @@
                   <React.Fragment key={md}>
                     <div style={{gridColumn:'1/-1',fontSize:11,color:'var(--ink-soft)',fontWeight:500,padding:'6px 0 2px'}}>Matchday {md}</div>
                     {matches.filter(m=>m.matchday===md).map(m=>(
-                      <MatchCells key={m.id} match={m} pred={predictions[m.id]||{h:'',a:''}} actual={actualResults?.[m.id]} onSet={onSet} jokerMultiplier={getJokerMultiplier(m,jokerTeam,jokerGroup)} locked={locked} matchLocked={lockedMatchIds.has(m.id)} kickoffMs={kickoffTimes.get(m.id)||null}/>
+                      <MatchCells key={m.id} match={m} pred={predictions[m.id]||{h:'',a:''}} actual={actualResults?.[m.id]} onSet={onSet} jokerMultiplier={getMatchMult(m)} locked={locked} matchLocked={lockedMatchIds.has(m.id)} kickoffMs={kickoffTimes.get(m.id)||null}/>
                     ))}
                   </React.Fragment>
                 ))}
@@ -907,7 +933,12 @@
       if(val!==''&&(isNaN(parseInt(val))||parseInt(val)<0||parseInt(val)>20)) return;
       onSave({...predictions,group:{...predictions.group,[mId]:{...predictions.group?.[mId],[side]:val}}});
     };
-    const setJoker=(k,v)=>{if(!locked) onSave({...predictions,joker:{...joker,[k]:v}});};
+    const setJoker=(k,v)=>{
+      if(locked) return;
+      const newJoker={...joker,[k]:v};
+      const newHist=[...(predictions.jokerHistory||[]),{team:newJoker.team||null,group:newJoker.group||null,setAt:Date.now()}];
+      onSave({...predictions,joker:newJoker,jokerHistory:newHist});
+    };
     const groupProgress=useMemo(()=>{
       const p={};
       GROUP_KEYS.forEach(g=>{
@@ -965,7 +996,7 @@
         </div>
         <div style={{marginTop:20,display:'flex',flexDirection:'column',gap:10}}>
           {GROUP_KEYS.map(g=>(
-            <GroupCard key={g} groupKey={g} isOpen={openGroup===g} onToggle={()=>setOpenGroup(openGroup===g?null:g)} predictions={predictions.group||{}} actualResults={results.group} onSet={setMatch} standings={standings[g]} progress={groupProgress[g]} jokerTeam={joker.team||null} jokerGroup={joker.group||null} locked={locked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes}/>
+            <GroupCard key={g} groupKey={g} isOpen={openGroup===g} onToggle={()=>setOpenGroup(openGroup===g?null:g)} predictions={predictions.group||{}} actualResults={results.group} onSet={setMatch} standings={standings[g]} progress={groupProgress[g]} jokerTeam={joker.team||null} jokerGroup={joker.group||null} jokerHistory={predictions.jokerHistory||null} locked={locked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes}/>
           ))}
         </div>
       </div>
