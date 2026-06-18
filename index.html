@@ -619,6 +619,8 @@
   @keyframes presenceSlide{from{opacity:0;transform:translateX(-110%)}to{opacity:1;transform:translateX(0)}}
   @keyframes balloonRise{0%{transform:translateY(60px);opacity:0}60%{opacity:1}100%{transform:translateY(0);opacity:1}}
   @keyframes popIn{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+  @keyframes liveBlink{0%,100%{opacity:1}50%{opacity:.3}}
+  @keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
   .fadein{animation:fadein .25s ease}
   a{color:var(--burgundy);text-decoration:none}
   a:hover{text-decoration:underline}
@@ -2896,22 +2898,49 @@
         <div style={{maxWidth:1100,margin:'0 auto',padding:'0 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'nowrap',minWidth:'max-content'}}>
           {live.length>0&&(
             <>
-              <span style={{background:'#c0392b',color:'white',fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:3,letterSpacing:1,flexShrink:0,animation:'pulse 1.5s infinite'}}>🔴 LIVE</span>
+              <span style={{background:'#c0392b',color:'white',fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:3,letterSpacing:1,flexShrink:0}}>
+                <span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'white',marginRight:4,animation:'liveBlink 1s infinite'}}/>LIVE
+              </span>
               {live.map((m,i)=>{
                 const h=tn(m.home||m.homeTeam||m.home_team), a=tn(m.away||m.awayTeam||m.away_team);
                 const hs=m.homeScore??m.home_score??m.score?.home??'–', as_=m.awayScore??m.away_score??m.score?.away??'–';
-                const min=m.minute??m.elapsed??m.time;
+                const min=m.minute??m.elapsed??null;
+                const minNum=min!=null?parseInt(min):null;
+                // Progress bar: 0-45 = first half, 45-90 = second half, 90+ = extra
+                const maxMin=minNum>90?120:90;
+                const pct=minNum!=null?Math.min(100,(minNum/maxMin)*100):null;
+                const isHT=(m.status||m.matchStatus||m.state||'').toLowerCase().includes('ht');
+                const statusLabel=isHT?'HT':minNum!=null?`${minNum}'`:'';
+                const hScorers=String(m.home_scorers||m.homeScorers||'').trim();
+                const aScorers=String(m.away_scorers||m.awayScorers||'').trim();
+                const cleanScorer=s=>s.replace(/\s+\d+\u0027?\s*/g,'').replace(/[\x22\x7b\x7d]/g,'').trim();
                 const teamBtn=(name)=>(
                   <span onClick={()=>onTeamClick&&onTeamClick(name)} style={{fontWeight:700,cursor:onTeamClick?'pointer':'default',borderBottom:'1px dotted rgba(255,255,255,.4)',paddingBottom:1}} title={onTeamClick?`Go to ${name}'s group`:''}>{teamShort(name)}</span>
                 );
                 return(
-                  <span key={i} style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,.07)',borderRadius:4,padding:'3px 10px',fontSize:12,flexShrink:0}}>
-                    <span>{TEAM_FLAGS[h]||'⚽'}</span>
-                    {teamBtn(h)}
-                    <span style={{fontFamily:'monospace',fontWeight:800,color:'#f9ca24',margin:'0 2px'}}>{hs}–{as_}</span>
-                    {teamBtn(a)}
-                    <span>{TEAM_FLAGS[a]||'⚽'}</span>
-                    {min!=null&&<span style={{fontSize:9,color:'#e74c3c',fontWeight:800,marginLeft:2}}>{min}'</span>}
+                  <span key={i} style={{display:'inline-flex',flexDirection:'column',background:'rgba(192,57,43,.25)',border:'1px solid rgba(192,57,43,.5)',borderRadius:6,padding:'4px 10px 3px',fontSize:12,flexShrink:0,minWidth:180}}>
+                    {/* Score row */}
+                    <span style={{display:'flex',alignItems:'center',gap:5}}>
+                      <span>{TEAM_FLAGS[h]||'⚽'}</span>
+                      {teamBtn(h)}
+                      <span style={{fontFamily:'monospace',fontWeight:900,color:'#f9ca24',margin:'0 4px',fontSize:15}}>{hs}–{as_}</span>
+                      {teamBtn(a)}
+                      <span>{TEAM_FLAGS[a]||'⚽'}</span>
+                      {statusLabel&&<span style={{fontSize:9,color:'#e74c3c',fontWeight:800,marginLeft:4,background:'rgba(231,76,60,.2)',padding:'1px 5px',borderRadius:3}}>{statusLabel}</span>}
+                    </span>
+                    {/* Progress bar */}
+                    {pct!=null&&!isHT&&(
+                      <span style={{display:'block',height:2,background:'rgba(255,255,255,.15)',borderRadius:1,marginTop:4,overflow:'hidden'}}>
+                        <span style={{display:'block',height:'100%',width:`${pct}%`,background:'#e74c3c',borderRadius:1,transition:'width 1s linear'}}/>
+                      </span>
+                    )}
+                    {isHT&&<span style={{display:'block',height:2,background:'rgba(255,165,0,.6)',borderRadius:1,marginTop:4}}/>}
+                    {/* Scorers */}
+                    {(hScorers||aScorers)&&(
+                      <span style={{fontSize:9,color:'rgba(255,255,255,.55)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:260}}>
+                        ⚽ {[hScorers&&`${cleanScorer(hScorers)} (${teamShort(h)})`,aScorers&&`${cleanScorer(aScorers)} (${teamShort(a)})`].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
                   </span>
                 );
               })}
