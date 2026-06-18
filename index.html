@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WC26 Predictions Pool</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
   <!-- Firebase 8 -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -12,7 +15,7 @@
   <!-- React 18 (jsdelivr CDN) -->
   <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
-  <!-- Babel (jsdelivr CDN) -->
+  <!-- Babel (react preset only — faster parse than full standalone) -->
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
 </head>
 <body style="margin:0;background:#FBF8F0">
@@ -45,6 +48,11 @@
     window.__ADMIN_PW        = 'admin2026';   // Super-admin password (change this!)
     window.__SUBADMIN_PW    = 'subadmin2026'; // Sub-admin password (change this!)
 
+    // ── RAPIDAPI KEY ─────────────────────────────────────────────────
+    // Paste your RapidAPI key here so all users share it automatically.
+    // Get it free at: https://rapidapi.com/search/fifa-world-cup-2026-live-data
+    window.__RAPID_KEY = '416399dec9msh8c452cfd8da4c3ep1c5513jsncb6a197ca308';
+
     // ── STEP 2: DEPLOY ───────────────────────────────────────────────
     // Option A: Vercel (free) — go to vercel.com, drag-drop this folder
     // Option B: GitHub Pages  — push to a repo, enable Pages
@@ -59,7 +67,7 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!--  APP CODE                                                       -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <script type="text/babel">
+  <script type="text/babel" data-presets="react">
   'use strict';
   const { useState, useEffect, useMemo, useCallback, useRef } = React;
   const db = window.__db;
@@ -68,22 +76,43 @@
   const NS        = window.__COMP_ID   || 'wc26';
   const DEFAULT_SUPER_PW  = window.__ADMIN_PW     || 'admin2026';
   const DEFAULT_SUB_PW    = window.__SUBADMIN_PW  || 'subadmin2026';
+  const FUNC_BASE = window.__FUNC_BASE || ''; // e.g. https://<project>.cloudfunctions.net
 
   // ── STORAGE (Firebase + localStorage fallback) ──────────────────
+  const fbTimeout = (promise, ms=3000) => Promise.race([
+    promise,
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('Firebase timeout')),ms))
+  ]);
+
+  // localStorage helpers (synchronous — instant)
+  const lsGet = key => { try{ const v=localStorage.getItem(`wc26_${key}`); return v?JSON.parse(v):null; }catch{ return null; } };
+  const lsSet = (key, val) => { try{ localStorage.setItem(`wc26_${key}`,JSON.stringify(val)); }catch{} };
+
   const storage = {
+    // Write: localStorage immediately, Firebase in background (fire-and-forget)
     async set(key, value, shared=false) {
       const full = shared ? key : `${NS}-${key}`;
-      try { localStorage.setItem(`wc26_${full}`, JSON.stringify(value)); } catch {}
-      if (FB_ON) try { await db.collection('wc26').doc(full).set({ value: JSON.stringify(value) }); } catch {}
+      lsSet(full, value);
+      if (FB_ON) fbTimeout(db.collection('wc26').doc(full).set({ value: JSON.stringify(value) })).catch(()=>{});
     },
+    // Read: localStorage instantly, no waiting for Firebase
     async get(key, shared=false) {
       const full = shared ? key : `${NS}-${key}`;
-      if (FB_ON) try {
-        const snap = await db.collection('wc26').doc(full).get();
-        if (snap.exists) return JSON.parse(snap.data().value);
+      return lsGet(full);
+    },
+    // Firebase-aware read: try localStorage first, then Firebase with timeout
+    async getShared(key) {
+      const cached = lsGet(key);
+      if (!FB_ON) return cached;
+      try {
+        const snap = await fbTimeout(db.collection('wc26').doc(key).get());
+        if (snap.exists) {
+          const val = JSON.parse(snap.data().value);
+          lsSet(key, val); // update cache
+          return val;
+        }
       } catch {}
-      try { const v = localStorage.getItem(`wc26_${full}`); if (v) return JSON.parse(v); } catch {}
-      return null;
+      return cached;
     },
     async getJSON(key, shared=false) { return this.get(key, shared); },
     async setJSON(key, value, shared=false) { return this.set(key, value, shared); },
@@ -117,6 +146,8 @@
     });
     return m;
   })();
+  // Pre-built index: group letter → match list (avoids 72-item filter on every render)
+  const GROUP_MATCHES_BY_GROUP = GROUP_KEYS.reduce((acc,g)=>{ acc[g]=GROUP_MATCHES.filter(m=>m.group===g); return acc; },{});
 
   const R32_SLOTS = {
     73:{home:{type:'2',g:'A'},away:{type:'2',g:'B'}},
@@ -210,6 +241,38 @@
   };
   const normTeam = n => n ? (API_TEAM_MAP[n] || n) : n;
 
+  const extractApiTeamName = tteam => {
+    if(!tteam) return '';
+    if(typeof tteam === 'string') return tteam;
+    if(typeof tteam === 'object'){
+      // Common direct fields
+      const direct = tteam.name || tteam.team || tteam.teamName || tteam.team_name || tteam.displayName || tteam.common_name || tteam.shortName || tteam.fullName || tteam.title || tteam.country || tteam.country_name || tteam.nation || tteam.name_en || tteam.full_name || tteam.simpleName;
+      if(direct && typeof direct === 'string') return direct;
+      // Nested name objects
+      if(tteam.name && typeof tteam.name === 'object') return tteam.name.common || tteam.name.official || tteam.name.en || '';
+      // Try some other nested common fields
+      if(tteam.team && typeof tteam.team === 'object') return tteam.team.name || tteam.team.common_name || tteam.team.displayName || '';
+      // Last resort: scan values for a plausible string
+      const isPlausible = s => typeof s==='string' && /[A-Za-zÀ-ÖØ-öø-ÿ\- ]{2,}/.test(s);
+      const scan = (obj, depth=0) => {
+        if(!obj || depth>2) return '';
+        for(const k of Object.keys(obj)){
+          const v = obj[k];
+          if(isPlausible(v)) return v;
+        }
+        for(const k of Object.keys(obj)){
+          const v = obj[k];
+          if(typeof v === 'object'){
+            const r = scan(v, depth+1); if(r) return r;
+          }
+        }
+        return '';
+      };
+      return scan(tteam,0) || '';
+    }
+    return '';
+  };
+
   const getUnderdog = (h, a) => {
     const hr=FIFA_RANKINGS[h], ar=FIFA_RANKINGS[a];
     if(!hr||!ar) return null;
@@ -247,7 +310,7 @@
   const computeGroupStandings = (gKey, preds) => {
     const teams=GROUPS[gKey], stats={};
     teams.forEach(t=>{stats[t]={team:t,P:0,W:0,D:0,L:0,GF:0,GA:0,GD:0,Pts:0}});
-    GROUP_MATCHES.filter(m=>m.group===gKey).forEach(m=>{
+    (GROUP_MATCHES_BY_GROUP[gKey]||[]).forEach(m=>{
       const p=preds[m.id];
       if(!p||p.h===''||p.a===''||p.h==null) return;
       const h=parseInt(p.h),a=parseInt(p.a);
@@ -308,7 +371,7 @@
     const standings=computeAllStandings(predictions);
     const completeGroups=new Set();
     GROUP_KEYS.forEach(g=>{
-      const done=GROUP_MATCHES.filter(m=>m.group===g).every(m=>{
+      const done=(GROUP_MATCHES_BY_GROUP[g]||[]).every(m=>{
         const p=predictions[m.id]; return p&&p.h!==''&&p.a!==''&&p.h!=null&&p.a!=null;
       });
       if(done) completeGroups.add(g);
@@ -356,7 +419,7 @@
     const standings=computeAllStandings(actualGroupResults);
     const completeGroups=new Set();
     GROUP_KEYS.forEach(g=>{
-      const done=GROUP_MATCHES.filter(m=>m.group===g).every(m=>{const r=actualGroupResults[m.id];return r&&r.h!==''&&r.h!=null&&r.a!==''&&r.a!=null;});
+      const done=(GROUP_MATCHES_BY_GROUP[g]||[]).every(m=>{const r=actualGroupResults[m.id];return r&&r.h!==''&&r.h!=null&&r.a!==''&&r.a!=null;});
       if(done) completeGroups.add(g);
     });
     const allComplete=completeGroups.size===12;
@@ -525,6 +588,12 @@
   .scrollbar::-webkit-scrollbar{height:6px;width:6px}
   .scrollbar::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
   @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  @keyframes fadeSlideUp{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  @keyframes balloonFloat{0%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-18px) rotate(3deg)}100%{transform:translateY(0) rotate(-3deg)}}
+  @keyframes shrink{from{width:100%}to{width:0%}}
+  @keyframes presenceSlide{from{opacity:0;transform:translateX(-110%)}to{opacity:1;transform:translateX(0)}}
+  @keyframes balloonRise{0%{transform:translateY(60px);opacity:0}60%{opacity:1}100%{transform:translateY(0);opacity:1}}
+  @keyframes popIn{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
   .fadein{animation:fadein .25s ease}
   a{color:var(--burgundy);text-decoration:none}
   a:hover{text-decoration:underline}
@@ -551,6 +620,7 @@
   const Settings2  = p=><Ic {...p} d={['M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z','M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z','M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41']}/>;
   const Users2     = p=><Ic {...p} d={['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2','M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0','M23 21v-2a4 4 0 0 0-3-3.87','M16 3.13a4 4 0 0 1 0 7.75']}/>;
   const BookOpen   = p=><Ic {...p} d={['M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z','M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z']}/>;
+  const Tv         = p=><Ic {...p} d={['M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z','M8 21h8','M12 17v4']}/>;
 
   // ── FLAG COMPONENT ───────────────────────────────────────────────
   const Flag = ({team,size=16}) => {
@@ -558,8 +628,22 @@
     try{
       const cp=[...em].map(c=>c.codePointAt(0).toString(16)).join('-');
       const url=`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${cp}.svg`;
-      return <img src={url} alt={em} style={{width:size,height:size,verticalAlign:'middle',display:'inline-block'}} />;
+      return <img src={url} alt={em} loading="lazy" decoding="async" style={{width:size,height:size,verticalAlign:'middle',display:'inline-block'}} />;
     } catch{return <span>{em}</span>;}
+  };
+
+  // ── AVATAR COMPONENT ─────────────────────────────────────────────
+  const AVATAR_COLORS=['#c0392b','#2980b9','#27ae60','#8e44ad','#d35400','#16a085','#e67e22','#1abc9c','#9f1b1b','#2c3e50','#c0711e','#0a7bab'];
+  const Avatar = ({name,size=32}) => {
+    if(!name||name==='__guest__') return <div style={{width:size,height:size,borderRadius:'50%',background:'var(--cream2)',border:'1px solid var(--line)',flexShrink:0}}/>;
+    const initials=name.trim().split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('')||'?';
+    let h=0; for(let i=0;i<name.length;i++) h=(Math.imul(31,h)+name.charCodeAt(i))|0;
+    const bg=AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length];
+    return(
+      <div style={{width:size,height:size,borderRadius:'50%',background:bg,color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:Math.round(size*0.38),fontWeight:700,flexShrink:0,userSelect:'none',letterSpacing:'-0.02em',fontFamily:'inherit'}}>
+        {initials}
+      </div>
+    );
   };
 
   // ── SHARED UI HELPERS ────────────────────────────────────────────
@@ -657,9 +741,10 @@
   );
 
   // ── MATCH CELLS (grid layout) ────────────────────────────────────
-  const MatchCells = ({match,pred,actual,onSet,jokerMultiplier=1,locked:compLocked}) => {
+  const MatchCells = ({match,pred,actual,onSet,jokerMultiplier=1,locked:compLocked,matchLocked=false}) => {
     const hasResult=actual&&actual.h!==''&&actual.h!=null&&actual.a!==''&&actual.a!=null;
     const resultLocked=hasResult;
+    const isLocked=resultLocked||compLocked||matchLocked;
     const ph=pred?.h??'',pa=pred?.a??'';
     const correct=resultLocked&&String(ph)===String(actual.h)&&String(pa)===String(actual.a);
     const underdog=getUnderdog(match.home,match.away);
@@ -676,9 +761,9 @@
           <Flag team={match.home} size={15}/>
         </div>
         <div style={{...cell,display:'flex',alignItems:'center',gap:4,justifyContent:'center',padding:'8px 6px'}}>
-          <input type="number" min="0" max="20" className="input-score" value={ph} onChange={e=>onSet(match.id,'h',e.target.value)} disabled={resultLocked||compLocked} style={resultLocked||compLocked?{background:'var(--cream2)',color:'var(--ink-soft)'}:{}}/>
+          <input type="number" min="0" max="20" className="input-score" value={ph} onChange={e=>onSet(match.id,'h',e.target.value)} disabled={isLocked} style={isLocked?{background:matchLocked?'rgba(231,76,60,.08)':'var(--cream2)',color:'var(--ink-soft)'}:{}}/>
           <span style={{fontSize:12,color:'var(--ink-soft)'}}>:</span>
-          <input type="number" min="0" max="20" className="input-score" value={pa} onChange={e=>onSet(match.id,'a',e.target.value)} disabled={resultLocked||compLocked} style={resultLocked||compLocked?{background:'var(--cream2)',color:'var(--ink-soft)'}:{}}/>
+          <input type="number" min="0" max="20" className="input-score" value={pa} onChange={e=>onSet(match.id,'a',e.target.value)} disabled={isLocked} style={isLocked?{background:matchLocked?'rgba(231,76,60,.08)':'var(--cream2)',color:'var(--ink-soft)'}:{}}/>
         </div>
         <div style={{...cell,display:'flex',alignItems:'center',gap:4,paddingLeft:8}}>
           <Flag team={match.away} size={15}/>
@@ -688,6 +773,7 @@
         {(resultLocked||jokerMultiplier>1)&&(
           <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'2px 0 6px',borderBottom:'1px solid var(--line-soft)',background:jBg,marginTop:-1}}>
             {jokerMultiplier>1&&<span style={{fontSize:9,fontWeight:800,color:jColor,background:jokerMultiplier===3?'rgba(159,27,27,.1)':'rgba(214,137,42,.15)',padding:'1px 5px',borderRadius:3}}>{jokerMultiplier}× JOKER</span>}
+            {matchLocked&&!resultLocked&&<span style={{fontSize:9,fontWeight:800,color:'#e74c3c',background:'rgba(231,76,60,.1)',padding:'1px 5px',borderRadius:3}}>🔴 PLAYING TODAY</span>}
             {resultLocked&&(
               <>
                 <span style={{fontSize:10,color:'var(--ink-soft)'}}>Result:</span>
@@ -703,9 +789,9 @@
   };
 
   // ── GROUP CARD ───────────────────────────────────────────────────
-  const GroupCard = ({groupKey,isOpen,onToggle,predictions,actualResults,onSet,standings,progress,jokerTeam,jokerGroup,locked}) => {
+  const GroupCard = ({groupKey,isOpen,onToggle,predictions,actualResults,onSet,standings,progress,jokerTeam,jokerGroup,locked,teamsPlayingToday=new Set()}) => {
     const teams=GROUPS[groupKey];
-    const matches=GROUP_MATCHES.filter(m=>m.group===groupKey);
+    const matches=GROUP_MATCHES_BY_GROUP[groupKey]||[];
     const isJG=jokerGroup===groupKey,jTIG=jokerTeam&&teams.includes(jokerTeam);
     const anyResults=matches.some(m=>{const r=actualResults?.[m.id];return r&&r.h!==''&&r.h!=null;});
     const groupPts=matches.reduce((sum,m)=>{
@@ -746,7 +832,7 @@
                   <React.Fragment key={md}>
                     <div style={{gridColumn:'1/-1',fontSize:11,color:'var(--ink-soft)',fontWeight:500,padding:'6px 0 2px'}}>Matchday {md}</div>
                     {matches.filter(m=>m.matchday===md).map(m=>(
-                      <MatchCells key={m.id} match={m} pred={predictions[m.id]||{h:'',a:''}} actual={actualResults?.[m.id]} onSet={onSet} jokerMultiplier={getJokerMultiplier(m,jokerTeam,jokerGroup)} locked={locked}/>
+                      <MatchCells key={m.id} match={m} pred={predictions[m.id]||{h:'',a:''}} actual={actualResults?.[m.id]} onSet={onSet} jokerMultiplier={getJokerMultiplier(m,jokerTeam,jokerGroup)} locked={locked} matchLocked={teamsPlayingToday.has(m.home)||teamsPlayingToday.has(m.away)}/>
                     ))}
                   </React.Fragment>
                 ))}
@@ -768,8 +854,10 @@
   };
 
   // ── PREDICTIONS VIEW ─────────────────────────────────────────────
-  const PredictionsView = ({predictions,onSave,results,locked}) => {
+  const PredictionsView = ({predictions,onSave,results,locked,teamsPlayingToday=new Set(),jumpToGroup=null}) => {
     const [openGroup,setOpenGroup]=useState('A');
+    // Jump to a specific group when requested from outside (e.g. banner click)
+    useEffect(()=>{ if(jumpToGroup) setOpenGroup(jumpToGroup); },[jumpToGroup]);
     const joker=predictions.joker||{};
     const setMatch=(mId,side,val)=>{
       if(locked) return;
@@ -780,7 +868,7 @@
     const groupProgress=useMemo(()=>{
       const p={};
       GROUP_KEYS.forEach(g=>{
-        const ms=GROUP_MATCHES.filter(m=>m.group===g);
+        const ms=GROUP_MATCHES_BY_GROUP[g]||[];
         const done=ms.filter(m=>{const r=predictions.group?.[m.id];return r&&r.h!==''&&r.a!==''&&r.h!=null&&r.a!=null;}).length;
         p[g]={done,total:ms.length};
       });
@@ -827,7 +915,7 @@
         <ProgressBar done={totalDone} total={72} label="matches predicted"/>
         <div style={{marginTop:20,display:'flex',flexDirection:'column',gap:10}}>
           {GROUP_KEYS.map(g=>(
-            <GroupCard key={g} groupKey={g} isOpen={openGroup===g} onToggle={()=>setOpenGroup(openGroup===g?null:g)} predictions={predictions.group||{}} actualResults={results.group} onSet={setMatch} standings={standings[g]} progress={groupProgress[g]} jokerTeam={joker.team||null} jokerGroup={joker.group||null} locked={locked}/>
+            <GroupCard key={g} groupKey={g} isOpen={openGroup===g} onToggle={()=>setOpenGroup(openGroup===g?null:g)} predictions={predictions.group||{}} actualResults={results.group} onSet={setMatch} standings={standings[g]} progress={groupProgress[g]} jokerTeam={joker.team||null} jokerGroup={joker.group||null} locked={locked} teamsPlayingToday={teamsPlayingToday}/>
           ))}
         </div>
       </div>
@@ -872,13 +960,13 @@
         {side==='right'&&(
           <div style={{position:'absolute',top:'50%',left:0,width:STUB+18,height:1,background:lineColor}}/>
         )}
-        <div style={{background:isFinal?'linear-gradient(180deg,#FFF8E5 0%,#FAEEC8 100%)':isThirdPlace?'var(--cream2)':'var(--paper)',border:`1px solid ${isFinal?'var(--amber)':advancer?'var(--forest)':'var(--line)'}`,borderRadius:4,padding:isFinal?'12px 12px 8px':'7px 8px',fontSize:12,opacity:hK||aK?1:0.45,position:'relative',zIndex:1,boxShadow:isFinal?'0 4px 14px rgba(214,137,42,.2)':'none'}}>
+        <div style={{background:isFinal?'linear-gradient(180deg,#FFF8E5 0%,#FAEEC8 100%)':isThirdPlace?'var(--cream2)':'var(--paper)',border:`1px solid ${isFinal?'var(--amber)':advancer?'var(--forest)':'var(--line)'}`,borderRadius:4,padding:isFinal?'12px 12px 8px':'7px 8px',fontSize:12,opacity:1,position:'relative',zIndex:1,boxShadow:isFinal?'0 4px 14px rgba(214,137,42,.2)':'none'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3,height:12}}>
             <span style={{fontSize:9,color:'var(--ink-soft)',fontWeight:600}}>{isFinal?'⚜ FINAL ⚜':isThirdPlace?'3RD PLACE':`M${match.id}`}</span>
             {needsPk&&<span style={{fontSize:9,color:'var(--burgundy)',fontWeight:700}}>PICK PK ↓</span>}
           </div>
           {[[match.home,'h',hK],[match.away,'a',aK]].map(([team,side_,known])=>(
-            <div key={side_} style={{display:'flex',alignItems:'center',gap:4,padding:'2px 0',opacity:advancer&&advancer!==team?.45:1}}>
+            <div key={side_} style={{display:'flex',alignItems:'center',gap:4,padding:'2px 0',opacity:(advancer && advancer!==team)?0.6:1}}>
               <span style={{fontSize:12,flexShrink:0}}>{known?(TEAM_FLAGS[team]||'⚽'):'○'}</span>
               <span style={{flex:1,fontSize:10,fontWeight:advancer===team?700:500,color:known?'var(--ink)':'var(--ink-soft)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontStyle:known?'normal':'italic'}}>{known?teamShort(team):getSlotLabel(match.id,side_==='h'?'home':'away')}</span>
               <input type="number" min="0" max="20" value={side_==='h'?h:a} onChange={e=>{const v=e.target.value;if(v===''||(parseInt(v)>=0&&parseInt(v)<=20)) onSet(match.id,side_,v);}} disabled={!hasTeams||resultLocked} style={{width:26,height:22,padding:0,textAlign:'center',fontFamily:'JetBrains Mono,monospace',fontSize:11,fontWeight:700,background:(!hasTeams||resultLocked)?'var(--cream2)':'white',border:'1px solid var(--line)',borderRadius:3,color:'var(--ink)',MozAppearance:'textfield'}}/>
@@ -1114,7 +1202,7 @@
   };
 
   // ── LEADERBOARD ──────────────────────────────────────────────────
-  const LeaderboardView = ({participants,allPredictions,results}) => {
+  const LeaderboardView = React.memo(({participants,allPredictions,results}) => {
     const scores=useMemo(()=>(
       participants.map(p=>{
         const preds=allPredictions[p]||{group:{},ko:{}};
@@ -1132,7 +1220,8 @@
           {scores.map((s,i)=>(
             <div key={s.name} className="card fadein" style={{padding:'14px 18px',borderLeft:i===0?'3px solid var(--amber)':i===1?'3px solid #9b9087':i===2?'3px solid #8b6e4e':'3px solid transparent'}}>
               <div style={{display:'flex',alignItems:'center',gap:12}}>
-                <div style={{fontSize:20,minWidth:28}}>{['🥇','🥈','🥉'][i]||<span style={{fontSize:14,color:'var(--ink-soft)',fontWeight:600}}>{i+1}</span>}</div>
+                <div style={{fontSize:20,minWidth:28,textAlign:'center'}}>{['🥇','🥈','🥉'][i]||<span style={{fontSize:14,color:'var(--ink-soft)',fontWeight:600}}>{i+1}</span>}</div>
+                <Avatar name={s.name} size={36}/>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:14,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.name}</div>
                   <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:2,display:'flex',gap:10,flexWrap:'wrap'}}>
@@ -1156,7 +1245,7 @@
         </div>
       </div>
     );
-  };
+  });
 
   // ── RULES VIEW ───────────────────────────────────────────────────
   const RulesView = () => (
@@ -1175,7 +1264,6 @@
       {[
         {title:'Per Match — Group Stage',rows:[['Correct home goals','+1'],['Correct away goals','+1'],['Correct result (win/loss)','+1'],['Correct draw result','+2'],['Exact score bonus','+1'],['Underdog win (team ranked 20+ spots lower wins)','+2']]},
         {title:'Per Match — Knockout Stage',rows:[['Correct home goals','+1'],['Correct away goals','+1'],['Correct result (win/loss)','+1'],['Correct draw result','+2'],['Exact score bonus','+1']]},
-        {title:'Bracket Bonuses — per team correctly placed per round',rows:[['Round of 32 (correct team in this round)','+4'],['Round of 16','+4'],['Quarter-Finals','+6'],['Semi-Finals','+8'],['Final','+10'],['3rd Place Play-off','+4'],['Team reaches round but picked on wrong side of bracket','÷2 (half points)']]},
         {title:'Bonus Picks — 10 pts each',rows:[['World Cup Winner (team)','+10'],['Runner-Up (team)','+10'],['3rd Place (team)','+10'],['Golden Boot (player name)','+10'],['Tie-break: time of first goal in the Final (MM:SS)','Breaks ties only']]},
       ].map(({title,rows})=>(
         <div key={title} className="card" style={{padding:18,marginTop:14}}>
@@ -1248,7 +1336,7 @@
   );
 
   // ── BROWSE VIEW ──────────────────────────────────────────────────
-  const BrowseView = ({participants,allPredictions,results}) => {
+  const BrowseView = React.memo(({participants,allPredictions,results}) => {
     const [selected,setSelected]=useState(null);
     const sorted=useMemo(()=>[...participants].sort((a,b)=>a.localeCompare(b)),[participants]);
     const viewPreds=selected?(allPredictions[selected]||{group:{},ko:{},bonus:{}}):null;
@@ -1258,20 +1346,23 @@
         <SectionHeader kicker={`${participants.length} participants`} title="Browse Picks" subtitle="View any participant's predictions."/>
         <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:16,marginBottom:20}}>
           {sorted.map(p=>(
-            <button key={p} className="pill" onClick={()=>setSelected(p===selected?null:p)} style={{cursor:'pointer',background:p===selected?'var(--ink)':'var(--cream2)',color:p===selected?'var(--cream)':'var(--ink)',border:`1px solid ${p===selected?'var(--ink)':'var(--line)'}`,fontWeight:p===selected?700:400,padding:'6px 12px',fontSize:13}}>{p}</button>
+            <button key={p} className="pill" onClick={()=>setSelected(p===selected?null:p)} style={{cursor:'pointer',background:p===selected?'var(--ink)':'var(--cream2)',color:p===selected?'var(--cream)':'var(--ink)',border:`1px solid ${p===selected?'var(--ink)':'var(--line)'}`,fontWeight:p===selected?700:400,padding:'5px 12px 5px 6px',fontSize:13,display:'flex',alignItems:'center',gap:7}}>
+              <Avatar name={p} size={22}/>{p}
+            </button>
           ))}
         </div>
         {!selected&&<div style={{textAlign:'center',padding:'40px 20px',color:'var(--ink-soft)',fontSize:14,fontStyle:'italic'}}>Tap a name above to view their picks</div>}
         {selected&&viewPreds&&(
           <div className="fadein">
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+            <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:14}}>
+              <Avatar name={selected} size={52}/>
               <div>
                 <div className="display" style={{fontSize:22,fontWeight:700}}>{selected}</div>
                 {viewScore&&<div style={{fontSize:13,color:'var(--ink-soft)'}}><strong>{viewScore.total} pts</strong> — Group: {viewScore.groupPoints} | KO: {viewScore.koPoints} | Bonus: {viewScore.bonusPoints}</div>}
               </div>
             </div>
             {GROUP_KEYS.map(g=>{
-              const ms=GROUP_MATCHES.filter(m=>m.group===g);
+              const ms=GROUP_MATCHES_BY_GROUP[g]||[];
               return(
                 <div key={g} className="card" style={{marginBottom:8,overflow:'hidden'}}>
                   <div style={{padding:'10px 14px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'flex',justifyContent:'space-between'}}>
@@ -1312,7 +1403,313 @@
         )}
       </div>
     );
-  };
+  });
+
+  // ── LIVE DATA VIEW  (memoized — re-renders only when mounted/unmounted) ───────────────────────────────────────────────
+  const LiveDataView = React.memo(() => {
+    const[syncKey,setSyncKey]=useState(()=>{ try{return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||'';}catch{return window.__RAPID_KEY||'';} });
+    const[liveStandings,setLiveStandings]=useState(null);
+    const[standingsLoading,setStandingsLoading]=useState(false);
+    const[liveData,setLiveData]=useState({});
+    const[loadingPanel,setLoadingPanel]=useState(null);
+
+    const handleFetchStandings=async()=>{
+      if(!syncKey.trim() && !FUNC_BASE){alert('API key is required.');return;}
+      setStandingsLoading(true);setLiveStandings(null);
+      try{
+        if(!FUNC_BASE) localStorage.setItem('wc26_synckey',syncKey.trim());
+        const hdrs = FUNC_BASE? null : {'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST};
+        const r = FUNC_BASE ? await fetch(`${FUNC_BASE}/getStandings`) : await fetch('https://'+API_HOST+'/standings',{headers:hdrs});
+        const data = await r.json();
+        if(data.status==='error'||data.error) throw new Error(data.message||data.error||'API error');
+        let groups = data?.data?.groups||data?.data||data?.groups||{};
+        if(Array.isArray(groups)) groups={};
+        const isGrouped = Object.values(groups).every(v=>Array.isArray(v));
+        if(!isGrouped) groups={};
+        const totalPts = Object.values(groups).flat().reduce((s,t)=>s+(t.points||0),0);
+        if(totalPts===0||Object.keys(groups).length<2){
+          const allGroups={};
+          const letters=['A','B','C','D','E','F','G','H','I','J','K','L'];
+          for(const letter of letters){
+            try{
+              const gr = FUNC_BASE ? await fetch(`${FUNC_BASE}/getStandings?group=${letter}`) : await fetch('https://'+API_HOST+'/standings?group='+letter,{headers:hdrs});
+              const gd = await gr.json();
+              const gArr = gd?.data?.groups?.['Group '+letter]||gd?.data?.['Group '+letter]||gd?.data||gd?.groups?.['Group '+letter]||null;
+              if(gArr&&Array.isArray(gArr)&&gArr.length>0) allGroups['Group '+letter]=gArr;
+            }catch(e2){}
+          }
+          if(Object.keys(allGroups).length>0) groups=allGroups;
+        }
+        setLiveStandings(groups);
+      }catch(e){alert('Standings fetch failed: '+e.message);}
+      setStandingsLoading(false);
+    };
+
+    const fetchPanel=async(panelKey,endpoint,params='')=>{
+      if(!syncKey.trim()&&!FUNC_BASE){alert('API key is required.');return;}
+      setLoadingPanel(panelKey);
+      try{
+        if(!FUNC_BASE) localStorage.setItem('wc26_synckey',syncKey.trim());
+        let r;
+        if(FUNC_BASE){
+          r=await fetch(`${FUNC_BASE}/proxy?ep=${encodeURIComponent(endpoint)}${params?'&'+params:''}`);
+        }else{
+          r=await fetch(`https://${API_HOST}/${endpoint}${params?'?'+params:''}`,{headers:{'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST}});
+        }
+        const d=await r.json();
+        setLiveData(prev=>({...prev,[panelKey]:d}));
+      }catch(e){alert(`${panelKey} fetch failed: ${e.message}`);}
+      setLoadingPanel(null);
+    };
+
+    const flatten=d=>{
+      if(!d) return [];
+      const candidates=[d?.data?.matches,d?.data?.results,d?.data?.live,d?.data?.upcoming,d?.data?.scorers,d?.data?.players,d?.data,d?.matches,d?.results,d?.live,d?.upcoming,d?.scorers,d?.players];
+      for(const c of candidates){
+        if(Array.isArray(c)&&c.length>0) return c;
+        if(c&&typeof c==='object'&&!Array.isArray(c)){
+          const vals=Object.values(c);
+          if(vals.length>0&&vals.every(v=>Array.isArray(v))) return vals.flat();
+        }
+      }
+      return Array.isArray(d)?d:[];
+    };
+    const closePanel=key=>{ if(key==='standings') setLiveStandings(null); else setLiveData(p=>{const n={...p};delete n[key];return n;}); };
+    const PanelHdr=({bg,title,count,panelKey})=>(
+      <div style={{padding:'10px 16px',background:bg,color:'white',display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontWeight:700,fontSize:13}}>{title}</span>
+        <span style={{fontSize:11,opacity:.75,fontFamily:'monospace'}}>({count})</span>
+        <button onClick={()=>closePanel(panelKey)} style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',border:'none',color:'white',cursor:'pointer',fontSize:11,borderRadius:4,padding:'2px 10px',fontWeight:700}}>✕ Close</button>
+      </div>
+    );
+    const tn=v=>{
+      if(!v) return '-';
+      if(typeof v==='string') return normTeam(v)||v;
+      if(typeof v==='object'){ const s=v.name||v.common_name||v.short_name||v.display_name||v.team||''; return normTeam(s)||s||'-'; }
+      return String(v);
+    };
+    const fv=v=>{
+      if(v==null) return '-';
+      if(typeof v!=='object') return String(v);
+      for(const k of ['name','common_name','short_name','fullName','display_name']){if(v[k]) return v[k];}
+      return '-';
+    };
+
+    return(
+      <div style={{maxWidth:900,margin:'0 auto',padding:'24px 16px'}}>
+        <SectionHeader kicker="Tournament" title="Live API Data" subtitle="Read-only — fetches live tournament data directly from the API."/>
+        {(!window.__RAPID_KEY&&!FUNC_BASE)&&(
+          <div className="card" style={{padding:16,marginBottom:20,maxWidth:520}}>
+            <div className="micro-caps" style={{marginBottom:6}}>API Key (optional override)</div>
+            <div style={{display:'flex',gap:8}}>
+              <input type="password" value={syncKey} onChange={e=>setSyncKey(e.target.value)} placeholder="Paste RapidAPI key…" style={{flex:1,padding:'9px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'JetBrains Mono,monospace',background:'white',color:'var(--ink)'}}/>
+            </div>
+          </div>
+        )}
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:20}}>
+          {[
+            {key:'live',     label:'🔴 Live',          ep:'live',      params:'',             bg:'#c0392b'},
+            {key:'results',  label:'✅ Match Results',  ep:'results',   params:'',             bg:'#27ae60'},
+            {key:'upcoming', label:'📅 Upcoming',       ep:'upcoming',  params:'day=tomorrow', bg:'#d4890a'},
+            {key:'standings',label:'📊 Standings',      ep:'standings', params:'',             bg:'#9f1b1b'},
+            {key:'scorers',  label:'⚽ Top Scorers',    ep:'scorers',   params:'',             bg:'#6c3483'},
+          ].map(({key,label,ep,params,bg})=>(
+            <button key={key}
+              onClick={()=>key==='standings'?handleFetchStandings():fetchPanel(key,ep,params)}
+              disabled={(loadingPanel===key)||(key==='standings'&&standingsLoading)||(!syncKey.trim()&&!FUNC_BASE)}
+              style={{background:(loadingPanel===key||(key==='standings'&&standingsLoading))?'#888':bg,color:'white',border:'none',borderRadius:6,padding:'9px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!syncKey.trim()&&!FUNC_BASE)?0.5:1,whiteSpace:'nowrap'}}>
+              {(loadingPanel===key||(key==='standings'&&standingsLoading))?'⏳ Loading…':label}
+            </button>
+          ))}
+        </div>
+
+        {/* 🔴 LIVE MATCHES */}
+        {liveData.live&&(()=>{
+          const arr=flatten(liveData.live);
+          return(
+            <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#c0392b'}}>
+              <PanelHdr bg="#c0392b" title="🔴 Live Matches" count={arr.length} panelKey="live"/>
+              {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No live matches right now.</div>:(
+                <div style={{overflowX:'auto',maxHeight:360,overflowY:'auto'}} className="scrollbar">
+                  <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                    <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                      {['#','Home','Score','Away','Min','Status','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='Score'||h==='Min'||h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>{arr.map((m,i)=>{
+                      const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+                      const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+                      const hs=m.homeScore??m.home_score??m.score?.home??m.goalsHome??'–';
+                      const as_=m.awayScore??m.away_score??m.score?.away??m.goalsAway??'–';
+                      const min=m.minute??m.elapsed??m.time??'–';
+                      const status=m.status??m.matchStatus??m.state??'–';
+                      const grp=m.group??m.round??m._groupKey??'–';
+                      return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
+                        <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
+                        <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
+                        <td style={{padding:'6px 8px',textAlign:'center',fontFamily:'monospace',fontWeight:800,color:'#c0392b'}}>{hs}–{as_}</td>
+                        <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
+                        <td style={{padding:'6px 8px',textAlign:'center',color:'var(--burgundy)',fontWeight:700}}>{min}'</td>
+                        <td style={{padding:'6px 8px',fontSize:11}}>{status}</td>
+                        <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
+                      </tr>);
+                    })}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ✅ MATCH RESULTS */}
+        {liveData.results&&(()=>{
+          const arr=flatten(liveData.results);
+          return(
+            <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#27ae60'}}>
+              <PanelHdr bg="#27ae60" title="✅ Match Results" count={arr.length} panelKey="results"/>
+              {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No results yet.</div>:(
+                <div style={{overflowX:'auto',maxHeight:360,overflowY:'auto'}} className="scrollbar">
+                  <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                    <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                      {['#','Home','Score','Away','Date','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='Score'||h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>{arr.map((m,i)=>{
+                      const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+                      const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+                      const hs=m.homeScore??m.home_score??m.score?.home??m.goalsHome??'–';
+                      const as_=m.awayScore??m.away_score??m.score?.away??m.goalsAway??'–';
+                      const date=String(m.date??m.matchDate??m.datetime??'–').slice(0,10);
+                      const grp=m.group??m.round??m._groupKey??'–';
+                      return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
+                        <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
+                        <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
+                        <td style={{padding:'6px 8px',textAlign:'center',fontFamily:'monospace',fontWeight:800,color:'var(--forest)'}}>{hs}–{as_}</td>
+                        <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
+                        <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)',fontFamily:'monospace'}}>{date}</td>
+                        <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
+                      </tr>);
+                    })}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 📅 UPCOMING MATCHES */}
+        {liveData.upcoming&&(()=>{
+          const arr=flatten(liveData.upcoming);
+          return(
+            <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#d4890a'}}>
+              <PanelHdr bg="#d4890a" title="📅 Upcoming Matches" count={arr.length} panelKey="upcoming"/>
+              {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No upcoming matches found.</div>:(
+                <div style={{overflowX:'auto',maxHeight:360,overflowY:'auto'}} className="scrollbar">
+                  <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                    <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                      {['#','Home','Away','Date / Time','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>{arr.map((m,i)=>{
+                      const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+                      const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+                      const dt=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'–').slice(0,16).replace('T',' ');
+                      const grp=m.group??m.round??'–';
+                      return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
+                        <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
+                        <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
+                        <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
+                        <td style={{padding:'6px 8px',fontSize:11,fontFamily:'monospace'}}>{dt}</td>
+                        <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
+                      </tr>);
+                    })}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 📊 STANDINGS */}
+        {(liveStandings||standingsLoading)&&(
+          <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#9f1b1b'}}>
+            <PanelHdr bg="#9f1b1b" title="📊 Live Standings" count={liveStandings?`${Object.keys(liveStandings).length} groups`:'…'} panelKey="standings"/>
+            {standingsLoading?<div style={{padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>⏳ Fetching…</div>:liveStandings&&(
+              <div style={{padding:14}}>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:10}}>
+                  {Object.entries(liveStandings).map(([groupName,groupArr])=>{
+                    const letter=groupName.replace('Group ','');
+                    return(
+                      <div key={groupName} style={{border:'1px solid var(--line)',borderRadius:6,overflow:'hidden'}}>
+                        <div style={{padding:'6px 12px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'flex',alignItems:'center',gap:8}}>
+                          <span className="group-letter" style={{fontSize:22,lineHeight:1}}>{letter}</span>
+                          <span style={{fontWeight:700,fontSize:12}}>{groupName}</span>
+                        </div>
+                        <table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}>
+                          <thead><tr style={{borderBottom:'1px solid var(--line)'}}>
+                            {['#','Team','P','W','D','L','GF','GA','GD','Pts'].map(h=>(
+                              <th key={h} style={{padding:'4px 5px',fontSize:9,color:'var(--ink-soft)',fontWeight:700,textAlign:h==='Team'?'left':'center'}}>{h}</th>
+                            ))}
+                          </tr></thead>
+                          <tbody>
+                            {groupArr.map((t,i)=>{
+                              const rawTeam=extractApiTeamName(t.team)||t.name||(typeof t==='string'?t:'');
+                              const appName=normTeam(rawTeam)||rawTeam;
+                              return(
+                                <tr key={appName||i} style={{borderBottom:'1px solid var(--line-soft)',background:i<2?'rgba(27,94,63,.04)':''}}>
+                                  <td style={{padding:'5px',textAlign:'center',fontWeight:700,color:i<2?'var(--forest)':'var(--ink-soft)'}}>{i+1}</td>
+                                  <td style={{padding:'5px',whiteSpace:'nowrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><Flag team={appName} size={12}/><span style={{fontWeight:i<2?700:400}}>{appName}</span></div></td>
+                                  {[t.played??t.matchesPlayed,t.won??t.wins,t.drawn??t.draws??t.tied,t.lost??t.losses,t.gf??t.goalsFor??t.goals_for,t.ga??t.goalsAgainst??t.goals_against,t.gd??t.goalDiff??t.goal_difference].map((v,j)=>(
+                                    <td key={j} className="mono" style={{padding:'5px',textAlign:'center',fontSize:10}}>{v==null?'—':j===6&&v>0?'+'+v:v}</td>
+                                  ))}
+                                  <td className="mono" style={{padding:'5px',textAlign:'center',fontWeight:800,color:i<2?'var(--forest)':'var(--ink)'}}>{t.points??t.pts??t.point??'—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ⚽ TOP SCORERS */}
+        {liveData.scorers&&(()=>{
+          const arr=flatten(liveData.scorers);
+          return(
+            <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#6c3483'}}>
+              <PanelHdr bg="#6c3483" title="⚽ Top Goal Scorers" count={arr.length} panelKey="scorers"/>
+              {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No scorer data.</div>:(
+                <div style={{overflowX:'auto',maxHeight:400,overflowY:'auto'}} className="scrollbar">
+                  <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                    <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                      {['#','Player','Team','Goals','Assists','Matches'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='Goals'||h==='Assists'||h==='Matches'||h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>{arr.map((p,i)=>{
+                      const player=fv(p.player??p.playerName??p.name??p.fullName??p);
+                      const team=tn(p.team??p.teamName??p.club??p.national_team??'');
+                      const goals=p.goals??p.goal??p.totalGoals??'–';
+                      const assists=p.assists??p.assist??'–';
+                      const matches=p.matches??p.appearances??p.gamesPlayed??'–';
+                      return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
+                        <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:i===0?'#d4af37':i===1?'#a8a9ad':i===2?'#cd7f32':'var(--ink-soft)'}}>{i+1}</td>
+                        <td style={{padding:'6px 8px',fontWeight:600}}>{player}</td>
+                        <td style={{padding:'6px 8px'}}><Flag team={team} size={13}/> {team}</td>
+                        <td style={{padding:'6px 8px',textAlign:'center',fontWeight:800,color:'var(--forest)',fontSize:14}}>{goals}</td>
+                        <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)'}}>{assists}</td>
+                        <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)'}}>{matches}</td>
+                      </tr>);
+                    })}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+    );
+  });
 
   // ── ADMIN VIEW ───────────────────────────────────────────────────
   const AdminView = ({results,onSave,config,setConfig,participants,setParticipants,userPins,setUserPins,allPredictions,setAllPredictions,adminRole,adminPws,saveAdminPws}) => {
@@ -1326,30 +1723,34 @@
     const[resetPins,setResetPins]=useState({});
     const[renameTarget,setRenameTarget]=useState(null); // name being renamed
     const[renameValue,setRenameValue]=useState('');
-    const[syncKey,setSyncKey]=useState(()=>{ try{return localStorage.getItem('wc26_synckey')||'';}catch{return '';} });
+    const[syncKey,setSyncKey]=useState(()=>{ try{return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||'';}catch{return window.__RAPID_KEY||'';} });
     const[syncing,setSyncing]=useState(false);
     const[syncLog,setSyncLog]=useState('');
     const[syncPreview,setSyncPreview]=useState(null);
     const[liveStandings,setLiveStandings]=useState(null);
     const[standingsLoading,setStandingsLoading]=useState(false);
+    const[liveData,setLiveData]=useState({});    // keyed by panel: live|results|upcoming|scorers
+    const[loadingPanel,setLoadingPanel]=useState(null);
 
     const handleFetchStandings=async()=>{
-      if(!syncKey.trim()){alert('Paste your API key first.');return;}
+      if(!syncKey.trim() && !FUNC_BASE){alert('Paste your API key first or set window.__FUNC_BASE for proxy.');return;}
       setStandingsLoading(true);setLiveStandings(null);
       try{
-        localStorage.setItem('wc26_synckey',syncKey.trim());
-        const hdrs={'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST};
+        if(!FUNC_BASE){
+          localStorage.setItem('wc26_synckey',syncKey.trim());
+        }
+        const hdrs = FUNC_BASE? null : {'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST};
         // First try /standings without params — may return all groups
-        const r=await fetch('https://'+API_HOST+'/standings',{headers:hdrs});
-        const data=await r.json();
+        const r = FUNC_BASE ? await fetch(`${FUNC_BASE}/getStandings`) : await fetch('https://'+API_HOST+'/standings',{headers:hdrs});
+        const data = await r.json();
         if(data.status==='error'||data.error) throw new Error(data.message||data.error||'API error');
-        let groups=data?.data?.groups||data?.data||data?.groups||{};
+        let groups = data?.data?.groups||data?.data||data?.groups||{};
         // Guard: groups must be an object keyed by group name with array values
         if(Array.isArray(groups)) groups={};
-        const isGrouped=Object.values(groups).every(v=>Array.isArray(v));
+        const isGrouped = Object.values(groups).every(v=>Array.isArray(v));
         if(!isGrouped) groups={};
         // Check if all groups have real data (points sum > 0 across all groups)
-        const totalPts=Object.values(groups).flat().reduce((s,t)=>s+(t.points||0),0);
+        const totalPts = Object.values(groups).flat().reduce((s,t)=>s+(t.points||0),0);
         if(totalPts===0||Object.keys(groups).length<2){
           // Fallback: fetch each group individually
           setSyncLog('⏳ Fetching each group individually (A–L)…');
@@ -1357,13 +1758,13 @@
           const letters=['A','B','C','D','E','F','G','H','I','J','K','L'];
           for(const letter of letters){
             try{
-              const gr=await fetch('https://'+API_HOST+'/standings?group='+letter,{headers:hdrs});
-              const gd=await gr.json();
-              const gArr=gd?.data?.groups?.['Group '+letter]
-                ||gd?.data?.['Group '+letter]
-                ||gd?.data
-                ||gd?.groups?.['Group '+letter]
-                ||null;
+              const gr = FUNC_BASE ? await fetch(`${FUNC_BASE}/getStandings?group=${letter}`) : await fetch('https://'+API_HOST+'/standings?group='+letter,{headers:hdrs});
+              const gd = await gr.json();
+              const gArr = gd?.data?.groups?.['Group '+letter]
+                || gd?.data?.['Group '+letter]
+                || gd?.data
+                || gd?.groups?.['Group '+letter]
+                || null;
               if(gArr&&Array.isArray(gArr)&&gArr.length>0){
                 allGroups['Group '+letter]=gArr;
               }
@@ -1371,9 +1772,30 @@
           }
           if(Object.keys(allGroups).length>0) groups=allGroups;
         }
+        // helpful debug: print one sample standings object to console for troubleshooting
+
         setLiveStandings(groups);
-      }catch(e){alert('Standings fetch failed: '+e.message);}
+      }catch(e){alert('Standings fetch failed: '+e.message);} 
       setStandingsLoading(false);
+    };
+
+    const fetchPanel=async(panelKey,endpoint,params='')=>{
+      if(!syncKey.trim()&&!FUNC_BASE){alert('Enter API key first.');return;}
+      setLoadingPanel(panelKey);
+      try{
+        if(!FUNC_BASE) localStorage.setItem('wc26_synckey',syncKey.trim());
+        let r;
+        if(FUNC_BASE){
+          r=await fetch(`${FUNC_BASE}/proxy?ep=${encodeURIComponent(endpoint)}${params?'&'+params:''}`);
+        }else{
+          const url=`https://${API_HOST}/${endpoint}${params?'?'+params:''}`;
+          r=await fetch(url,{headers:{'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST}});
+        }
+        const d=await r.json();
+
+        setLiveData(prev=>({...prev,[panelKey]:d}));
+      }catch(e){alert(`${panelKey} fetch failed: ${e.message}`);}
+      setLoadingPanel(null);
     };
 
     const handleSync=async(confirm=false)=>{
@@ -1383,17 +1805,18 @@
         setSyncLog('✅ Done! '+ok+' results imported.\n\n'+syncPreview.log.join('\n'));
         setSyncPreview(null); return;
       }
-      if(!syncKey.trim()){alert('Paste your API key first.');return;}
+      if(!syncKey.trim() && !FUNC_BASE){alert('Paste your API key first or set window.__FUNC_BASE for proxy.');return;}
       setSyncing(true);setSyncLog('⏳ Finding the right endpoint…');setSyncPreview(null);
       try{
-        localStorage.setItem('wc26_synckey',syncKey.trim());
-        const hdrs={'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST};
+        if(!FUNC_BASE) localStorage.setItem('wc26_synckey',syncKey.trim());
+        const hdrs = FUNC_BASE ? null : {'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST};
         const ENDPOINTS=['/results','/fixtures','/matches','/group-results','/group-matches','/scores','/games','/all-matches'];
         let all=null,usedEndpoint='';
         for(const ep of ENDPOINTS){
           setSyncLog('⏳ Trying '+ep+'…');
           try{
-            const r=await fetch('https://'+API_HOST+ep,{headers:hdrs});
+            const path = ep.replace(/^\//,'');
+            const r = FUNC_BASE ? await fetch(`${FUNC_BASE}/proxy?ep=${encodeURIComponent(path)}`) : await fetch('https://'+API_HOST+ep,{headers:hdrs});
             const d=await r.json();
             if(d.message&&d.message.includes('does not exist')) continue;
             if(d.status==='error'||d.error) continue;
@@ -1422,8 +1845,8 @@
           }catch(e2){}
         }
         if(!all){
-          const r=await fetch('https://'+API_HOST+'/results',{headers:hdrs});
-          const d=await r.json();
+          const r = FUNC_BASE ? await fetch(`${FUNC_BASE}/proxy?ep=results`) : await fetch('https://'+API_HOST+'/results',{headers:hdrs});
+          const d = await r.json();
           setSyncLog('❌ Could not find a matches endpoint.\nTried: '+ENDPOINTS.join(', ')+'\n\nRaw /results response:\n'+JSON.stringify(d).slice(0,500)+'\n\nLook at the Endpoints tab on rapidapi.com for the correct path.');
           setSyncing(false);return;
         }
@@ -1534,7 +1957,7 @@
     const setBonus=(k,v)=>onSave({...results,bonus:{...results.bonus,[k]:v}});
     const{bracket}=useMemo(()=>buildActualBracket(results.group||{},results.ko||{}),[results]);
     const standings=useMemo(()=>computeAllStandings(results.group||{}),[results]);
-    const totalGroupDone=GROUP_MATCHES.filter(m=>{const r=results.group?.[m.id];return r&&r.h!==''&&r.h!=null;}).length;
+    const totalGroupDone=GROUP_MATCHES.filter(m=>{const r=results.group?.[m.id];return r&&r.h!==''&&r.h!=null;}).length; // flat scan OK here — only once per admin render
     const BONUS_PICKS=[{k:'winner',l:'🏆 World Cup Winner'},{k:'runnerUp',l:'🥈 Runner-Up'},{k:'thirdPlace',l:'🥉 3rd Place'},{k:'goldenBoot',l:'⚽ Golden Boot (player)'}];
     const koRounds=[{ids:range(73,88),label:'Round of 32'},{ids:range(89,96),label:'Round of 16'},{ids:range(97,100),label:'Quarter-Finals'},{ids:[101,102],label:'Semi-Finals'},{ids:[103],label:'3rd Place'},{ids:[104],label:'Final'}];
     return(
@@ -1557,7 +1980,7 @@
             <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 14px'}}>{totalGroupDone}/72 group match results entered.</p>
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               {GROUP_KEYS.map(g=>{
-                const ms=GROUP_MATCHES.filter(m=>m.group===g);
+                const ms=GROUP_MATCHES_BY_GROUP[g]||[];
                 const done=ms.filter(m=>{const r=results.group?.[m.id];return r&&r.h!==''&&r.h!=null;}).length;
                 const isOpen=openGroup===g;
                 return(
@@ -1704,76 +2127,254 @@
             <div style={{marginTop:12,fontSize:12,color:'var(--ink-soft)'}}>
               <strong>Tip:</strong> Run this once after every matchday. The free plan (100 req/day) is more than enough — each sync uses 1 request.
             </div>
-            {/* ── LIVE STANDINGS ───────────────────────────── */}
+            {/* ── LIVE API PANELS ───────────────────────────── */}
             <div style={{marginTop:24}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                <div>
-                  <div className="display" style={{fontSize:20,fontWeight:700}}>📊 Live FIFA Standings</div>
-                  <div style={{fontSize:12,color:'var(--ink-soft)'}}>Fetched directly from api-football.com — read only, does not import results.</div>
-                </div>
-                <button className="btn" onClick={handleFetchStandings} disabled={standingsLoading||!syncKey.trim()} style={{background:'var(--burgundy)',whiteSpace:'nowrap'}}>
-                  {standingsLoading?'⏳ Loading…':'📡 Fetch Standings'}
-                </button>
+              <div className="display" style={{fontSize:18,fontWeight:700,marginBottom:4}}>📡 Live API Data</div>
+              <div style={{fontSize:12,color:'var(--ink-soft)',marginBottom:14}}>Read-only — fetches live tournament data. Does not affect predictions or results.</div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:20}}>
+                {[
+                  {key:'live',    label:'🔴 Live',           ep:'live',      params:'',             bg:'#c0392b'},
+                  {key:'results', label:'✅ Match Results',   ep:'results',   params:'',             bg:'#27ae60'},
+                  {key:'upcoming',label:'📅 Upcoming',        ep:'upcoming',  params:'day=tomorrow', bg:'#d4890a'},
+                  {key:'standings',label:'📊 Standings',      ep:'standings', params:'',             bg:'#9f1b1b'},
+                  {key:'scorers', label:'⚽ Top Scorers',     ep:'scorers',   params:'',             bg:'#6c3483'},
+                ].map(({key,label,ep,params,bg})=>(
+                  <button key={key}
+                    onClick={()=>key==='standings'?handleFetchStandings():fetchPanel(key,ep,params)}
+                    disabled={(loadingPanel===key)||(key==='standings'&&standingsLoading)||(!syncKey.trim()&&!FUNC_BASE)}
+                    style={{background:(loadingPanel===key||(key==='standings'&&standingsLoading))?'#888':bg,color:'white',border:'none',borderRadius:6,padding:'9px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!syncKey.trim()&&!FUNC_BASE)?0.5:1,whiteSpace:'nowrap'}}>
+                    {(loadingPanel===key||(key==='standings'&&standingsLoading))?'⏳ Loading…':label}
+                  </button>
+                ))}
               </div>
-              {!liveStandings&&!standingsLoading&&(
-                <div className="card" style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic'}}>
-                  Enter your API key above and click Fetch Standings.
-                </div>
-              )}
-              {standingsLoading&&(
-                <div className="card" style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13}}>⏳ Fetching from API…</div>
-              )}
-              {liveStandings&&(
-                <>
-                <div style={{fontSize:11,color:'var(--ink-soft)',marginBottom:8,fontFamily:'JetBrains Mono,monospace',padding:'6px 10px',background:'var(--cream2)',borderRadius:4}}>
-                  Sample fields from API: {Object.keys(Object.values(liveStandings)[0]?.[0]||{}).join(', ')||'none'}
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:12}}>
-                  {Object.entries(liveStandings).map(([groupName,groupArr])=>{
-                    const letter=groupName.replace('Group ','');
+
+              {/* ── data panels ─────────────────────────── */}
+              {(()=>{
+                // Generic response → flat array
+                const flatten=d=>{
+                  if(!d) return [];
+                  const candidates=[d?.data?.matches,d?.data?.results,d?.data?.live,d?.data?.upcoming,d?.data?.scorers,d?.data?.players,d?.data,d?.matches,d?.results,d?.live,d?.upcoming,d?.scorers,d?.players];
+                  for(const c of candidates){
+                    if(Array.isArray(c)&&c.length>0) return c;
+                    if(c&&typeof c==='object'&&!Array.isArray(c)){
+                      const vals=Object.values(c);
+                      if(vals.length>0&&vals.every(v=>Array.isArray(v))) return vals.flat();
+                    }
+                  }
+                  return Array.isArray(d)?d:[];
+                };
+                const closePanel=key=>{ if(key==='standings') setLiveStandings(null); else setLiveData(p=>{const n={...p};delete n[key];return n;}); };
+                const PanelHdr=({bg,title,count,panelKey})=>(
+                  <div style={{padding:'10px 16px',background:bg,color:'white',display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontWeight:700,fontSize:13}}>{title}</span>
+                    <span style={{fontSize:11,opacity:.75,fontFamily:'monospace'}}>({count})</span>
+                    <button onClick={()=>closePanel(panelKey)} style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',border:'none',color:'white',cursor:'pointer',fontSize:11,borderRadius:4,padding:'2px 10px',fontWeight:700}}>✕ Close</button>
+                  </div>
+                );
+                const tn=v=>{
+                  if(!v) return '-';
+                  if(typeof v==='string') return normTeam(v)||v;
+                  if(typeof v==='object'){ const s=v.name||v.common_name||v.short_name||v.display_name||v.team||''; return normTeam(s)||s||'-'; }
+                  return String(v);
+                };
+                const fv=v=>{
+                  if(v==null) return '-';
+                  if(typeof v!=='object') return String(v);
+                  for(const k of ['name','common_name','short_name','fullName','display_name']){if(v[k]) return v[k];}
+                  return '-';
+                };
+                return(
+                  <>
+                  {/* 🔴 LIVE MATCHES */}
+                  {liveData.live&&(()=>{
+                    const arr=flatten(liveData.live);
                     return(
-                      <div key={groupName} className="card" style={{overflow:'hidden'}}>
-                        <div style={{padding:'8px 14px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'flex',alignItems:'center',gap:10}}>
-                          <span className="group-letter" style={{fontSize:28,lineHeight:1}}>{letter}</span>
-                          <span style={{fontWeight:700,fontSize:13}}>{groupName}</span>
-                        </div>
-                        <div style={{overflowX:'auto'}}>
-                          <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
-                            <thead><tr style={{borderBottom:'1px solid var(--line)'}}>
-                              {['#','Team','P','W','D','L','GF','GA','GD','Pts'].map(h=>(
-                                <th key={h} style={{padding:'4px 6px',fontSize:10,color:'var(--ink-soft)',fontWeight:700,textAlign:h==='Team'?'left':'center',whiteSpace:'nowrap'}}>{h}</th>
-                              ))}
-                            </tr></thead>
-                            <tbody>
-                              {groupArr.map((t,i)=>{
-                                // API shape: {team, played, won, drawn, lost, gf, ga, gd, points, flag}
-                                const name=normTeam(t.team);
-                                const appName=name; // mapped to our team names
-                                return(
-                                  <tr key={t.team} style={{borderBottom:'1px solid var(--line-soft)',background:i<2?'rgba(27,94,63,.04)':i===2?'rgba(214,137,42,.04)':'transparent'}}>
-                                    <td style={{padding:'6px',textAlign:'center',fontWeight:700,color:i<2?'var(--forest)':'var(--ink-soft)'}}>{i+1}</td>
-                                    <td style={{padding:'6px',whiteSpace:'nowrap'}}>
-                                      <div style={{display:'flex',alignItems:'center',gap:5}}>
-                                        <Flag team={appName} size={14}/>
-                                        <span style={{fontWeight:i<2?700:400}}>{appName}</span>
-                                      </div>
-                                    </td>
-                                    {[t.played??t.matchesPlayed,t.won??t.wins,t.drawn??t.draws??t.tied,t.lost??t.losses,t.gf??t.goalsFor??t.goals_for,t.ga??t.goalsAgainst??t.goals_against,t.gd??t.goalDiff??t.goal_difference].map((v,j)=>(
-                                      <td key={j} className="mono" style={{padding:'6px',textAlign:'center',fontSize:11}}>{v==null?<span style={{color:'var(--line)'}}>—</span>:j===6&&v>0?'+'+v:v}</td>
-                                    ))}
-                                    <td className="mono" style={{padding:'6px',textAlign:'center',fontWeight:800,color:i<2?'var(--forest)':'var(--ink)'}}>{t.points??t.pts??t.point??<span style={{color:'var(--line)'}}>—</span>}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
+                      <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#c0392b'}}>
+                        <PanelHdr bg="#c0392b" title="🔴 Live Matches" count={arr.length} panelKey="live"/>
+                        {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No live matches right now. Raw keys: {Object.keys(liveData.live||{}).join(', ')}</div>:(
+                          <div style={{overflowX:'auto',maxHeight:320,overflowY:'auto'}} className="scrollbar">
+                            <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                              <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                                {['#','Home','Score','Away','Min','Status','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='Score'||h==='Min'||h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                              </tr></thead>
+                              <tbody>{arr.map((m,i)=>{
+                                const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+                                const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+                                const hs=m.homeScore??m.home_score??m.score?.home??m.goalsHome??'–';
+                                const as_=m.awayScore??m.away_score??m.score?.away??m.goalsAway??'–';
+                                const min=m.minute??m.elapsed??m.time??'–';
+                                const status=m.status??m.matchStatus??m.state??'–';
+                                const grp=m.group??m.round??m._groupKey??'–';
+                                return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
+                                  <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
+                                  <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
+                                  <td style={{padding:'6px 8px',textAlign:'center',fontFamily:'monospace',fontWeight:800,color:'#c0392b'}}>{hs}–{as_}</td>
+                                  <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
+                                  <td style={{padding:'6px 8px',textAlign:'center',color:'var(--burgundy)',fontWeight:700}}>{min}'</td>
+                                  <td style={{padding:'6px 8px',fontSize:11}}>{status}</td>
+                                  <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
+                                </tr>);
+                              })}</tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     );
-                  })}
-                </div>
-                </>
-              )}
+                  })()}
+
+                  {/* ✅ MATCH RESULTS */}
+                  {liveData.results&&(()=>{
+                    const arr=flatten(liveData.results);
+                    return(
+                      <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#27ae60'}}>
+                        <PanelHdr bg="#27ae60" title="✅ Match Results" count={arr.length} panelKey="results"/>
+                        {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No results. Raw keys: {Object.keys(liveData.results||{}).join(', ')}</div>:(
+                          <div style={{overflowX:'auto',maxHeight:320,overflowY:'auto'}} className="scrollbar">
+                            <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                              <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                                {['#','Home','Score','Away','Date','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='Score'||h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                              </tr></thead>
+                              <tbody>{arr.map((m,i)=>{
+                                const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+                                const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+                                const hs=m.homeScore??m.home_score??m.score?.home??m.goalsHome??'–';
+                                const as_=m.awayScore??m.away_score??m.score?.away??m.goalsAway??'–';
+                                const date=String(m.date??m.matchDate??m.datetime??'–').slice(0,10);
+                                const grp=m.group??m.round??m._groupKey??'–';
+                                return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
+                                  <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
+                                  <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
+                                  <td style={{padding:'6px 8px',textAlign:'center',fontFamily:'monospace',fontWeight:800,color:'var(--forest)'}}>{hs}–{as_}</td>
+                                  <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
+                                  <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)',fontFamily:'monospace'}}>{date}</td>
+                                  <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
+                                </tr>);
+                              })}</tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* 📅 UPCOMING MATCHES */}
+                  {liveData.upcoming&&(()=>{
+                    const arr=flatten(liveData.upcoming);
+                    return(
+                      <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#d4890a'}}>
+                        <PanelHdr bg="#d4890a" title="📅 Upcoming Matches" count={arr.length} panelKey="upcoming"/>
+                        {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No upcoming matches. Raw keys: {Object.keys(liveData.upcoming||{}).join(', ')}</div>:(
+                          <div style={{overflowX:'auto',maxHeight:320,overflowY:'auto'}} className="scrollbar">
+                            <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                              <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                                {['#','Home','Away','Date / Time','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                              </tr></thead>
+                              <tbody>{arr.map((m,i)=>{
+                                const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+                                const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+                                const dt=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'–').slice(0,16).replace('T',' ');
+                                const grp=m.group??m.round??'–';
+                                return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
+                                  <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
+                                  <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
+                                  <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
+                                  <td style={{padding:'6px 8px',fontSize:11,fontFamily:'monospace'}}>{dt}</td>
+                                  <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
+                                </tr>);
+                              })}</tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* 📊 STANDINGS */}
+                  {(liveStandings||standingsLoading)&&(
+                    <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#9f1b1b'}}>
+                      <PanelHdr bg="#9f1b1b" title="📊 Live Standings" count={liveStandings?`${Object.keys(liveStandings).length} groups`:'…'} panelKey="standings"/>
+                      {standingsLoading?<div style={{padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>⏳ Fetching…</div>:liveStandings&&(
+                        <div style={{padding:14}}>
+                          <div style={{fontSize:10,color:'var(--ink-soft)',marginBottom:10,fontFamily:'monospace',padding:'3px 8px',background:'var(--cream2)',borderRadius:4}}>
+                            Sample keys: {Object.keys(Object.values(liveStandings)[0]?.[0]||{}).join(', ')||'—'}
+                          </div>
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:10}}>
+                            {Object.entries(liveStandings).map(([groupName,groupArr])=>{
+                              const letter=groupName.replace('Group ','');
+                              return(
+                                <div key={groupName} style={{border:'1px solid var(--line)',borderRadius:6,overflow:'hidden'}}>
+                                  <div style={{padding:'6px 12px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'flex',alignItems:'center',gap:8}}>
+                                    <span className="group-letter" style={{fontSize:22,lineHeight:1}}>{letter}</span>
+                                    <span style={{fontWeight:700,fontSize:12}}>{groupName}</span>
+                                  </div>
+                                  <table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}>
+                                    <thead><tr style={{borderBottom:'1px solid var(--line)'}}>
+                                      {['#','Team','P','W','D','L','GF','GA','GD','Pts'].map(h=>(
+                                        <th key={h} style={{padding:'4px 5px',fontSize:9,color:'var(--ink-soft)',fontWeight:700,textAlign:h==='Team'?'left':'center'}}>{h}</th>
+                                      ))}
+                                    </tr></thead>
+                                    <tbody>
+                                      {groupArr.map((t,i)=>{
+                                        const rawTeam=extractApiTeamName(t.team)||t.name||(typeof t==='string'?t:'');
+                                        const appName=normTeam(rawTeam)||rawTeam;
+                                        return(
+                                          <tr key={appName||i} style={{borderBottom:'1px solid var(--line-soft)',background:i<2?'rgba(27,94,63,.04)':''}}>
+                                            <td style={{padding:'5px',textAlign:'center',fontWeight:700,color:i<2?'var(--forest)':'var(--ink-soft)'}}>{i+1}</td>
+                                            <td style={{padding:'5px',whiteSpace:'nowrap'}}><div style={{display:'flex',alignItems:'center',gap:4}}><Flag team={appName} size={12}/><span style={{fontWeight:i<2?700:400}}>{appName}</span></div></td>
+                                            {[t.played??t.matchesPlayed,t.won??t.wins,t.drawn??t.draws??t.tied,t.lost??t.losses,t.gf??t.goalsFor??t.goals_for,t.ga??t.goalsAgainst??t.goals_against,t.gd??t.goalDiff??t.goal_difference].map((v,j)=>(
+                                              <td key={j} className="mono" style={{padding:'5px',textAlign:'center',fontSize:10}}>{v==null?'—':j===6&&v>0?'+'+v:v}</td>
+                                            ))}
+                                            <td className="mono" style={{padding:'5px',textAlign:'center',fontWeight:800,color:i<2?'var(--forest)':'var(--ink)'}}>{t.points??t.pts??t.point??'—'}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ⚽ TOP SCORERS */}
+                  {liveData.scorers&&(()=>{
+                    const arr=flatten(liveData.scorers);
+                    return(
+                      <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#6c3483'}}>
+                        <PanelHdr bg="#6c3483" title="⚽ Top Goal Scorers" count={arr.length} panelKey="scorers"/>
+                        {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No scorer data. Raw keys: {Object.keys(liveData.scorers||{}).join(', ')}</div>:(
+                          <div style={{overflowX:'auto',maxHeight:400,overflowY:'auto'}} className="scrollbar">
+                            <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                              <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                                {['#','Player','Team','Goals','Assists','Matches'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='Goals'||h==='Assists'||h==='Matches'||h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                              </tr></thead>
+                              <tbody>{arr.map((p,i)=>{
+                                const player=fv(p.player??p.playerName??p.name??p.fullName??p);
+                                const team=tn(p.team??p.teamName??p.club??p.national_team??'');
+                                const goals=p.goals??p.goal??p.totalGoals??'–';
+                                const assists=p.assists??p.assist??'–';
+                                const matches=p.matches??p.appearances??p.gamesPlayed??'–';
+                                return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
+                                  <td style={{padding:'6px 8px',textAlign:'center',fontWeight:700,color:i===0?'#d4af37':i===1?'#a8a9ad':i===2?'#cd7f32':'var(--ink-soft)'}}>{i+1}</td>
+                                  <td style={{padding:'6px 8px',fontWeight:600}}>{player}</td>
+                                  <td style={{padding:'6px 8px'}}><Flag team={team} size={13}/> {team}</td>
+                                  <td style={{padding:'6px 8px',textAlign:'center',fontWeight:800,color:'var(--forest)',fontSize:14}}>{goals}</td>
+                                  <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)'}}>{assists}</td>
+                                  <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)'}}>{matches}</td>
+                                </tr>);
+                              })}</tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -1926,6 +2527,20 @@
             <h1 className="display" style={{fontSize:42,fontWeight:700,lineHeight:1,margin:'0 0 8px',letterSpacing:'-.02em'}}>The <em>Prediction</em><br/>Competition</h1>
             <p style={{color:'var(--ink-soft)',fontSize:14,margin:'4px 0 0'}}>{COMP_NAME}</p>
             <p style={{color:'var(--ink-soft)',fontSize:13,margin:'2px 0 0'}}>June 11 – July 19, 2026 · USA, Canada, Mexico</p>
+            {/* Participant count badge */}
+            {participants.length>0&&(
+              <div style={{marginTop:16,display:'inline-flex',flexDirection:'column',alignItems:'center',gap:8,background:'white',border:'1px solid var(--line)',borderRadius:16,padding:'10px 20px',boxShadow:'0 2px 12px rgba(0,0,0,.07)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:-6}}>
+                  {participants.slice(0,7).map((p,i)=>(
+                    <div key={p} title={p} style={{marginLeft:i>0?-8:0,zIndex:10-i,flexShrink:0,border:'2px solid white',borderRadius:'50%'}}>
+                      <Avatar name={p} size={30}/>
+                    </div>
+                  ))}
+                  {participants.length>7&&<div style={{marginLeft:-8,width:30,height:30,borderRadius:'50%',background:'var(--cream2)',border:'2px solid white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'var(--ink-soft)',flexShrink:0}}>+{participants.length-7}</div>}
+                </div>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--ink)'}}>🎈 {participants.length} player{participants.length!==1?'s':''} competing</div>
+              </div>
+            )}
           </div>
           <div className="card" style={{padding:28}}>
             {locked&&(
@@ -1949,7 +2564,9 @@
                 {participants.length>0&&(
                   <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
                     {participants.sort().map(p=>(
-                      <button key={p} onClick={()=>{setName(p);setStep('pin');}} style={{padding:'6px 12px',borderRadius:20,border:'1px solid var(--line)',background:'var(--cream2)',cursor:'pointer',fontSize:13,fontFamily:'inherit',fontWeight:500}}>{p}</button>
+                      <button key={p} onClick={()=>{setName(p);setStep('pin');}} style={{padding:'5px 12px 5px 6px',borderRadius:20,border:'1px solid var(--line)',background:'var(--cream2)',cursor:'pointer',fontSize:13,fontFamily:'inherit',fontWeight:500,display:'flex',alignItems:'center',gap:7}}>
+                        <Avatar name={p} size={22}/>{p}
+                      </button>
                     ))}
                   </div>
                 )}
@@ -1960,8 +2577,9 @@
             )}
             {(step==='pin'||step==='register')&&(
               <>
-                <div style={{marginBottom:14,display:'flex',alignItems:'center',gap:8}}>
+                <div style={{marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
                   <button onClick={()=>setStep('name')} style={{background:'none',border:'none',cursor:'pointer',color:'var(--ink-soft)',fontSize:14}}>←</button>
+                  <Avatar name={trimmed} size={40}/>
                   <div>
                     <div style={{fontWeight:700,fontSize:16}}>{trimmed}</div>
                     <div style={{fontSize:12,color:'var(--ink-soft)'}}>{isExisting?'Welcome back! Enter your PIN.':'New participant — set a PIN to protect your predictions.'}</div>
@@ -1979,6 +2597,80 @@
     );
   };
 
+  // ── LIVE MATCH BANNER ─────────────────────────────────────────
+  const LiveMatchBanner = ({matches, loading, onTeamClick}) => {
+    if(loading) return(
+      <div style={{background:'#c0392b',color:'white',padding:'7px 16px',display:'flex',alignItems:'center',gap:8,fontSize:12}}>
+        <span style={{animation:'spin 1s linear infinite',display:'inline-block'}}>⚽</span>
+        <span style={{fontWeight:600}}>Checking for live matches…</span>
+      </div>
+    );
+    if(!matches||matches.length===0) return null;
+    const live = matches.filter(m=>{
+      const s=(m.status||m.matchStatus||m.state||'').toLowerCase();
+      return s.includes('live')||s.includes('1h')||s.includes('2h')||s.includes('ht')||s.includes('in progress')||(m.minute!=null&&m.elapsed!=null);
+    });
+    const upcoming = matches.filter(m=>!live.includes(m));
+    const tn=v=>{
+      if(!v) return '?';
+      if(typeof v==='string') return normTeam(v)||v;
+      if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.team||'';return normTeam(x)||x;}
+      return '?';
+    };
+    return(
+      <div style={{background:'#1a1a1a',color:'white',padding:'6px 0',overflowX:'auto'}}>
+        <div style={{maxWidth:1100,margin:'0 auto',padding:'0 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'nowrap',minWidth:'max-content'}}>
+          {live.length>0&&(
+            <>
+              <span style={{background:'#c0392b',color:'white',fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:3,letterSpacing:1,flexShrink:0,animation:'pulse 1.5s infinite'}}>🔴 LIVE</span>
+              {live.map((m,i)=>{
+                const h=tn(m.home||m.homeTeam||m.home_team), a=tn(m.away||m.awayTeam||m.away_team);
+                const hs=m.homeScore??m.home_score??m.score?.home??'–', as_=m.awayScore??m.away_score??m.score?.away??'–';
+                const min=m.minute??m.elapsed??m.time;
+                const teamBtn=(name)=>(
+                  <span onClick={()=>onTeamClick&&onTeamClick(name)} style={{fontWeight:700,cursor:onTeamClick?'pointer':'default',borderBottom:'1px dotted rgba(255,255,255,.4)',paddingBottom:1}} title={onTeamClick?`Go to ${name}'s group`:''}>{teamShort(name)}</span>
+                );
+                return(
+                  <span key={i} style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,.07)',borderRadius:4,padding:'3px 10px',fontSize:12,flexShrink:0}}>
+                    <span>{TEAM_FLAGS[h]||'⚽'}</span>
+                    {teamBtn(h)}
+                    <span style={{fontFamily:'monospace',fontWeight:800,color:'#f9ca24',margin:'0 2px'}}>{hs}–{as_}</span>
+                    {teamBtn(a)}
+                    <span>{TEAM_FLAGS[a]||'⚽'}</span>
+                    {min!=null&&<span style={{fontSize:9,color:'#e74c3c',fontWeight:800,marginLeft:2}}>{min}'</span>}
+                  </span>
+                );
+              })}
+              {upcoming.length>0&&<span style={{width:1,height:16,background:'rgba(255,255,255,.2)',flexShrink:0}}/>}
+            </>
+          )}
+          {upcoming.length>0&&(
+            <>
+              <span style={{fontSize:9,fontWeight:700,color:'#f0932b',letterSpacing:1,flexShrink:0}}>📅 TODAY</span>
+              {upcoming.map((m,i)=>{
+                const h=tn(m.home||m.homeTeam||m.home_team), a=tn(m.away||m.awayTeam||m.away_team);
+                const dt=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'').slice(11,16)||'TBD';
+                const teamBtn=(name)=>(
+                  <span onClick={()=>onTeamClick&&onTeamClick(name)} style={{fontWeight:600,cursor:onTeamClick?'pointer':'default',borderBottom:'1px dotted rgba(255,255,255,.35)',paddingBottom:1}} title={onTeamClick?`Go to ${name}'s group`:''}>{teamShort(name)}</span>
+                );
+                return(
+                  <span key={i} style={{display:'inline-flex',alignItems:'center',gap:5,background:'rgba(255,255,255,.05)',borderRadius:4,padding:'3px 10px',fontSize:12,flexShrink:0}}>
+                    <span>{TEAM_FLAGS[h]||'⚽'}</span>
+                    {teamBtn(h)}
+                    <span style={{color:'rgba(255,255,255,.5)',margin:'0 2px'}}>vs</span>
+                    {teamBtn(a)}
+                    <span>{TEAM_FLAGS[a]||'⚽'}</span>
+                    {dt!=='TBD'&&<span style={{fontSize:9,color:'#f0932b',marginLeft:2}}>{dt}</span>}
+                  </span>
+                );
+              })}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ── HEADER ───────────────────────────────────────────────────────
   const Header = ({user,onLogout,view,setView,saveStatus,locked}) => (
     <header style={{borderBottom:'1px solid var(--line)',background:'var(--paper)',position:'sticky',top:0,zIndex:10}}>
@@ -1990,7 +2682,8 @@
         <div style={{display:'flex',alignItems:'center',gap:10,fontSize:13}}>
           {saveStatus==='saving'&&<span className="pill"><RefreshCw size={11}/> Saving</span>}
           {saveStatus==='saved'&&<span className="pill pill-success"><Check size={11}/> Saved</span>}
-          <div style={{fontWeight:600}}>{user}</div>
+          <Avatar name={user} size={28}/>
+          <div style={{fontWeight:600}}>{user==='__guest__'?'Guest':user}</div>
           <button style={{background:'none',border:'none',padding:6,color:'var(--ink-soft)',cursor:'pointer'}} onClick={onLogout} title="Sign out"><LogOut size={16}/></button>
         </div>
       </div>
@@ -2001,6 +2694,7 @@
           {k:'bonus',l:'Bonus Picks',I:Star,hide:user==='__guest__'},
           {k:'leaderboard',l:'Leaderboard',I:BarChart},
           {k:'browse',l:'Browse Picks',I:Users2},
+          {k:'live',l:'Live Data',I:Tv},
           {k:'rules',l:'Rules',I:BookOpen},
           {k:'admin',l:'Admin',I:Settings2},
         ].filter(t=>!t.hide).map(({k,l,I})=>(
@@ -2009,6 +2703,81 @@
       </nav>
     </header>
   );
+
+  // ── BALLOON POPUP ─────────────────────────────────────────────────
+  const BALLOON_COLORS=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6','#e91e63','#00bcd4'];
+  function BalloonPopup({notif, onClose}) {
+    const [visible, setVisible] = React.useState(false);
+    const DURATION = 6000;
+    React.useEffect(()=>{
+      if(!notif) return;
+      setVisible(true);
+      const t = setTimeout(()=>{ setVisible(false); setTimeout(onClose,400); }, DURATION);
+      return ()=>clearTimeout(t);
+    },[notif]);
+    if(!notif) return null;
+    const balloons = BALLOON_COLORS.slice(0,6);
+    return(
+      <div style={{position:'fixed',inset:0,zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:20,pointerEvents:visible?'auto':'none'}}
+        onClick={e=>{if(e.target===e.currentTarget){setVisible(false);setTimeout(onClose,300);}}}>
+        {balloons.map((c,i)=>(
+          <div key={i} style={{
+            position:'fixed',
+            left:`${8+i*15}%`,
+            bottom:'0%',
+            fontSize:32+Math.floor(i%3)*8,
+            animation:visible?`balloonRise .6s ease ${i*0.08}s both, balloonFloat ${2.4+i*0.3}s ease-in-out ${0.6+i*0.08}s infinite`:'none',
+            userSelect:'none',pointerEvents:'none',zIndex:9997,
+            filter:'drop-shadow(0 4px 8px rgba(0,0,0,.2))',
+          }}>🎈</div>
+        ))}
+        <div style={{
+          background:'white',borderRadius:20,
+          boxShadow:'0 24px 80px rgba(0,0,0,.35)',
+          maxWidth:380,width:'100%',overflow:'hidden',
+          animation:visible?'popIn .45s cubic-bezier(.34,1.56,.64,1)':'none',
+          position:'relative',zIndex:9999,
+        }}>
+          <div style={{background:'linear-gradient(135deg,#667eea 0%,#764ba2 100%)',padding:'28px 24px 20px',textAlign:'center',position:'relative'}}>
+            <button onClick={()=>{setVisible(false);setTimeout(onClose,300);}} style={{position:'absolute',top:10,right:10,background:'rgba(255,255,255,.2)',border:'none',borderRadius:20,width:28,height:28,cursor:'pointer',color:'white',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',zIndex:1}}>×</button>
+            <div style={{fontSize:52,lineHeight:1,marginBottom:8,filter:'drop-shadow(0 4px 12px rgba(0,0,0,.3))'}}>{notif.isNew?'🎉':'👋'}</div>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:3,textTransform:'uppercase',color:'rgba(255,255,255,.75)',marginBottom:6}}>
+              {notif.isNew?'New Player!':'Welcome Back!'}
+            </div>
+            <div className="display" style={{fontSize:28,fontWeight:900,color:'white',textShadow:'0 2px 10px rgba(0,0,0,.3)',lineHeight:1.1}}>
+              {notif.name}
+            </div>
+          </div>
+          <div style={{padding:'20px 24px 24px',textAlign:'center'}}>
+            {notif.isNew?(
+              <>
+                <div style={{fontSize:42,fontWeight:900,color:'#764ba2',fontFamily:'JetBrains Mono,monospace',lineHeight:1}}>#{notif.rank}</div>
+                <div style={{fontSize:15,fontWeight:700,color:'#333',margin:'6px 0 4px'}}>You joined the pool!</div>
+                <div style={{fontSize:13,color:'#666',lineHeight:1.6}}>You're player #{notif.rank} out of <strong>{notif.total}</strong> competing.<br/>Good luck! 🏆</div>
+              </>
+            ):(
+              <>
+                <div style={{fontSize:42,lineHeight:1,marginBottom:6}}>⚽</div>
+                <div style={{fontSize:15,fontWeight:700,color:'#333',margin:'0 0 4px'}}>{notif.total} player{notif.total!==1?'s':''} in the pool</div>
+                <div style={{fontSize:13,color:'#666',lineHeight:1.6}}>Jump in and make your predictions!<br/>Every goal counts. 💪</div>
+              </>
+            )}
+            {notif.others.length>0&&(
+              <div style={{display:'flex',justifyContent:'center',alignItems:'center',gap:4,marginTop:14,flexWrap:'wrap'}}>
+                {notif.others.slice(0,8).map(p=>(
+                  <div key={p} title={p} style={{flexShrink:0}}><Avatar name={p} size={28}/></div>
+                ))}
+                {notif.others.length>8&&<div style={{fontSize:12,color:'#999',marginLeft:2}}>+{notif.others.length-8}</div>}
+              </div>
+            )}
+          </div>
+          <div style={{height:3,background:'#eee'}}>
+            <div style={{height:'100%',background:'linear-gradient(90deg,#667eea,#764ba2)',animation:`shrink ${DURATION}ms linear forwards`}}/>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── WINNER POPUP ─────────────────────────────────────────────────
   function WinnerPopup({notif, onClose}) {
@@ -2132,6 +2901,178 @@
     const[adminRole,setAdminRole]=useState(null); // 'superadmin' | 'subadmin'
     const[adminPws,setAdminPws]=useState({super:DEFAULT_SUPER_PW,sub:DEFAULT_SUB_PW});
     const[winnerNotif,setWinnerNotif]=useState(null);
+    const[balloonNotif,setBalloonNotif]=useState(null);
+    const[liveMatches,setLiveMatches]=useState([]); // live + today's upcoming matches
+    const[liveLoading,setLiveLoading]=useState(false);
+    const[jumpToGroup,setJumpToGroup]=useState(null); // group letter to jump to in PredictionsView
+    const[autoSyncToast,setAutoSyncToast]=useState(null);
+    const[presenceToast,setPresenceToast]=useState(null); // {name, type} live join/login notification
+    const presenceSessionStart=useRef(Date.now()); // ignore events before this session
+    const autoSyncRef=useRef(null); // interval id
+    const POLL_INTERVAL_MS=60000; // poll every 60s
+    const DONE_STATUSES=['ft','aet','pen','finished','completed','full-time','full time'];
+
+    const handleBannerTeamClick=useCallback((teamName)=>{
+      // find which group this team belongs to
+      const grp=GROUP_KEYS.find(g=>GROUPS[g].includes(teamName));
+      if(!grp) return;
+      setView('predictions');
+      setJumpToGroup(grp);
+      // reset after a tick so re-clicking the same group still triggers the effect
+      setTimeout(()=>setJumpToGroup(null),500);
+    },[]);
+
+    // ── AUTO-POLL: import live results every 60s while page is visible ──────
+    useEffect(()=>{
+      const apiKey=()=>{ try{ return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||''; }catch{ return window.__RAPID_KEY||''; } };
+      const fetchAndImport=async()=>{
+        if(document.visibilityState==='hidden') return; // skip while tab hidden
+        const key=apiKey();
+        if(!key&&!FUNC_BASE) return;
+        const hdrs=key?{'X-RapidAPI-Key':key,'X-RapidAPI-Host':API_HOST}:null;
+        try{
+          // 1. Fetch /results
+          const url=FUNC_BASE?`${FUNC_BASE}/proxy?ep=results`:`https://${API_HOST}/results`;
+          const r=await fetch(url,hdrs?{headers:hdrs}:{});
+          const d=await r.json();
+          // Flatten
+          const flattenGrouped=obj=>{
+            if(!obj) return [];
+            if(Array.isArray(obj)) return obj;
+            const res=[];
+            Object.entries(obj).forEach(([k,v])=>{ if(Array.isArray(v)) v.forEach(m=>res.push({...m,_groupKey:k})); });
+            return res;
+          };
+          const candidates=[d?.data?.groups,d?.data?.matches,d?.data?.results,d?.data,d?.groups,d?.matches,d?.results];
+          let best=[];
+          for(const c of candidates){ if(!c) continue; const f=flattenGrouped(c); if(f.length>best.length) best=f; }
+          const finished=best.filter(m=>{
+            const s=(m.status||m.matchStatus||m.state||'').toLowerCase();
+            const hG=m.homeScore??m.home_score??m.goalsHome??m.homeGoals;
+            const aG=m.awayScore??m.away_score??m.goalsAway??m.awayGoals;
+            const hasScore=hG!=null&&aG!=null&&!(hG===0&&aG===0&&!DONE_STATUSES.some(ds=>s.includes(ds)));
+            return DONE_STATUSES.some(ds=>s.includes(ds))||hasScore;
+          });
+          if(finished.length===0) return;
+          // 2. Get current stored results
+          const stored=await storage.getJSON('results',true)||{group:{},ko:{},bonus:{}};
+          const newGR={...stored.group};
+          let count=0;
+          finished.forEach(f=>{
+            // Extract team names — handle both string and object-shaped fields
+            const rawH=f.home||f.homeTeam||f.team_home||f.homeName||f.home_team;
+            const rawA=f.away||f.awayTeam||f.team_away||f.awayName||f.away_team;
+            const home=normTeam(extractApiTeamName(rawH)||String(rawH||''));
+            const away=normTeam(extractApiTeamName(rawA)||String(rawA||''));
+            const hG=f.homeScore??f.home_score??f.score_home??f.goals_home??f.goalsHome??f.homeGoals;
+            const aG=f.awayScore??f.away_score??f.score_away??f.goals_away??f.goalsAway??f.awayGoals;
+            if(hG==null||hG===''||aG==null||aG==='') return;
+            // Find the match first — if it's in GROUP_MATCHES it IS a group stage match
+            const m=GROUP_MATCHES.find(m=>(m.home===home&&m.away===away)||(m.home===away&&m.away===home));
+            if(!m) return;
+            const swap=m.home===away;
+            const nh=String(swap?aG:hG),na=String(swap?hG:aG);
+            const existing=newGR[m.id];
+            if(existing&&existing.h===nh&&existing.a===na) return; // no change
+            newGR[m.id]={h:nh,a:na};
+            count++;
+          });
+          if(count===0) return; // nothing new
+          // 3. Save + update state
+          const newResults={...stored,group:newGR};
+          await storage.setJSON('results',newResults,true);
+          setResults(newResults);
+          // Refresh allPredictions so leaderboard recalculates
+          try{
+            const predResults=await Promise.all(participants.map(async p=>({p,data:await storage.getJSON(`pred-${p}`,true)})));
+            const all={};
+            predResults.forEach(({p,data})=>{ if(data) all[p]=data; });
+            setAllPredictions(all);
+          }catch(e){}
+          // 4. Refresh live match banner
+          try{
+            const liveUrl=FUNC_BASE?`${FUNC_BASE}/proxy?ep=live`:`https://${API_HOST}/live`;
+            const lr=await fetch(liveUrl,hdrs?{headers:hdrs}:{});
+            const ld=await lr.json();
+            const liveArr=flattenGrouped(ld?.data||ld?.live||ld)||[];
+            const uUrl=FUNC_BASE?`${FUNC_BASE}/proxy?ep=upcoming&day=today`:`https://${API_HOST}/upcoming?day=today`;
+            const ur=await fetch(uUrl,hdrs?{headers:hdrs}:{});
+            const ud=await ur.json();
+            const upArr=flattenGrouped(ud?.data||ud?.upcoming||ud)||[];
+            const combined=[...liveArr,...upArr];
+            if(combined.length>0) setLiveMatches(combined);
+          }catch(e){}
+          // 5. Show toast
+          const now=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+          setAutoSyncToast({count,time:now});
+          setTimeout(()=>setAutoSyncToast(null),5000);
+        }catch(e){ console.warn('Auto-sync error:',e); }
+      };
+      // Initial fetch after 5s (allow page to settle)
+      const initialTimer=setTimeout(fetchAndImport,5000);
+      // Recurring poll
+      autoSyncRef.current=setInterval(fetchAndImport,POLL_INTERVAL_MS);
+      // Re-fetch immediately when tab becomes visible again
+      const onVisible=()=>{ if(document.visibilityState==='visible') fetchAndImport(); };
+      document.addEventListener('visibilitychange',onVisible);
+      return()=>{
+        clearTimeout(initialTimer);
+        clearInterval(autoSyncRef.current);
+        document.removeEventListener('visibilitychange',onVisible);
+      };
+    },[participants]); // restart if participants list changes
+
+    // ── END AUTO-POLL ─────────────────────────────────────────────────
+
+    // ── FETCH LIVE MATCHES ON MOUNT ───────────────────────────────────
+    useEffect(()=>{
+      const savedKey=(() => { try{ return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||''; }catch{ return window.__RAPID_KEY||''; } })();
+      if(!savedKey && !FUNC_BASE) return; // skip silently if no key
+      setLiveLoading(true);
+      const hdrs = savedKey ? {'X-RapidAPI-Key':savedKey,'X-RapidAPI-Host':API_HOST} : null;
+      const tryFetch = async (ep, params='') => {
+        try {
+          const url = FUNC_BASE ? `${FUNC_BASE}/proxy?ep=${ep}${params?'&'+params:''}` : `https://${API_HOST}/${ep}${params?'?'+params:''}`;
+          const r = await fetch(url, hdrs ? {headers:hdrs} : {});
+          const d = await r.json();
+          const flatten = obj => {
+            if(!obj) return [];
+            if(Array.isArray(obj)) return obj;
+            const candidates=[obj?.data?.matches,obj?.data?.results,obj?.data?.live,obj?.data?.upcoming,obj?.data,obj?.matches,obj?.live,obj?.upcoming,obj?.results];
+            for(const c of candidates) { if(Array.isArray(c)&&c.length>0) return c; }
+            return [];
+          };
+          return flatten(d);
+        } catch{ return []; }
+      };
+      (async()=>{
+        const [live, upcoming] = await Promise.all([
+          tryFetch('live'),
+          tryFetch('upcoming','day=today'),
+        ]);
+        const all = [...live, ...upcoming];
+        if(all.length>0) setLiveMatches(all);
+        setLiveLoading(false);
+      })();
+    },[]);
+
+    // Set of team names playing today (used to lock predictions)
+    const teamsPlayingToday = useMemo(()=>{
+      const s = new Set();
+      liveMatches.forEach(m=>{
+        const tn = v => {
+          if(!v) return '';
+          if(typeof v==='string') return normTeam(v)||v;
+          if(typeof v==='object'){ const x=v.name||v.common_name||v.short_name||v.display_name||v.team||''; return normTeam(x)||x; }
+          return '';
+        };
+        const h = tn(m.home||m.homeTeam||m.home_team||m.team_home);
+        const a = tn(m.away||m.awayTeam||m.away_team||m.team_away);
+        if(h) s.add(h);
+        if(a) s.add(a);
+      });
+      return s;
+    },[liveMatches]);
 
     // Show winner popup on login (track previous user to detect login event)
     const prevUserRef = React.useRef(null);
@@ -2156,21 +3097,49 @@
     },[currentUser]);
 
     useEffect(()=>{
+      // Phase 1: load from localStorage immediately — page unblocks in <1ms
+      try{
+        const partList = lsGet('participants')||[];
+        const pins     = lsGet('pins')||{};
+        const res      = lsGet('results')||{group:{},ko:{},bonus:{}};
+        const cfg      = lsGet('config')||{locked:false};
+        const pws      = lsGet('admin-pws')||{};
+        if(pws.super||pws.sub) setAdminPws(p=>({...p,...pws}));
+        setParticipants(partList); setUserPins(pins); setResults(res); setConfig(cfg);
+        const all={};
+        partList.forEach(p=>{ const d=lsGet(`pred-${p}`); if(d) all[p]=d; });
+        setAllPredictions(all);
+      }catch(e){ console.error('Init (local) error:',e); }
+      setLoading(false); // ← unblocks page immediately
+
+      // Phase 2: refresh from Firebase in background (non-blocking)
+      if(!FB_ON) return;
       (async()=>{
         try{
-          const partList=(await storage.getJSON('participants',true))||[];
-          const pins=(await storage.getJSON('pins',true))||{};
-          const res=(await storage.getJSON('results',true))||{group:{},ko:{},bonus:{}};
-          const cfg=(await storage.getJSON('config',true))||{locked:false};
-          const storedPws=(await storage.getJSON('admin-pws',true))||{};
-          if(storedPws.super||storedPws.sub) setAdminPws(p=>({...p,...storedPws}));
-          setParticipants(partList); setUserPins(pins); setResults(res); setConfig(cfg);
-          const predResults=await Promise.all(partList.map(async p=>({p,data:await storage.getJSON(`pred-${p}`,true)})));
+          const keys=['participants','pins','results','config','admin-pws'];
+          const snaps = await Promise.all(keys.map(k=>fbTimeout(db.collection('wc26').doc(k).get()).catch(()=>null)));
+          const vals={};
+          snaps.forEach((snap,i)=>{
+            if(snap?.exists){ try{ vals[keys[i]]=JSON.parse(snap.data().value); lsSet(keys[i],vals[keys[i]]); }catch{} }
+          });
+          if(vals['participants']) setParticipants(vals['participants']);
+          if(vals['pins']) setUserPins(vals['pins']);
+          if(vals['results']) setResults(vals['results']);
+          if(vals['config']) setConfig(vals['config']);
+          if(vals['admin-pws']){ const pws=vals['admin-pws']; if(pws.super||pws.sub) setAdminPws(p=>({...p,...pws})); }
+          // Reload per-user predictions
+          const parts = vals['participants']||lsGet('participants')||[];
+          const predResults = await Promise.all(parts.map(async p=>{
+            try{
+              const snap = await fbTimeout(db.collection('wc26').doc(`pred-${p}`).get()).catch(()=>null);
+              if(snap?.exists){ const d=JSON.parse(snap.data().value); lsSet(`pred-${p}`,d); return {p,data:d}; }
+            }catch{}
+            return {p,data:lsGet(`pred-${p}`)};
+          }));
           const all={};
-          predResults.forEach(({p,data})=>{if(data) all[p]=data;});
+          predResults.forEach(({p,data})=>{ if(data) all[p]=data; });
           setAllPredictions(all);
-        }catch(e){console.error('Init error:',e);}
-        finally{setLoading(false);}
+        }catch(e){ console.warn('Firebase bg sync error:',e); }
       })();
     },[]);
 
@@ -2203,22 +3172,47 @@
 
     const handleLogin=useCallback(async(name,pin)=>{
       const existing=participants.includes(name);
+      let finalParts=participants;
       if(existing){
         const storedPin=userPins[name];
         if(storedPin&&storedPin!==pin){alert('Incorrect PIN. Try again.');return;}
       } else {
         if(!pin||pin.length<3){alert('Please enter at least a 3-character PIN.');return;}
-        const newParts=[...participants,name];
+        finalParts=[...participants,name];
         const newPins={...userPins,[name]:pin};
-        setParticipants(newParts); setUserPins(newPins);
-        await storage.setJSON('participants',newParts,true);
+        setParticipants(finalParts); setUserPins(newPins);
+        await storage.setJSON('participants',finalParts,true);
         await storage.setJSON('pins',newPins,true);
       }
       setCurrentUser(name);
       const p=(await storage.getJSON(`pred-${name}`,true))||{group:{},ko:{},bonus:{},joker:{}};
       setPredictions(p);
       setView('predictions');
+      // Broadcast presence event to all other active users via Firestore
+      if(FB_ON){
+        try{
+          db.collection('wc26').doc('presence').set({name,type:existing?'login':'join',ts:Date.now()}).catch(()=>{});
+        }catch(e){}
+      }
+      // Show balloon popup
+      const rank=finalParts.indexOf(name)+1;
+      setBalloonNotif({name,isNew:!existing,rank,total:finalParts.length,others:finalParts.filter(x=>x!==name)});
     },[participants,userPins]);
+
+    // ── PRESENCE LISTENER: show toast when anyone logs in ────────────
+    useEffect(()=>{
+      if(!FB_ON||!currentUser) return;
+      const unsub=db.collection('wc26').doc('presence').onSnapshot(snap=>{
+        if(!snap.exists) return;
+        const {name,type,ts}=snap.data();
+        // Ignore events that predate this session or are from ourselves
+        if(!ts||ts<presenceSessionStart.current) return;
+        if(name===currentUser) return;
+        setPresenceToast({name,type});
+        setTimeout(()=>setPresenceToast(null),5000);
+      });
+      return()=>unsub();
+    },[currentUser]);
 
     const handleLogout=useCallback(async()=>{
       setCurrentUser(null);
@@ -2270,24 +3264,46 @@
       <div className="app">
         <style>{CSS}</style>
         <Header user={currentUser} onLogout={handleLogout} view={view} setView={v=>{if(v==='admin'&&!adminAuthed&&v!==view){handleAdminLogin(prompt('Admin password:'));return;}setView(v);}} saveStatus={saveStatus} locked={locked}/>
+        <LiveMatchBanner matches={liveMatches} loading={liveLoading} onTeamClick={handleBannerTeamClick}/>
         {locked&&view!=='admin'&&(
           <div style={{background:'var(--burgundy)',color:'white',textAlign:'center',padding:'7px 16px',fontSize:12,fontWeight:600}}>
             🔒 COMPETITION LOCKED — predictions are now closed. Good luck!
           </div>
         )}
         <main style={{maxWidth:1100,margin:'0 auto',padding:'24px 16px 80px'}}>
-          {view==='predictions'&&!isGuest&&<PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={locked}/>}
+          {view==='predictions'&&!isGuest&&<PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={locked} teamsPlayingToday={teamsPlayingToday} jumpToGroup={jumpToGroup}/>}
           {view==='bracket'&&!isGuest&&<BracketView predictions={predictions} onSave={savePredictions} results={results} locked={locked}/>}
           {view==='bonus'&&!isGuest&&<BonusView predictions={predictions} onSave={savePredictions} results={results} locked={locked}/>}
           {view==='leaderboard'&&<LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/>}
           {view==='browse'&&<BrowseView participants={participants} allPredictions={allPredictions} results={results}/>}
+          {view==='live'&&<LiveDataView/>}
           {view==='rules'&&<RulesView/>}
           {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws}/>}
         </main>
         <footer style={{borderTop:'1px solid var(--line)',padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>
           {COMP_NAME} · FIFA World Cup 2026 · Built with ❤️
         </footer>
+        <BalloonPopup notif={balloonNotif} onClose={()=>setBalloonNotif(null)}/>
         <WinnerPopup notif={winnerNotif} onClose={()=>setWinnerNotif(null)}/>
+        {/* Presence toast — shown to all active users when someone joins/logs in */}
+        {presenceToast&&(
+          <div style={{position:'fixed',bottom:80,left:20,zIndex:9997,display:'flex',alignItems:'center',gap:10,background:'white',border:'1px solid var(--line)',borderRadius:12,padding:'10px 16px',boxShadow:'0 8px 32px rgba(0,0,0,.18)',animation:'presenceSlide .4s cubic-bezier(.34,1.56,.64,1)',maxWidth:280,pointerEvents:'none'}}>
+            <Avatar name={presenceToast.name} size={36}/>
+            <div style={{minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13,color:'var(--ink)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{presenceToast.name}</div>
+              <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:1}}>{presenceToast.type==='join'?'🎉 just joined the pool!':'👋 just logged in'}</div>
+            </div>
+            <div style={{fontSize:18,flexShrink:0}}>{presenceToast.type==='join'?'🎈':'⚽'}</div>
+          </div>
+        )}
+        {/* Auto-sync toast */}
+        {autoSyncToast&&(
+          <div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',zIndex:9998,background:'#1a1a1a',color:'white',borderRadius:8,padding:'10px 20px',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:10,boxShadow:'0 4px 20px rgba(0,0,0,.3)',animation:'fadeSlideUp .3s ease',pointerEvents:'none'}}>
+            <span style={{fontSize:16}}>🔄</span>
+            <span>{autoSyncToast.count} new result{autoSyncToast.count!==1?'s':''} auto-imported</span>
+            <span style={{fontSize:11,opacity:.6,fontFamily:'monospace'}}>{autoSyncToast.time}</span>
+          </div>
+        )}
       </div>
     );
   }
