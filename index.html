@@ -241,6 +241,25 @@
   };
   const normTeam = n => n ? (API_TEAM_MAP[n] || n) : n;
 
+  // Parses various API datetime formats → local HH:MM + short date label
+  const formatMatchTime = raw => {
+    if(!raw) return {time:'TBD',date:'',local:false};
+    const s=String(raw);
+    // Try ISO parse first (handles 2026-06-17T20:00:00Z, 2026-06-17T20:00:00+00:00 etc)
+    const d=new Date(s);
+    if(!isNaN(d.getTime())){
+      const now=new Date();
+      const isToday=d.toDateString()===now.toDateString();
+      const isTomorrow=d.toDateString()===new Date(now.getTime()+86400000).toDateString();
+      const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      const dateStr=isToday?'Today':isTomorrow?'Tomorrow':d.toLocaleDateString([],{month:'short',day:'numeric'});
+      return{time:timeStr,date:dateStr,local:true};
+    }
+    // Fallback: try to extract HH:MM from raw string
+    const m=s.match(/(\d{2}):(\d{2})/);
+    return m?{time:`${m[1]}:${m[2]}`,date:s.slice(0,10),local:false}:{time:s.slice(11,16)||'TBD',date:s.slice(0,10),local:false};
+  };
+
   const extractApiTeamName = tteam => {
     if(!tteam) return '';
     if(typeof tteam === 'string') return tteam;
@@ -741,10 +760,23 @@
   );
 
   // ── MATCH CELLS (grid layout) ────────────────────────────────────
-  const MatchCells = ({match,pred,actual,onSet,jokerMultiplier=1,locked:compLocked,matchLocked=false}) => {
+  const MatchCells = ({match,pred,actual,onSet,jokerMultiplier=1,locked:compLocked,matchLocked=false,kickoffMs=null}) => {
     const hasResult=actual&&actual.h!==''&&actual.h!=null&&actual.a!==''&&actual.a!=null;
     const resultLocked=hasResult;
     const isLocked=resultLocked||compLocked||matchLocked;
+    const [nowMs,setNowMs]=useState(()=>Date.now());
+    const minsUntilKickoff=kickoffMs&&!resultLocked&&!matchLocked?(kickoffMs-nowMs)/60000:null;
+    const showCountdown=minsUntilKickoff!==null&&minsUntilKickoff>0&&minsUntilKickoff<=60;
+    useEffect(()=>{
+      if(!showCountdown) return;
+      const t=setInterval(()=>setNowMs(Date.now()),15000); // refresh every 15s
+      return()=>clearInterval(t);
+    },[showCountdown]);
+    const countdownStr=showCountdown?(()=>{
+      const totalSec=Math.max(0,kickoffMs-nowMs)/1000;
+      const m=Math.floor(totalSec/60),s=Math.floor(totalSec%60);
+      return m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m ${String(s).padStart(2,'0')}s`;
+    })():null;
     const ph=pred?.h??'',pa=pred?.a??'';
     const correct=resultLocked&&String(ph)===String(actual.h)&&String(pa)===String(actual.a);
     const underdog=getUnderdog(match.home,match.away);
@@ -770,10 +802,11 @@
           <span style={{fontSize:13,fontWeight:match.away===underdog?600:500,color:match.away===underdog?'var(--burgundy)':'var(--ink)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{teamShort(match.away)}</span>
           {FIFA_RANKINGS[match.away]&&<span style={{fontSize:9,color:match.away===underdog?'var(--burgundy)':'var(--ink-soft)',fontWeight:match.away===underdog?700:400}}>#{FIFA_RANKINGS[match.away]}</span>}
         </div>
-        {(resultLocked||jokerMultiplier>1)&&(
+        {(resultLocked||jokerMultiplier>1||showCountdown||matchLocked)&&(
           <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'2px 0 6px',borderBottom:'1px solid var(--line-soft)',background:jBg,marginTop:-1}}>
             {jokerMultiplier>1&&<span style={{fontSize:9,fontWeight:800,color:jColor,background:jokerMultiplier===3?'rgba(159,27,27,.1)':'rgba(214,137,42,.15)',padding:'1px 5px',borderRadius:3}}>{jokerMultiplier}× JOKER</span>}
-            {matchLocked&&!resultLocked&&<span style={{fontSize:9,fontWeight:800,color:'#e74c3c',background:'rgba(231,76,60,.1)',padding:'1px 5px',borderRadius:3}}>🔴 PLAYING TODAY</span>}
+            {showCountdown&&<span style={{fontSize:9,fontWeight:800,color:'#d4890a',background:'rgba(212,136,10,.12)',padding:'1px 6px',borderRadius:3}}>⏱ Locks in {countdownStr}</span>}
+            {matchLocked&&!resultLocked&&<span style={{fontSize:9,fontWeight:800,color:'#e74c3c',background:'rgba(231,76,60,.1)',padding:'1px 5px',borderRadius:3}}>🔴 LIVE / LOCKED</span>}
             {resultLocked&&(
               <>
                 <span style={{fontSize:10,color:'var(--ink-soft)'}}>Result:</span>
@@ -789,7 +822,7 @@
   };
 
   // ── GROUP CARD ───────────────────────────────────────────────────
-  const GroupCard = ({groupKey,isOpen,onToggle,predictions,actualResults,onSet,standings,progress,jokerTeam,jokerGroup,locked,teamsPlayingToday=new Set()}) => {
+  const GroupCard = ({groupKey,isOpen,onToggle,predictions,actualResults,onSet,standings,progress,jokerTeam,jokerGroup,locked,lockedMatchIds=new Set(),kickoffTimes=new Map()}) => {
     const teams=GROUPS[groupKey];
     const matches=GROUP_MATCHES_BY_GROUP[groupKey]||[];
     const isJG=jokerGroup===groupKey,jTIG=jokerTeam&&teams.includes(jokerTeam);
@@ -832,7 +865,7 @@
                   <React.Fragment key={md}>
                     <div style={{gridColumn:'1/-1',fontSize:11,color:'var(--ink-soft)',fontWeight:500,padding:'6px 0 2px'}}>Matchday {md}</div>
                     {matches.filter(m=>m.matchday===md).map(m=>(
-                      <MatchCells key={m.id} match={m} pred={predictions[m.id]||{h:'',a:''}} actual={actualResults?.[m.id]} onSet={onSet} jokerMultiplier={getJokerMultiplier(m,jokerTeam,jokerGroup)} locked={locked} matchLocked={teamsPlayingToday.has(m.home)||teamsPlayingToday.has(m.away)}/>
+                      <MatchCells key={m.id} match={m} pred={predictions[m.id]||{h:'',a:''}} actual={actualResults?.[m.id]} onSet={onSet} jokerMultiplier={getJokerMultiplier(m,jokerTeam,jokerGroup)} locked={locked} matchLocked={lockedMatchIds.has(m.id)} kickoffMs={kickoffTimes.get(m.id)||null}/>
                     ))}
                   </React.Fragment>
                 ))}
@@ -854,7 +887,7 @@
   };
 
   // ── PREDICTIONS VIEW ─────────────────────────────────────────────
-  const PredictionsView = ({predictions,onSave,results,locked,teamsPlayingToday=new Set(),jumpToGroup=null}) => {
+  const PredictionsView = ({predictions,onSave,results,locked,lockedMatchIds=new Set(),kickoffTimes=new Map(),jumpToGroup=null}) => {
     const [openGroup,setOpenGroup]=useState('A');
     // Jump to a specific group when requested from outside (e.g. banner click)
     useEffect(()=>{ if(jumpToGroup) setOpenGroup(jumpToGroup); },[jumpToGroup]);
@@ -913,9 +946,16 @@
           )}
         </div>
         <ProgressBar done={totalDone} total={72} label="matches predicted"/>
+        <div style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 14px',marginTop:12,background:'rgba(214,137,42,.08)',border:'1px solid rgba(214,137,42,.3)',borderRadius:6}}>
+          <span style={{fontSize:16,lineHeight:1}}>⏰</span>
+          <div style={{fontSize:12,color:'var(--ink)',lineHeight:1.5}}>
+            <strong>Predictions lock 5 minutes before kick-off.</strong>{' '}
+            Boxes marked <span style={{fontWeight:700,color:'#e74c3c'}}>🔴 LIVE</span> or <span style={{fontWeight:700,color:'#d4890a'}}>⏳ SOON</span> are frozen. Edit all others before the whistle.
+          </div>
+        </div>
         <div style={{marginTop:20,display:'flex',flexDirection:'column',gap:10}}>
           {GROUP_KEYS.map(g=>(
-            <GroupCard key={g} groupKey={g} isOpen={openGroup===g} onToggle={()=>setOpenGroup(openGroup===g?null:g)} predictions={predictions.group||{}} actualResults={results.group} onSet={setMatch} standings={standings[g]} progress={groupProgress[g]} jokerTeam={joker.team||null} jokerGroup={joker.group||null} locked={locked} teamsPlayingToday={teamsPlayingToday}/>
+            <GroupCard key={g} groupKey={g} isOpen={openGroup===g} onToggle={()=>setOpenGroup(openGroup===g?null:g)} predictions={predictions.group||{}} actualResults={results.group} onSet={setMatch} standings={standings[g]} progress={groupProgress[g]} jokerTeam={joker.team||null} jokerGroup={joker.group||null} locked={locked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes}/>
           ))}
         </div>
       </div>
@@ -1406,12 +1446,44 @@
   });
 
   // ── LIVE DATA VIEW  (memoized — re-renders only when mounted/unmounted) ───────────────────────────────────────────────
-  const LiveDataView = React.memo(() => {
+  const LiveDataView = React.memo(({adminRole}) => {
     const[syncKey,setSyncKey]=useState(()=>{ try{return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||'';}catch{return window.__RAPID_KEY||'';} });
     const[liveStandings,setLiveStandings]=useState(null);
     const[standingsLoading,setStandingsLoading]=useState(false);
     const[liveData,setLiveData]=useState({});
     const[loadingPanel,setLoadingPanel]=useState(null);
+    const[cacheInfo,setCacheInfo]=useState({});  // {panelKey:{updatedAt}}
+    const[cacheLoading,setCacheLoading]=useState(null);
+
+    // ── Auto-load cached data from Firestore on mount ─────────────────────────
+    useEffect(()=>{
+      const keys=['results','standings','scorers','upcoming','live'];
+      keys.forEach(async k=>{
+        try{
+          const cached=await storage.getShared(`live-cache-${k}`);
+          if(cached&&cached.data){
+            if(k==='standings') setLiveStandings(cached.data);
+            else setLiveData(prev=>({...prev,[k]:cached.data}));
+            setCacheInfo(prev=>({...prev,[k]:{updatedAt:cached.updatedAt}}));
+          }
+        }catch(e){}
+      });
+    },[]);
+
+    const loadFromCache=async(key)=>{
+      setCacheLoading(key);
+      try{
+        const cached=await storage.getShared(`live-cache-${key}`);
+        if(cached&&cached.data){
+          if(key==='standings') setLiveStandings(cached.data);
+          else setLiveData(prev=>({...prev,[key]:cached.data}));
+          setCacheInfo(prev=>({...prev,[key]:{updatedAt:cached.updatedAt}}));
+        } else {
+          alert('No cached data available yet. Ask an admin to fetch this data first.');
+        }
+      }catch(e){alert('Failed to load cached data: '+e.message);}
+      setCacheLoading(null);
+    };
 
     const handleFetchStandings=async()=>{
       if(!syncKey.trim() && !FUNC_BASE){alert('API key is required.');return;}
@@ -1440,7 +1512,16 @@
           }
           if(Object.keys(allGroups).length>0) groups=allGroups;
         }
+        const finalPts=Object.values(groups).flat().reduce((s,t)=>s+(t.points||0),0);
+        if(Object.keys(groups).length<2||finalPts===0){
+          alert('⚠️ Standings data returned empty or incomplete — not overwriting current data.');
+          setStandingsLoading(false); return;
+        }
         setLiveStandings(groups);
+        // Save to Firestore cache so users can load it
+        const cEntry={data:groups,updatedAt:new Date().toISOString()};
+        await storage.setJSON('live-cache-standings',cEntry,true);
+        setCacheInfo(prev=>({...prev,standings:{updatedAt:cEntry.updatedAt}}));
       }catch(e){alert('Standings fetch failed: '+e.message);}
       setStandingsLoading(false);
     };
@@ -1450,14 +1531,36 @@
       setLoadingPanel(panelKey);
       try{
         if(!FUNC_BASE) localStorage.setItem('wc26_synckey',syncKey.trim());
-        let r;
-        if(FUNC_BASE){
-          r=await fetch(`${FUNC_BASE}/proxy?ep=${encodeURIComponent(endpoint)}${params?'&'+params:''}`);
-        }else{
-          r=await fetch(`https://${API_HOST}/${endpoint}${params?'?'+params:''}`,{headers:{'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST}});
+        if(panelKey==='upcoming'){
+          // Fetch today + tomorrow and merge
+          const fetchDay=async(day)=>{
+            try{
+              const r=FUNC_BASE
+                ?await fetch(`${FUNC_BASE}/proxy?ep=upcoming&day=${day}`)
+                :await fetch(`https://${API_HOST}/upcoming?day=${day}`,{headers:{'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST}});
+              return await r.json();
+            }catch{return null;}
+          };
+          const [dToday,dTomorrow]=await Promise.all([fetchDay('today'),fetchDay('tomorrow')]);
+          // Merge both responses into one fake response object
+          const combined={data:{upcoming:[...((flatten(dToday)||[])),...((flatten(dTomorrow)||[]))]}};
+          setLiveData(prev=>({...prev,[panelKey]:combined}));
+          const cEntry={data:combined,updatedAt:new Date().toISOString()};
+          await storage.setJSON(`live-cache-${panelKey}`,cEntry,true);
+          setCacheInfo(prev=>({...prev,[panelKey]:{updatedAt:cEntry.updatedAt}}));
+        } else {
+          let r;
+          if(FUNC_BASE){
+            r=await fetch(`${FUNC_BASE}/proxy?ep=${encodeURIComponent(endpoint)}${params?'&'+params:''}`);
+          }else{
+            r=await fetch(`https://${API_HOST}/${endpoint}${params?'?'+params:''}`,{headers:{'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST}});
+          }
+          const d=await r.json();
+          setLiveData(prev=>({...prev,[panelKey]:d}));
+          const cEntry={data:d,updatedAt:new Date().toISOString()};
+          await storage.setJSON(`live-cache-${panelKey}`,cEntry,true);
+          setCacheInfo(prev=>({...prev,[panelKey]:{updatedAt:cEntry.updatedAt}}));
         }
-        const d=await r.json();
-        setLiveData(prev=>({...prev,[panelKey]:d}));
       }catch(e){alert(`${panelKey} fetch failed: ${e.message}`);}
       setLoadingPanel(null);
     };
@@ -1506,22 +1609,52 @@
             </div>
           </div>
         )}
-        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:20}}>
-          {[
-            {key:'live',     label:'🔴 Live',          ep:'live',      params:'',             bg:'#c0392b'},
-            {key:'results',  label:'✅ Match Results',  ep:'results',   params:'',             bg:'#27ae60'},
-            {key:'upcoming', label:'📅 Upcoming',       ep:'upcoming',  params:'day=tomorrow', bg:'#d4890a'},
-            {key:'standings',label:'📊 Standings',      ep:'standings', params:'',             bg:'#9f1b1b'},
-            {key:'scorers',  label:'⚽ Top Scorers',    ep:'scorers',   params:'',             bg:'#6c3483'},
-          ].map(({key,label,ep,params,bg})=>(
-            <button key={key}
-              onClick={()=>key==='standings'?handleFetchStandings():fetchPanel(key,ep,params)}
-              disabled={(loadingPanel===key)||(key==='standings'&&standingsLoading)||(!syncKey.trim()&&!FUNC_BASE)}
-              style={{background:(loadingPanel===key||(key==='standings'&&standingsLoading))?'#888':bg,color:'white',border:'none',borderRadius:6,padding:'9px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!syncKey.trim()&&!FUNC_BASE)?0.5:1,whiteSpace:'nowrap'}}>
-              {(loadingPanel===key||(key==='standings'&&standingsLoading))?'⏳ Loading…':label}
-            </button>
-          ))}
-        </div>
+        {(adminRole==='superadmin'||adminRole==='subadmin')?(
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:20}}>
+            {[
+              {key:'live',     label:'🔴 Live',          ep:'live',      params:'',             bg:'#c0392b'},
+              {key:'results',  label:'✅ Match Results',  ep:'results',   params:'',             bg:'#27ae60'},
+              {key:'upcoming', label:'📅 Today + Tomorrow', ep:'upcoming',  params:'day=tomorrow', bg:'#d4890a'},
+              {key:'standings',label:'📊 Standings',      ep:'standings', params:'',             bg:'#9f1b1b'},
+              {key:'scorers',  label:'⚽ Top Scorers',    ep:'scorers',   params:'',             bg:'#6c3483'},
+            ].map(({key,label,ep,params,bg})=>(
+              <button key={key}
+                onClick={()=>key==='standings'?handleFetchStandings():fetchPanel(key,ep,params)}
+                disabled={(loadingPanel===key)||(key==='standings'&&standingsLoading)||(!syncKey.trim()&&!FUNC_BASE)}
+                style={{background:(loadingPanel===key||(key==='standings'&&standingsLoading))?'#888':bg,color:'white',border:'none',borderRadius:6,padding:'9px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!syncKey.trim()&&!FUNC_BASE)?0.5:1,whiteSpace:'nowrap'}}>
+                {(loadingPanel===key||(key==='standings'&&standingsLoading))?'⏳ Loading…':label}
+              </button>
+            ))}
+          </div>
+        ):(
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,color:'var(--ink-soft)',marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+              <span>📦 Data cached by admin — click to load from Firestore</span>
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {[
+                {key:'live',     label:'🔴 Live',             bg:'#c0392b'},
+                {key:'results',  label:'✅ Match Results',     bg:'#27ae60'},
+                {key:'upcoming', label:'📅 Today + Tomorrow',  bg:'#d4890a'},
+                {key:'standings',label:'📊 Standings',         bg:'#9f1b1b'},
+                {key:'scorers',  label:'⚽ Top Scorers',       bg:'#6c3483'},
+              ].map(({key,label,bg})=>{
+                const ts=cacheInfo[key]?.updatedAt;
+                const ago=ts?new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):null;
+                return(
+                  <button key={key}
+                    onClick={()=>loadFromCache(key)}
+                    disabled={cacheLoading===key}
+                    title={ts?`Last updated: ${new Date(ts).toLocaleString()}`:'Not yet cached'}
+                    style={{background:cacheLoading===key?'#888':bg,color:'white',border:'none',borderRadius:6,padding:'9px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:ts?1:0.45,whiteSpace:'nowrap',position:'relative'}}>
+                    {cacheLoading===key?'⏳ Loading…':label}
+                    {ago&&<span style={{display:'block',fontSize:9,fontWeight:400,opacity:.8,marginTop:1}}>updated {ago}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 🔴 LIVE MATCHES */}
         {liveData.live&&(()=>{
@@ -1605,18 +1738,23 @@
                 <div style={{overflowX:'auto',maxHeight:360,overflowY:'auto'}} className="scrollbar">
                   <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
                     <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
-                      {['#','Home','Away','Date / Time','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                      {['#','Home','Away','Kick-off (local)','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
                     </tr></thead>
                     <tbody>{arr.map((m,i)=>{
                       const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
                       const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
-                      const dt=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'–').slice(0,16).replace('T',' ');
+                      const raw=m.date??m.matchDate??m.datetime??m.kickoff??m.time??'';
+                      const {time,date,local}=formatMatchTime(raw);
                       const grp=m.group??m.round??'–';
                       return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
                         <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
                         <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
                         <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
-                        <td style={{padding:'6px 8px',fontSize:11,fontFamily:'monospace'}}>{dt}</td>
+                        <td style={{padding:'6px 8px'}}>
+                          <span style={{fontFamily:'monospace',fontWeight:700,fontSize:13,color:'var(--amber)'}}>{time}</span>
+                          {date&&<span style={{fontSize:10,color:'var(--ink-soft)',marginLeft:5}}>{date}</span>}
+                          {local&&<span style={{fontSize:9,color:'var(--forest)',marginLeft:4}} title="Converted to your local time">🕐 local</span>}
+                        </td>
                         <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
                       </tr>);
                     })}</tbody>
@@ -1731,6 +1869,9 @@
     const[standingsLoading,setStandingsLoading]=useState(false);
     const[liveData,setLiveData]=useState({});    // keyed by panel: live|results|upcoming|scorers
     const[loadingPanel,setLoadingPanel]=useState(null);
+    const[espnSyncing,setEspnSyncing]=useState(false);
+    const[espnLog,setEspnLog]=useState('');
+    const[espnPreview,setEspnPreview]=useState(null);
 
     const handleFetchStandings=async()=>{
       if(!syncKey.trim() && !FUNC_BASE){alert('Paste your API key first or set window.__FUNC_BASE for proxy.');return;}
@@ -1773,7 +1914,11 @@
           if(Object.keys(allGroups).length>0) groups=allGroups;
         }
         // helpful debug: print one sample standings object to console for troubleshooting
-
+        const finalPts=Object.values(groups).flat().reduce((s,t)=>s+(t.points||0),0);
+        if(Object.keys(groups).length<2||finalPts===0){
+          setSyncLog('⚠️ Standings data returned empty or incomplete — not overwriting saved data.');
+          setStandingsLoading(false); return;
+        }
         setLiveStandings(groups);
       }catch(e){alert('Standings fetch failed: '+e.message);} 
       setStandingsLoading(false);
@@ -1798,8 +1943,64 @@
       setLoadingPanel(null);
     };
 
-    const handleSync=async(confirm=false)=>{
-      if(confirm&&syncPreview){
+    // ── ESPN SYNC ────────────────────────────────────────────────
+    const handleEspnSync=async(confirm=false)=>{
+      if(confirm&&espnPreview){
+        await onSave({...results,group:espnPreview.newGroupResults});
+        const ok=espnPreview.log.filter(l=>l.startsWith('✅')).length;
+        setEspnLog('✅ Done! '+ok+' results imported from ESPN.');
+        setEspnPreview(null); return;
+      }
+      setEspnSyncing(true);setEspnLog('⏳ Fetching from ESPN…');setEspnPreview(null);
+      try{
+        // ESPN public scoreboard — no key needed
+        const ESPN_URL='https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+        const r=await fetch(ESPN_URL);
+        if(!r.ok) throw new Error('ESPN returned '+r.status);
+        const data=await r.json();
+        const events=data?.events||[];
+        if(events.length===0){
+          setEspnLog('⚠️ ESPN returned 0 events today.\n\nESPN only shows TODAY\'s scoreboard. For past results, use the RapidAPI sync above.');
+          setEspnSyncing(false); return;
+        }
+        const log=[],newGroupResults={...results.group};
+        events.forEach(ev=>{
+          const comps=ev.competitions||[];
+          comps.forEach(comp=>{
+            const status=comp.status?.type?.name||'';
+            const completed=comp.status?.type?.completed||false;
+            if(!completed&&!status.toLowerCase().includes('final')) return;
+            const teams=comp.competitors||[];
+            const home=teams.find(t=>t.homeAway==='home');
+            const away=teams.find(t=>t.homeAway==='away');
+            if(!home||!away) return;
+            const hName=normTeam(home.team?.displayName||home.team?.shortDisplayName||home.team?.name||'');
+            const aName=normTeam(away.team?.displayName||away.team?.shortDisplayName||away.team?.name||'');
+            const hG=parseInt(home.score);
+            const aG=parseInt(away.score);
+            if(isNaN(hG)||isNaN(aG)) return;
+            const m=GROUP_MATCHES.find(m=>(m.home===hName&&m.away===aName)||(m.home===aName&&m.away===hName));
+            if(!m){ log.push('⚠️ Unmatched: '+hName+' vs '+aName); return; }
+            const swap=m.home===aName;
+            const nh=String(swap?aG:hG),na=String(swap?hG:aG);
+            const existing=newGroupResults[m.id];
+            if(existing&&existing.h===nh&&existing.a===na){ log.push('✔ Already set: '+m.home+' '+nh+'–'+na+' '+m.away); return; }
+            newGroupResults[m.id]={h:nh,a:na};
+            log.push('✅ [Group '+m.group+'] '+m.home+' '+nh+'–'+na+' '+m.away);
+          });
+        });
+        const newCount=log.filter(l=>l.startsWith('✅')).length;
+        if(newCount===0&&log.filter(l=>l.startsWith('⚠️')).length===0){
+          setEspnLog('ℹ️ No new results — all already up to date.');
+          setEspnSyncing(false); return;
+        }
+        setEspnPreview({newGroupResults,log});
+        setEspnLog('Preview ready — '+newCount+' new/updated results from ESPN.');
+      }catch(e){ setEspnLog('❌ ESPN fetch failed: '+e.message+'. ESPN may block cross-origin requests in some browsers — try Chrome or use the RapidAPI sync instead.'); }
+      setEspnSyncing(false);
+    };
+
+    const handleSync=async(confirm=false)=>{      if(confirm&&syncPreview){
         await onSave({...results,group:syncPreview.newGroupResults,ko:syncPreview.newKoResults});
         const ok=syncPreview.log.filter(l=>l.startsWith('✅')).length;
         setSyncLog('✅ Done! '+ok+' results imported.\n\n'+syncPreview.log.join('\n'));
@@ -2127,6 +2328,35 @@
             <div style={{marginTop:12,fontSize:12,color:'var(--ink-soft)'}}>
               <strong>Tip:</strong> Run this once after every matchday. The free plan (100 req/day) is more than enough — each sync uses 1 request.
             </div>
+
+            {/* ── ESPN SYNC ─────────────────────────────────── */}
+            <div className="card" style={{padding:18,marginTop:16,borderColor:'#cc0000',background:'rgba(204,0,0,.03)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                <span style={{fontSize:22}}>🏈</span>
+                <div>
+                  <div style={{fontWeight:700,fontSize:15,color:'#cc0000'}}>ESPN Sync <span style={{fontSize:11,fontWeight:400,background:'#cc0000',color:'white',borderRadius:4,padding:'1px 7px',marginLeft:6}}>No key needed</span></div>
+                  <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:1}}>Pulls today\'s completed scores from ESPN\'s free public API. Use as a fallback when RapidAPI is missing data.</div>
+                </div>
+              </div>
+              <div style={{display:'flex',gap:8,marginBottom:10}}>
+                <button className="btn" onClick={()=>handleEspnSync(false)} disabled={espnSyncing}
+                  style={{background:'#cc0000',whiteSpace:'nowrap'}}>
+                  {espnSyncing?'⏳ Fetching…':'📡 Fetch from ESPN'}
+                </button>
+                {espnPreview&&<button className="btn btn-green" onClick={()=>handleEspnSync(true)}>✅ Import {espnPreview.log.filter(l=>l.startsWith('✅')).length} Results</button>}
+                {espnPreview&&<button className="btn btn-ghost" onClick={()=>{setEspnPreview(null);setEspnLog('');}}>Cancel</button>}
+              </div>
+              {espnPreview&&(
+                <div className="scrollbar" style={{maxHeight:180,overflowY:'auto',background:'var(--cream2)',borderRadius:4,padding:'10px 12px',fontFamily:'JetBrains Mono,monospace',fontSize:11,lineHeight:1.8,whiteSpace:'pre-wrap',marginBottom:8}}>
+                  {espnPreview.log.join('\n')||'Nothing to import.'}
+                </div>
+              )}
+              {espnLog&&!espnPreview&&(
+                <div style={{fontFamily:'JetBrains Mono,monospace',fontSize:12,lineHeight:1.7,whiteSpace:'pre-wrap',padding:'10px 12px',background:'var(--cream2)',borderRadius:4,color:espnLog.startsWith('❌')?'var(--burgundy)':espnLog.startsWith('✅')?'var(--forest)':'var(--ink)'}}>{espnLog}</div>
+              )}
+              <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:8}}>⚠️ ESPN only shows <strong>today\'s</strong> matches. For historical results use the RapidAPI sync above.</div>
+            </div>
+
             {/* ── LIVE API PANELS ───────────────────────────── */}
             <div style={{marginTop:24}}>
               <div className="display" style={{fontSize:18,fontWeight:700,marginBottom:4}}>📡 Live API Data</div>
@@ -2135,7 +2365,7 @@
                 {[
                   {key:'live',    label:'🔴 Live',           ep:'live',      params:'',             bg:'#c0392b'},
                   {key:'results', label:'✅ Match Results',   ep:'results',   params:'',             bg:'#27ae60'},
-                  {key:'upcoming',label:'📅 Upcoming',        ep:'upcoming',  params:'day=tomorrow', bg:'#d4890a'},
+                  {key:'upcoming',label:'📅 Today + Tomorrow', ep:'upcoming',  params:'day=tomorrow', bg:'#d4890a'},
                   {key:'standings',label:'📊 Standings',      ep:'standings', params:'',             bg:'#9f1b1b'},
                   {key:'scorers', label:'⚽ Top Scorers',     ep:'scorers',   params:'',             bg:'#6c3483'},
                 ].map(({key,label,ep,params,bg})=>(
@@ -2267,18 +2497,23 @@
                           <div style={{overflowX:'auto',maxHeight:320,overflowY:'auto'}} className="scrollbar">
                             <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
                               <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
-                                {['#','Home','Away','Date / Time','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
+                                {['#','Home','Away','Kick-off (local)','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
                               </tr></thead>
                               <tbody>{arr.map((m,i)=>{
                                 const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
                                 const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
-                                const dt=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'–').slice(0,16).replace('T',' ');
+                                const raw=m.date??m.matchDate??m.datetime??m.kickoff??m.time??'';
+                                const {time,date,local}=formatMatchTime(raw);
                                 const grp=m.group??m.round??'–';
                                 return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
                                   <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
                                   <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
                                   <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
-                                  <td style={{padding:'6px 8px',fontSize:11,fontFamily:'monospace'}}>{dt}</td>
+                                  <td style={{padding:'6px 8px'}}>
+                                    <span style={{fontFamily:'monospace',fontWeight:700,fontSize:13,color:'var(--amber)'}}>{time}</span>
+                                    {date&&<span style={{fontSize:10,color:'var(--ink-soft)',marginLeft:5}}>{date}</span>}
+                                    {local&&<span style={{fontSize:9,color:'var(--forest)',marginLeft:4}} title="Converted to your local time">🕐 local</span>}
+                                  </td>
                                   <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
                                 </tr>);
                               })}</tbody>
@@ -2650,6 +2885,9 @@
               {upcoming.map((m,i)=>{
                 const h=tn(m.home||m.homeTeam||m.home_team), a=tn(m.away||m.awayTeam||m.away_team);
                 const dt=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'').slice(11,16)||'TBD';
+                const dtDate=String(m.date??m.matchDate??m.datetime??m.kickoff??m.time??'').slice(0,10);
+                const {time:localTime,local:isLocal}=formatMatchTime(m.date??m.matchDate??m.datetime??m.kickoff??m.time);
+                const displayTime=isLocal?localTime:dt;
                 const teamBtn=(name)=>(
                   <span onClick={()=>onTeamClick&&onTeamClick(name)} style={{fontWeight:600,cursor:onTeamClick?'pointer':'default',borderBottom:'1px dotted rgba(255,255,255,.35)',paddingBottom:1}} title={onTeamClick?`Go to ${name}'s group`:''}>{teamShort(name)}</span>
                 );
@@ -2660,7 +2898,8 @@
                     <span style={{color:'rgba(255,255,255,.5)',margin:'0 2px'}}>vs</span>
                     {teamBtn(a)}
                     <span>{TEAM_FLAGS[a]||'⚽'}</span>
-                    {dt!=='TBD'&&<span style={{fontSize:9,color:'#f0932b',marginLeft:2}}>{dt}</span>}
+                    <span style={{fontSize:10,color:'#f0932b',marginLeft:3,fontFamily:'monospace',fontWeight:700}}>{displayTime}</span>
+                    {isLocal&&<span style={{fontSize:8,color:'rgba(255,255,255,.4)',marginLeft:1}} title="Local time">local</span>}
                   </span>
                 );
               })}
@@ -2909,7 +3148,7 @@
     const[presenceToast,setPresenceToast]=useState(null); // {name, type} live join/login notification
     const presenceSessionStart=useRef(Date.now()); // ignore events before this session
     const autoSyncRef=useRef(null); // interval id
-    const POLL_INTERVAL_MS=60000; // poll every 60s
+    const POLL_INTERVAL_MS=3600000; // poll every 1 hour
     const DONE_STATUSES=['ft','aet','pen','finished','completed','full-time','full time'];
 
     const handleBannerTeamClick=useCallback((teamName)=>{
@@ -3056,22 +3295,51 @@
       })();
     },[]);
 
-    // Set of team names playing today (used to lock predictions)
-    const teamsPlayingToday = useMemo(()=>{
-      const s = new Set();
+    // Set of GROUP_MATCHES IDs that are live or within 5 min of kickoff
+    const lockedMatchIds = useMemo(()=>{
+      const ids = new Set();
+      const LIVE_STATUS=/^(1h|2h|ht|et|pen|live|in.?progress|playing)$/i;
+      const now = Date.now();
+      const tn = v => { if(!v)return''; if(typeof v==='string')return normTeam(v)||v; if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;} return''; };
       liveMatches.forEach(m=>{
-        const tn = v => {
-          if(!v) return '';
-          if(typeof v==='string') return normTeam(v)||v;
-          if(typeof v==='object'){ const x=v.name||v.common_name||v.short_name||v.display_name||v.team||''; return normTeam(x)||x; }
-          return '';
-        };
+        const status=(m.status||m.matchStatus||m.state||'').toLowerCase().trim();
+        const minute=m.minute??m.elapsed??m.time??null;
+        const minuteNum=minute!=null&&minute!==''?Number(minute):NaN;
+        const isLive = LIVE_STATUS.test(status) || (!isNaN(minuteNum) && minuteNum > 0);
+        const rawDt = m.date??m.matchDate??m.datetime??m.kickoff??m.scheduled??null;
+        let kicksOffSoon = false;
+        if(rawDt){
+          const kickoff = new Date(rawDt).getTime();
+          if(!isNaN(kickoff)){
+            const minsUntil = (kickoff - now) / 60000;
+            kicksOffSoon = minsUntil <= 5 && minsUntil > -200;
+          }
+        }
+        if(!isLive && !kicksOffSoon) return;
         const h = tn(m.home||m.homeTeam||m.home_team||m.team_home);
         const a = tn(m.away||m.awayTeam||m.away_team||m.team_away);
-        if(h) s.add(h);
-        if(a) s.add(a);
+        // Match to the specific GROUP_MATCHES entry by both team names
+        const gm = GROUP_MATCHES.find(x=>(x.home===h&&x.away===a)||(x.home===a&&x.away===h));
+        if(gm) ids.add(gm.id);
       });
-      return s;
+      return ids;
+    },[liveMatches]);
+
+    // Map: GROUP_MATCHES ID → kickoff timestamp (ms) — used for countdown timer
+    const kickoffTimes = useMemo(()=>{
+      const map = new Map();
+      const tn = v => { if(!v)return''; if(typeof v==='string')return normTeam(v)||v; if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;} return''; };
+      liveMatches.forEach(m=>{
+        const rawDt=m.date??m.matchDate??m.datetime??m.kickoff??m.scheduled??null;
+        if(!rawDt) return;
+        const kickoff=new Date(rawDt).getTime();
+        if(isNaN(kickoff)) return;
+        const h=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+        const a=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+        const gm=GROUP_MATCHES.find(x=>(x.home===h&&x.away===a)||(x.home===a&&x.away===h));
+        if(gm) map.set(gm.id,kickoff);
+      });
+      return map;
     },[liveMatches]);
 
     // Show winner popup on login (track previous user to detect login event)
@@ -3271,12 +3539,12 @@
           </div>
         )}
         <main style={{maxWidth:1100,margin:'0 auto',padding:'24px 16px 80px'}}>
-          {view==='predictions'&&!isGuest&&<PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={locked} teamsPlayingToday={teamsPlayingToday} jumpToGroup={jumpToGroup}/>}
+          {view==='predictions'&&!isGuest&&<PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={locked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup}/>}
           {view==='bracket'&&!isGuest&&<BracketView predictions={predictions} onSave={savePredictions} results={results} locked={locked}/>}
           {view==='bonus'&&!isGuest&&<BonusView predictions={predictions} onSave={savePredictions} results={results} locked={locked}/>}
           {view==='leaderboard'&&<LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/>}
           {view==='browse'&&<BrowseView participants={participants} allPredictions={allPredictions} results={results}/>}
-          {view==='live'&&<LiveDataView/>}
+          {view==='live'&&<LiveDataView adminRole={adminRole}/>}
           {view==='rules'&&<RulesView/>}
           {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws}/>}
         </main>
