@@ -231,7 +231,7 @@
     "Côte d'Ivoire":'Ivory Coast',"Cote d'Ivoire":'Ivory Coast','Ivory Coast':'Ivory Coast',
     'Cabo Verde':'Cape Verde','Cape Verde':'Cape Verde',
     'Türkiye':'Turkiye','Turkey':'Turkiye','Turkiye':'Turkiye',
-    'Bosnia and Herzegovina':'Bosnia & Herz.','Bosnia':'Bosnia & Herz.','Bosnia & Herz.':'Bosnia & Herz.',
+    'Bosnia and Herzegovina':'Bosnia & Herz.','Bosnia-Herzegovina':'Bosnia & Herz.','Bosnia':'Bosnia & Herz.','Bosnia & Herz.':'Bosnia & Herz.',
     'Congo DR':'DR Congo','DR Congo':'DR Congo','Democratic Republic of Congo':'DR Congo',
     'Iran':'Iran','IR Iran':'Iran','Islamic Republic of Iran':'Iran',
     'Curaçao':'Curacao','Curacao':'Curacao',
@@ -908,13 +908,16 @@
     // Jump to a specific group when requested from outside (e.g. banner click)
     useEffect(()=>{ if(jumpToGroup) setOpenGroup(jumpToGroup); },[jumpToGroup]);
     const joker=predictions.joker||{};
+    const todayDateStr=new Date().toLocaleDateString('sv'); // "YYYY-MM-DD" in local time
+    const jokerLockedDate=predictions.jokerLockedDate||null;
+    const jokerLockedToday=jokerLockedDate===todayDateStr;
     const setMatch=(mId,side,val)=>{
       if(locked) return;
       if(val!==''&&(isNaN(parseInt(val))||parseInt(val)<0||parseInt(val)>20)) return;
       onSave({...predictions,group:{...predictions.group,[mId]:{...predictions.group?.[mId],[side]:val}}});
     };
     const setJoker=(k,v)=>{
-      if(locked) return;
+      if(locked||jokerLockedToday) return;
       const newJoker={...joker,[k]:v};
       const existingHist=predictions.jokerHistory||[];
       // On the very first change, snapshot the ORIGINAL joker as setAt=0 so all
@@ -924,6 +927,11 @@
         : existingHist;
       const newHist=[...baseHist,{team:newJoker.team||null,group:newJoker.group||null,setAt:Date.now()}];
       onSave({...predictions,joker:newJoker,jokerHistory:newHist});
+    };
+    const submitJokerForToday=()=>{
+      if(!joker.team&&!joker.group){alert('Please select a Joker Team and/or Joker Group first.');return;}
+      if(!window.confirm(`Lock your Joker for today (${todayDateStr})?\n\n\u2022 Joker Team: ${joker.team||'(none)'}\n\u2022 Joker Group: ${joker.group?'Group '+joker.group:'(none)'}\n\nYou won\u2019t be able to change it until tomorrow.`)) return;
+      onSave({...predictions,jokerLockedDate:todayDateStr});
     };
     const groupProgress=useMemo(()=>{
       const p={};
@@ -942,34 +950,65 @@
       <div>
         <SectionHeader kicker="Stage 1 of 2" title="Group Stage" subtitle="Predict the score of all 72 group matches. Standings auto-update."/>
         {/* Joker */}
-        <div className="card" style={{padding:18,marginTop:18,borderColor:'var(--amber)',background:'linear-gradient(135deg,rgba(214,137,42,.06) 0%,var(--paper) 60%)'}}>
+        <div className="card" style={{padding:18,marginTop:18,borderColor:jokerLockedToday?'var(--burgundy)':'var(--amber)',background:jokerLockedToday?'linear-gradient(135deg,rgba(159,27,27,.07) 0%,var(--paper) 60%)':'linear-gradient(135deg,rgba(214,137,42,.06) 0%,var(--paper) 60%)'}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
             <span style={{fontSize:22}}>🃏</span>
-            <div>
+            <div style={{flex:1}}>
               <div className="display" style={{fontSize:16,fontWeight:700}}>Joker Picks</div>
               <div style={{fontSize:12,color:'var(--ink-soft)'}}>Double points for all Joker Group matches and all Joker Team matches. Triple if both overlap.</div>
             </div>
+            {jokerLockedToday&&(
+              <div style={{flexShrink:0,padding:'5px 12px',borderRadius:6,background:'var(--burgundy)',color:'white',fontSize:11,fontWeight:700,letterSpacing:'.05em'}}>🔒 LOCKED TODAY</div>
+            )}
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-            <div>
-              <div className="micro-caps" style={{marginBottom:6}}>Joker Team</div>
-              <TeamSearchInput value={joker.team||''} onChange={v=>setJoker('team',v)} placeholder="Pick a team…"/>
-              {joker.team&&jTeamGroup&&<div style={{fontSize:11,color:'var(--ink-soft)',marginTop:4}}>{TEAM_FLAGS[joker.team]} plays in <strong>Group {jTeamGroup}</strong></div>}
-            </div>
-            <div>
-              <div className="micro-caps" style={{marginBottom:6}}>Joker Group</div>
-              <select value={joker.group||''} onChange={e=>setJoker('group',e.target.value)} style={{width:'100%',padding:'10px 12px',fontSize:14,border:`1px solid ${joker.group?'var(--forest)':'var(--line)'}`,borderRadius:4,background:'white',fontFamily:'inherit',color:'var(--ink)'}}>
-                <option value="">Pick a group…</option>
-                {GROUP_KEYS.map(g=><option key={g} value={g}>Group {g} — {GROUPS[g].map(t=>teamShort(t)).join(', ')}</option>)}
-              </select>
-            </div>
-          </div>
-          {(joker.team||joker.group)&&(
-            <div style={{marginTop:12,padding:'8px 12px',borderRadius:4,background:isTriple?'rgba(159,27,27,.08)':'rgba(214,137,42,.1)',border:`1px solid ${isTriple?'var(--burgundy)':'var(--amber)'}`}}>
-              <div style={{fontSize:12,fontWeight:600,color:isTriple?'var(--burgundy)':'var(--amber)'}}>
-                {isTriple?`🃏 TRIPLE: ${joker.team} matches score 3×`:`${joker.team?`${TEAM_FLAGS[joker.team]||''} ${joker.team} matches → 2×`:''} ${joker.group?`All Group ${joker.group} matches → 2×`:''}`}
+          {jokerLockedToday?(
+            <div style={{padding:'14px 16px',borderRadius:6,background:'rgba(159,27,27,.06)',border:'1px solid var(--burgundy)',display:'flex',alignItems:'center',gap:14}}>
+              <span style={{fontSize:28}}>🃏</span>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,color:'var(--burgundy)'}}>Joker submitted for {jokerLockedDate}</div>
+                <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:3}}>
+                  {joker.team&&<span>{TEAM_FLAGS[joker.team]||''} <strong>{joker.team}</strong> (team){joker.group?' · ':''}</span>}
+                  {joker.group&&<span>Group <strong>{joker.group}</strong> (group)</span>}
+                  {isTriple&&<span style={{marginLeft:8,fontSize:11,fontWeight:700,color:'var(--burgundy)',background:'rgba(159,27,27,.1)',padding:'1px 6px',borderRadius:3}}>3× TRIPLE</span>}
+                </div>
+                <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:4}}>Unlocks automatically tomorrow.</div>
               </div>
             </div>
+          ):(
+            <>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                <div>
+                  <div className="micro-caps" style={{marginBottom:6}}>Joker Team</div>
+                  <TeamSearchInput value={joker.team||''} onChange={v=>setJoker('team',v)} placeholder="Pick a team…"/>
+                  {joker.team&&jTeamGroup&&<div style={{fontSize:11,color:'var(--ink-soft)',marginTop:4}}>{TEAM_FLAGS[joker.team]} plays in <strong>Group {jTeamGroup}</strong></div>}
+                </div>
+                <div>
+                  <div className="micro-caps" style={{marginBottom:6}}>Joker Group</div>
+                  <select value={joker.group||''} onChange={e=>setJoker('group',e.target.value)} style={{width:'100%',padding:'10px 12px',fontSize:14,border:`1px solid ${joker.group?'var(--forest)':'var(--line)'}`,borderRadius:4,background:'white',fontFamily:'inherit',color:'var(--ink)'}}>
+                    <option value="">Pick a group…</option>
+                    {GROUP_KEYS.map(g=><option key={g} value={g}>Group {g} — {GROUPS[g].map(t=>teamShort(t)).join(', ')}</option>)}
+                  </select>
+                </div>
+              </div>
+              {(joker.team||joker.group)&&(
+                <div style={{marginTop:12,padding:'8px 12px',borderRadius:4,background:isTriple?'rgba(159,27,27,.08)':'rgba(214,137,42,.1)',border:`1px solid ${isTriple?'var(--burgundy)':'var(--amber)'}`}}>
+                  <div style={{fontSize:12,fontWeight:600,color:isTriple?'var(--burgundy)':'var(--amber)'}}>
+                    {isTriple?`🃏 TRIPLE: ${joker.team} matches score 3×`:`${joker.team?`${TEAM_FLAGS[joker.team]||''} ${joker.team} matches → 2×`:''} ${joker.group?`All Group ${joker.group} matches → 2×`:''}`}
+                  </div>
+                </div>
+              )}
+              <div style={{marginTop:14,display:'flex',alignItems:'center',gap:12}}>
+                <button onClick={submitJokerForToday} disabled={!joker.team&&!joker.group} style={{padding:'9px 22px',borderRadius:6,border:'none',background:(joker.team||joker.group)?'var(--burgundy)':'var(--line)',color:(joker.team||joker.group)?'white':'var(--ink-soft)',fontWeight:700,fontSize:13,cursor:(joker.team||joker.group)?'pointer':'not-allowed',fontFamily:'inherit'}}>
+                  🔒 Submit Joker for Today
+                </button>
+                {jokerLockedDate&&jokerLockedDate!==todayDateStr&&(
+                  <span style={{fontSize:11,color:'var(--ink-soft)'}}>Last locked: {jokerLockedDate}</span>
+                )}
+                {!joker.team&&!joker.group&&(
+                  <span style={{fontSize:11,color:'var(--ink-soft)',fontStyle:'italic'}}>Select a team and/or group first</span>
+                )}
+              </div>
+            </>
           )}
         </div>
         <ProgressBar done={totalDone} total={72} label="matches predicted"/>
@@ -1353,7 +1392,7 @@
       <div className="card" style={{padding:18,marginTop:14,borderColor:'var(--amber)',background:'linear-gradient(135deg,rgba(214,137,42,.06) 0%,var(--paper) 60%)'}}>
         <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 6px'}}>🃏 Joker Picks — How They Work</h3>
         <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 14px',lineHeight:1.7}}>
-          Before the tournament starts, pick one <strong>Joker Team</strong> and one <strong>Joker Group</strong>. These multiply your points for group stage matches only — no effect on knockouts. <strong>Changes are time-stamped</strong>: if you change your joker after matchday 1 has been played, your original joker is preserved for those already-scored matches.
+          Pick one <strong>Joker Team</strong> and one <strong>Joker Group</strong>. These multiply your points for group stage matches only — no effect on knockouts. Once you're happy with your selection, click <strong>"🔒 Submit Joker for Today"</strong> — this locks your joker for the rest of that day. It unlocks automatically the next day, letting you adjust before that day's matches kick off. <strong>Changes are time-stamped</strong>: if you change your joker after matchday 1 has been played, your original joker is preserved for those already-scored matches.
         </p>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:10,marginBottom:16}}>
           {[
@@ -1383,7 +1422,7 @@
         </div>
         <div style={{padding:'10px 14px',background:'rgba(159,27,27,.06)',border:'1px solid var(--burgundy)',borderRadius:6}}>
           <div style={{fontWeight:700,fontSize:12,color:'var(--burgundy)',marginBottom:3}}>💡 Strategic Tip</div>
-          <div style={{fontSize:12,color:'var(--ink)',lineHeight:1.6}}>Pick a Joker Team you're confident about <em>and</em> set your Joker Group to their group — you'll get 3× on all their matches instead of just 2×.</div>
+          <div style={{fontSize:12,color:'var(--ink)',lineHeight:1.6}}>Pick a Joker Team you're confident about <em>and</em> set your Joker Group to their group — you'll get 3× on all their matches instead of just 2×. Remember to click <strong>🔒 Submit Joker for Today</strong> each morning to lock in your choice before the day's matches begin.</div>
         </div>
       </div>
 
@@ -1498,6 +1537,8 @@
     const[cacheInfo,setCacheInfo]=useState({});  // {panelKey:{updatedAt}}
     const[cacheLoading,setCacheLoading]=useState(null);
     const[liveAutoTs,setLiveAutoTs]=useState(null); // last auto-refresh timestamp
+    const[rawDebug,setRawDebug]=useState(null);     // {key, json} shown in debug modal
+    const[espnPreview,setEspnPreview]=useState(null); // {panelKey,payload,isStandings,summary,rows} — confirm before save
 
     // ── Auto-load cached data from Firestore on mount ─────────────────────────
     useEffect(()=>{
@@ -1638,8 +1679,27 @@
             r=await fetch(`https://${API_HOST}/${endpoint}${params?'?'+params:''}`,{headers:{'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST}});
           }
           const d=await r.json();
-          setLiveData(prev=>({...prev,[panelKey]:d}));
-          const cEntry={data:d,updatedAt:new Date().toISOString()};
+          // If /live returns empty, transparently try /results as fallback
+          let finalData=d;
+          if(panelKey==='live'){
+            const liveArr=flatten(d);
+            if(liveArr.length===0){
+              try{
+                const rr=FUNC_BASE
+                  ?await fetch(`${FUNC_BASE}/proxy?ep=results`)
+                  :await fetch(`https://${API_HOST}/results`,{headers:{'X-RapidAPI-Key':syncKey.trim(),'X-RapidAPI-Host':API_HOST}});
+                const rd=await rr.json();
+                const resArr=flatten(rd);
+                if(resArr.length>0){
+                  finalData={_fallback:'results',...rd};
+                  alert(`ℹ️ /live returned 0 matches. Showing /results instead (${resArr.length} recent matches).`);
+                }
+              }catch{}
+            }
+          }
+          setRawDebug({key:panelKey,json:JSON.stringify(finalData,null,2),fetchedAt:new Date().toLocaleTimeString()});
+          setLiveData(prev=>({...prev,[panelKey]:finalData}));
+          const cEntry={data:finalData,updatedAt:new Date().toISOString()};
           await storage.setJSON(`live-cache-${panelKey}`,cEntry,true);
           setCacheInfo(prev=>({...prev,[panelKey]:{updatedAt:cEntry.updatedAt}}));
         }
@@ -1659,11 +1719,165 @@
       }
       return Array.isArray(d)?d:[];
     };
+
+    // ── ESPN FETCH (free, no key) ─────────────────────────────────────
+    // Converts ESPN competition objects into the same shape the rest of the app expects
+    const ESPN_BASE='https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world';
+    const espnCompToMatch=comp=>{
+      const hC=comp.competitors?.find(c=>c.homeAway==='home');
+      const aC=comp.competitors?.find(c=>c.homeAway==='away');
+      if(!hC||!aC) return null;
+      const st=comp.status?.type||{};
+      const minuteRaw=comp.status?.displayClock||'';
+      const minuteNum=parseInt(minuteRaw)||0;
+      // Normalise status → short code app understands
+      const stName=st.name||'';
+      let status='scheduled';
+      if(stName==='STATUS_IN_PROGRESS') status=minuteNum>45?'2H':'1H';
+      else if(stName==='STATUS_HALFTIME') status='HT';
+      else if(stName==='STATUS_FULL_TIME'||st.completed) status='FT';
+      else if(stName==='STATUS_SCHEDULED') status='scheduled';
+      return{
+        home:normTeam(hC.team?.displayName||''),
+        away:normTeam(aC.team?.displayName||''),
+        homeScore:hC.score??'', awayScore:aC.score??'',
+        minute:minuteNum||'',
+        status,
+        kickoff:comp.date||comp.startDate||null, // ISO UTC string e.g. "2026-06-18T22:00Z"
+        _espn:true,
+      };
+    };
+    const fetchESPN=async(panelKey)=>{
+      setLoadingPanel('espn-'+panelKey);
+      try{
+        const todayStr=new Date().toISOString().slice(0,10).replace(/-/g,'');
+        const tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10).replace(/-/g,'');
+        if(panelKey==='live'||panelKey==='upcoming'){
+          const [r1,r2]=await Promise.all([
+            fetch(`${ESPN_BASE}/scoreboard?dates=${todayStr}`).then(r=>r.json()),
+            fetch(`${ESPN_BASE}/scoreboard?dates=${tomorrowStr}`).then(r=>r.json()),
+          ]);
+          const all=[...(r1.events||[]),...(r2.events||[])];
+          const matches=all.map(ev=>espnCompToMatch(ev.competitions?.[0])).filter(Boolean);
+          if(panelKey==='live'){
+            const live=matches.filter(m=>['1H','2H','HT','ET','PEN'].includes(m.status));
+            const payload={_espn:true,data:{live}};
+            const pvRows=live.length?live.slice(0,5).map(m=>`${m.home} ${m.homeScore??'-'} - ${m.awayScore??'-'} ${m.away} (${m.status}${m.minute?" "+m.minute+"'":''})`) :['No live matches right now'];
+            setEspnPreview({panelKey,payload,isStandings:false,summary:`${live.length} live match${live.length!==1?'es':''}`,rows:pvRows});
+          } else {
+            const upcoming=matches.filter(m=>m.status==='scheduled');
+            const payload={_espn:true,data:{upcoming}};
+            const pvRows=upcoming.length?upcoming.slice(0,5).map(m=>{const t=m.kickoff?new Date(m.kickoff).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'?';return `${m.home} vs ${m.away} @ ${t}`;}) :['No upcoming matches'];
+            setEspnPreview({panelKey,payload,isStandings:false,summary:`${upcoming.length} upcoming match${upcoming.length!==1?'es':''}`,rows:pvRows});
+          }
+        } else if(panelKey==='results'){
+          // Fetch last 7 days of results from ESPN
+          const days=Array.from({length:7},(_,i)=>{
+            const d=new Date(Date.now()-i*86400000);
+            return d.toISOString().slice(0,10).replace(/-/g,'');
+          });
+          const allEvents=[];
+          await Promise.all(days.map(async day=>{
+            try{
+              const r=await fetch(`${ESPN_BASE}/scoreboard?dates=${day}`).then(r=>r.json());
+              (r.events||[]).forEach(ev=>allEvents.push(ev));
+            }catch{}
+          }));
+          const matches=allEvents.map(ev=>espnCompToMatch(ev.competitions?.[0])).filter(m=>m&&m.status==='FT');
+          const payload={_espn:true,data:{results:matches}};
+          const pvRows=matches.length?matches.slice(0,5).map(m=>`${m.home} ${m.homeScore} - ${m.awayScore} ${m.away} (FT)`) :['No results found'];
+          setEspnPreview({panelKey,payload,isStandings:false,summary:`${matches.length} result${matches.length!==1?'s':''}`,rows:pvRows});
+        } else if(panelKey==='standings'){
+          // ESPN standings: https://site.api.espn.com/apis/v2/sports/soccer/fifa.world/standings
+          // Returns 12 children (one per group), each with standings.entries (4 teams)
+          const r=await fetch('https://site.api.espn.com/apis/v2/sports/soccer/fifa.world/standings').then(r=>r.json());
+          const groups={};
+          (r.children||[]).forEach(grp=>{
+            const gName=grp.name||grp.abbreviation||''; // "Group A"
+            const letter=gName.replace('Group ','').trim();
+            if(!letter) return;
+            const rows=(grp.standings?.entries||[]).map(e=>{
+              const stat=name=>{ const s=e.stats?.find(x=>x.name===name); return s?Number(s.value):0; };
+              const teamName=normTeam(e.team?.displayName||e.team?.name||'');
+              return{
+                team:teamName,
+                played:stat('gamesPlayed'),
+                wins:stat('wins'),
+                draws:stat('ties'),
+                losses:stat('losses'),
+                gf:stat('pointsFor'),
+                ga:stat('pointsAgainst'),
+                gd:stat('pointDifferential'),
+                points:stat('points'),
+                rank:stat('rank'),
+              };
+            }).sort((a,b)=>a.rank-b.rank);
+            groups['Group '+letter]=rows;
+          });
+          if(Object.keys(groups).length<2){alert('ESPN returned incomplete standings.');setLoadingPanel(null);return;}
+          const pvRows=Object.entries(groups).slice(0,4).map(([g,teams])=>`${g}: ${teams.map(t=>`${t.team} (${t.points}pts)`).join(' | ')}`);
+          setEspnPreview({panelKey,payload:groups,isStandings:true,summary:`${Object.keys(groups).length} groups, ${Object.values(groups).flat().length} teams`,rows:pvRows});
+        } else if(panelKey==='scorers'){
+          // ESPN leaders: https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/seasons/2026/types/1/leaders
+          const r=await fetch('https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/seasons/2026/types/1/leaders').then(r=>r.json());
+          const goalsCat=r.categories?.find(c=>c.name==='goalsLeaders');
+          const assistsCat=r.categories?.find(c=>c.name==='assistsLeaders');
+          if(!goalsCat||!goalsCat.leaders?.length){alert('ESPN top scorers not available yet.');setLoadingPanel(null);return;}
+          // Build assists lookup keyed by athlete $ref URL (normalised to https://)
+          const assistsMap=new Map();
+          (assistsCat?.leaders||[]).forEach(e=>{if(e.athlete?.['$ref'])assistsMap.set(e.athlete['$ref'].replace(/^http:\/\//,'https://'),e.value||0);});
+          // Fetch all athlete + team refs in parallel (25 each = 50 concurrent requests)
+          // Force https:// — ESPN $ref URLs come back as http:// which browsers block as mixed content
+          const toHttps=url=>url.replace(/^http:\/\//,'https://');
+          const leaders=goalsCat.leaders;
+          const athleteRows=await Promise.all(leaders.map(async(e,i)=>{
+            try{
+              const [ad,td]=await Promise.all([
+                fetch(toHttps(e.athlete['$ref'])).then(r=>r.json()).catch(()=>({})),
+                fetch(toHttps(e.team['$ref'])).then(r=>r.json()).catch(()=>({})),
+              ]);
+              return{
+                rank:i+1,
+                name:ad.displayName||ad.fullName||'Unknown',
+                team:normTeam(td.displayName||td.name||ad.citizenship||''),
+                goals:e.value||0,
+                assists:assistsMap.get(toHttps(e.athlete['$ref']))||0,
+              };
+            }catch{return null;}
+          }));
+          const scorers=athleteRows.filter(Boolean).sort((a,b)=>b.goals-a.goals||b.assists-a.assists).map((s,i)=>({...s,rank:i+1}));
+          if(!scorers.length){alert('No scorer data returned from ESPN.');setLoadingPanel(null);return;}
+          const payload={_espn:true,data:{scorers}};
+          const pvRows=scorers.slice(0,5).map(s=>`${s.rank}. ${s.name} (${s.team||'?'}) — ${s.goals} goal${s.goals!==1?'s':''}${s.assists?' | '+s.assists+' ast':''}`);
+          setEspnPreview({panelKey,payload,isStandings:false,summary:`${scorers.length} players`,rows:pvRows});
+        }
+      }catch(e){alert('ESPN fetch failed: '+e.message);}
+      setLoadingPanel(null);
+    };
+    const saveESPNPreview=async({panelKey,payload,isStandings})=>{
+      setEspnPreview(null);
+      try{
+        if(isStandings){
+          setLiveStandings(payload);
+          const cEntry={data:payload,updatedAt:new Date().toISOString()};
+          await storage.setJSON('live-cache-standings',cEntry,true);
+          setCacheInfo(prev=>({...prev,standings:{updatedAt:cEntry.updatedAt}}));
+        } else {
+          setLiveData(prev=>({...prev,[panelKey]:payload}));
+          const cEntry={data:payload,updatedAt:new Date().toISOString()};
+          await storage.setJSON(`live-cache-${panelKey}`,cEntry,true);
+          setCacheInfo(prev=>({...prev,[panelKey]:{updatedAt:cEntry.updatedAt}}));
+        }
+      }catch(e){alert('Save to Firebase failed: '+e.message);}
+    };
     const closePanel=key=>{ if(key==='standings') setLiveStandings(null); else setLiveData(p=>{const n={...p};delete n[key];return n;}); };
     const PanelHdr=({bg,title,count,panelKey})=>(
       <div style={{padding:'10px 16px',background:bg,color:'white',display:'flex',alignItems:'center',gap:8}}>
         <span style={{fontWeight:700,fontSize:13}}>{title}</span>
         <span style={{fontSize:11,opacity:.75,fontFamily:'monospace'}}>({count})</span>
+        {(adminRole==='superadmin'||adminRole==='subadmin')&&liveData[panelKey]&&(
+          <button onClick={()=>setRawDebug({key:panelKey,json:JSON.stringify(liveData[panelKey],null,2),fetchedAt:cacheInfo[panelKey]?.updatedAt?new Date(cacheInfo[panelKey].updatedAt).toLocaleTimeString():'?'})} style={{background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',color:'white',cursor:'pointer',fontSize:10,borderRadius:4,padding:'2px 8px',fontWeight:600}}>🔍 Raw</button>
+        )}
         <button onClick={()=>closePanel(panelKey)} style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',border:'none',color:'white',cursor:'pointer',fontSize:11,borderRadius:4,padding:'2px 10px',fontWeight:700}}>✕ Close</button>
       </div>
     );
@@ -1683,6 +1897,42 @@
     return(
       <div style={{maxWidth:900,margin:'0 auto',padding:'24px 16px'}}>
         <SectionHeader kicker="Tournament" title="Live API Data" subtitle="Read-only — fetches live tournament data directly from the API."/>
+        {/* Raw JSON debug modal */}
+        {rawDebug&&(
+          <div style={{position:'fixed',inset:0,zIndex:12000,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={()=>setRawDebug(null)}>
+            <div style={{background:'#1a1a2e',border:'1px solid #444',borderRadius:12,width:'100%',maxWidth:760,maxHeight:'80vh',display:'flex',flexDirection:'column',overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
+              <div style={{padding:'10px 16px',borderBottom:'1px solid #333',display:'flex',alignItems:'center',gap:10}}>
+                <span style={{color:'#f9ca24',fontWeight:700,fontFamily:'monospace',fontSize:13}}>🔍 Raw API response — /{rawDebug.key} ({rawDebug.fetchedAt})</span>
+                <span style={{marginLeft:'auto',fontSize:11,color:'#aaa'}}>{(rawDebug.json.length/1024).toFixed(1)} KB</span>
+                <button onClick={()=>setRawDebug(null)} style={{background:'#444',border:'none',color:'white',borderRadius:4,padding:'3px 10px',cursor:'pointer',fontSize:12}}>✕ Close</button>
+              </div>
+              <pre className="scrollbar" style={{margin:0,padding:'12px 16px',overflowY:'auto',fontSize:11,color:'#7ec8e3',fontFamily:'JetBrains Mono,monospace',lineHeight:1.5,flex:1}}>{rawDebug.json}</pre>
+            </div>
+          </div>
+        )}
+        {/* ESPN preview/confirm modal */}
+        {espnPreview&&(
+          <div style={{position:'fixed',inset:0,zIndex:13000,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={()=>setEspnPreview(null)}>
+            <div style={{background:'white',borderRadius:12,width:'100%',maxWidth:600,maxHeight:'85vh',display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 8px 40px rgba(0,0,0,.35)'}} onClick={e=>e.stopPropagation()}>
+              <div style={{padding:'12px 16px',background:'#2c3e50',color:'white',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+                <span style={{fontWeight:700,fontSize:13}}>📋 ESPN Preview — {espnPreview.panelKey}</span>
+                <span style={{fontSize:11,background:'rgba(255,255,255,.18)',padding:'2px 10px',borderRadius:10,fontFamily:'monospace'}}>{espnPreview.summary}</span>
+                <button onClick={()=>setEspnPreview(null)} style={{marginLeft:'auto',background:'rgba(255,255,255,.15)',border:'none',color:'white',borderRadius:4,padding:'3px 10px',cursor:'pointer',fontSize:12}}>✕</button>
+              </div>
+              <div style={{padding:'14px 16px',overflowY:'auto',flex:1}} className="scrollbar">
+                <div style={{fontSize:11,color:'#888',marginBottom:10,fontStyle:'italic'}}>Showing first 5 entries — review before saving:</div>
+                {espnPreview.rows.map((row,i)=>(
+                  <div key={i} style={{padding:'7px 10px',marginBottom:4,background:i%2===0?'#f4f6f8':'white',borderRadius:4,fontSize:12,fontFamily:'JetBrains Mono,monospace',color:'#2c3e50',border:'1px solid #eee'}}>{row}</div>
+                ))}
+                <div style={{marginTop:12,padding:'10px 12px',background:'#fff8e1',borderRadius:6,border:'1px solid #f0c040',fontSize:11,color:'#7a5800'}}>⚠️ Saving will overwrite the current cached data for all users. Only save if the data looks correct.</div>
+              </div>
+              <div style={{padding:'12px 16px',borderTop:'1px solid #e5e7eb',display:'flex',gap:10,justifyContent:'flex-end',background:'#f8f9fa',flexShrink:0}}>
+                <button onClick={()=>setEspnPreview(null)} style={{padding:'8px 20px',borderRadius:6,border:'1px solid #ddd',background:'white',cursor:'pointer',fontSize:12,fontWeight:600,color:'#555'}}>🗑️ Discard</button>
+                <button onClick={()=>saveESPNPreview(espnPreview)} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#27ae60',color:'white',cursor:'pointer',fontSize:12,fontWeight:700}}>💾 Save to Firebase</button>
+              </div>
+            </div>
+          </div>
+        )}
         {(!window.__RAPID_KEY&&!FUNC_BASE)&&(
           <div className="card" style={{padding:16,marginBottom:20,maxWidth:520}}>
             <div className="micro-caps" style={{marginBottom:6}}>API Key (optional override)</div>
@@ -1692,21 +1942,44 @@
           </div>
         )}
         {(adminRole==='superadmin'||adminRole==='subadmin')?(
-          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:20}}>
-            {[
-              {key:'live',     label:'🔴 Live',          ep:'live',      params:'',             bg:'#c0392b'},
-              {key:'results',  label:'✅ Match Results',  ep:'results',   params:'',             bg:'#27ae60'},
-              {key:'upcoming', label:'📅 Today + Tomorrow', ep:'upcoming',  params:'day=tomorrow', bg:'#d4890a'},
-              {key:'standings',label:'📊 Standings',      ep:'standings', params:'',             bg:'#9f1b1b'},
-              {key:'scorers',  label:'⚽ Top Scorers',    ep:'scorers',   params:'',             bg:'#6c3483'},
-            ].map(({key,label,ep,params,bg})=>(
-              <button key={key}
-                onClick={()=>key==='standings'?handleFetchStandings():fetchPanel(key,ep,params)}
-                disabled={(loadingPanel===key)||(key==='standings'&&standingsLoading)||(!syncKey.trim()&&!FUNC_BASE)}
-                style={{background:(loadingPanel===key||(key==='standings'&&standingsLoading))?'#888':bg,color:'white',border:'none',borderRadius:6,padding:'9px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!syncKey.trim()&&!FUNC_BASE)?0.5:1,whiteSpace:'nowrap'}}>
-                {(loadingPanel===key||(key==='standings'&&standingsLoading))?'⏳ Loading…':label}
-              </button>
-            ))}
+          <div style={{marginBottom:20}}>
+            {/* ESPN — free, no key, primary source */}
+            <div style={{fontSize:11,fontWeight:700,color:'#27ae60',marginBottom:6,letterSpacing:'.05em'}}>✅ ESPN (free, no key required — recommended)</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+              {[
+                {key:'live',      label:'🔴 Live Matches',     fn:()=>fetchESPN('live'),      bg:'#c0392b'},
+                {key:'upcoming',  label:'📅 Today + Tomorrow', fn:()=>fetchESPN('upcoming'),  bg:'#d4890a'},
+                {key:'results',   label:'✅ Results (7 days)',  fn:()=>fetchESPN('results'),   bg:'#27ae60'},
+                {key:'standings', label:'📊 Standings',        fn:()=>fetchESPN('standings'), bg:'#9f1b1b'},
+                {key:'scorers',   label:'⚽ Top Scorers',      fn:()=>fetchESPN('scorers'),   bg:'#6c3483'},
+              ].map(({key,label,fn,bg})=>{
+                const espnKey='espn-'+key;
+                return(
+                <button key={key} onClick={fn} disabled={loadingPanel===espnKey}
+                  style={{background:loadingPanel===espnKey?'#888':bg,color:'white',border:'none',borderRadius:6,padding:'9px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                  {loadingPanel===espnKey?'⏳ Loading…':label}
+                </button>
+                );
+              })}
+            </div>
+            {/* RapidAPI — fallback for standings & scorers (ESPN doesn't have these) */}
+            <div style={{fontSize:11,fontWeight:700,color:'var(--ink-soft)',marginBottom:6,letterSpacing:'.05em'}}>📡 RapidAPI (key required — use for Standings & Top Scorers only)</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {[
+                {key:'live',     label:'🔴 Live (fallback)',    ep:'live',      params:'',  bg:'#7f8c8d'},
+                {key:'results',  label:'✅ Results (fallback)', ep:'results',   params:'',  bg:'#7f8c8d'},
+                {key:'upcoming', label:'📅 Upcoming (fallback)',ep:'upcoming',  params:'',  bg:'#7f8c8d'},
+                {key:'standings',label:'📊 Standings',          ep:'standings', params:'',  bg:'#9f1b1b'},
+                {key:'scorers',  label:'⚽ Top Scorers',        ep:'scorers',   params:'',  bg:'#6c3483'},
+              ].map(({key,label,ep,params,bg})=>(
+                <button key={key+'-rapid'}
+                  onClick={()=>key==='standings'?handleFetchStandings():fetchPanel(key,ep,params)}
+                  disabled={(loadingPanel===key)||(key==='standings'&&standingsLoading)||(!syncKey.trim()&&!FUNC_BASE)}
+                  style={{background:(loadingPanel===key||(key==='standings'&&standingsLoading))?'#888':bg,color:'white',border:'none',borderRadius:6,padding:'9px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!syncKey.trim()&&!FUNC_BASE)?0.4:1,whiteSpace:'nowrap'}}>
+                  {(loadingPanel===key||(key==='standings'&&standingsLoading))?'⏳ Loading…':label}
+                </button>
+              ))}
+            </div>
           </div>
         ):(
           <div style={{marginBottom:20}}>
@@ -1971,6 +2244,22 @@
     const[espnSyncing,setEspnSyncing]=useState(false);
     const[espnLog,setEspnLog]=useState('');
     const[espnPreview,setEspnPreview]=useState(null);
+    const[manualLive,setManualLive]=useState([]); // admin-entered live scores override
+    const[mlSaving,setMlSaving]=useState(false);
+
+    // Load existing manual overrides on mount
+    useEffect(()=>{
+      storage.getShared('manual-live').then(d=>{ if(d&&Array.isArray(d.rows)) setManualLive(d.rows); }).catch(()=>{});
+    },[]);
+
+    const saveManualLive=async(rows)=>{
+      setMlSaving(true);
+      try{
+        await storage.setJSON('manual-live',{rows,updatedAt:new Date().toISOString()},true);
+        setManualLive(rows);
+      }catch(e){alert('Save failed: '+e.message);}
+      setMlSaving(false);
+    };
 
     const handleFetchStandings=async()=>{
       if(!syncKey.trim() && !FUNC_BASE){alert('Paste your API key first or set window.__FUNC_BASE for proxy.');return;}
@@ -2244,6 +2533,19 @@
       setRenameTarget(null);setRenameValue('');
       alert(`Renamed "${oldName}" → "${newN}"`);
     };
+    const handleResetPredictions=async(name)=>{
+      const hasPreds=!!allPredictions[name];
+      const msg=hasPreds
+        ?`Reset ALL predictions for "${name}"?\n\nThis will clear:\n• All group stage score predictions\n• All KO round predictions\n• Bonus picks\n• Joker assignment\n\nTheir score will become 0. This cannot be undone.`
+        :`"${name}" has no predictions to reset.`;
+      if(!hasPreds){alert(msg);return;}
+      if(!window.confirm(msg)) return;
+      const empty={group:{},ko:{},bonus:{},joker:{},jokerHistory:[],jokerLockedDate:null};
+      await storage.setJSON(`pred-${name}`,empty,true);
+      const na={...allPredictions,[name]:empty};
+      setAllPredictions(na);
+      alert(`✅ Predictions reset for "${name}". Their score is now 0.`);
+    };
     const scores=useMemo(()=>participants.map(p=>{const s=computeUserScore(allPredictions[p]||{},results.group||{},results.ko||{},results.bonus||{});return{name:p,total:s.total,groupPts:s.groupPoints,koPts:s.koPoints+s.bracketPoints,bonusPts:s.bonusPoints};}).sort((a,b)=>b.total-a.total),[participants,allPredictions,results]);
     const setGroupResult=(mId,side,val)=>{
       if(val!==''&&(isNaN(parseInt(val))||parseInt(val)<0||parseInt(val)>20)) return;
@@ -2269,6 +2571,7 @@
             ['ko','Knockout Results',true],
             ['bonus','Bonus Results',true],
             ['sync','🔄 Auto-Sync',true],
+            ['liveoverride','🔴 Live Override',true],
             ['users',`Users (${participants.length})`,isSuperAdmin],
             ['settings','Settings',isSuperAdmin],
           ].filter(([,, allowed])=>allowed).map(([k,l])=>(
@@ -2724,6 +3027,78 @@
             </div>
           </div>
         )}
+        {section==='liveoverride'&&(()=>{
+          // When API data is wrong, admin can manually enter the current live scores.
+          // These are saved to Firestore and pushed to all users' liveMatches within 30s.
+          const addRow=()=>saveManualLive([...manualLive,{home:'',away:'',hs:'',as:'',minute:'',status:'1H'}]);
+          const updateRow=(i,k,v)=>saveManualLive(manualLive.map((r,ri)=>ri===i?{...r,[k]:v}:r));
+          const removeRow=i=>saveManualLive(manualLive.filter((_,ri)=>ri!==i));
+          const STATUS_OPTS=['1H','HT','2H','ET','PEN','FT'];
+          return(
+            <div style={{marginTop:16}}>
+              <div className="card" style={{padding:18,borderColor:'#c0392b',background:'rgba(192,57,43,.04)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                  <span style={{fontSize:20}}>🔴</span>
+                  <div>
+                    <div className="display" style={{fontWeight:700,fontSize:16}}>Live Score Override</div>
+                    <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:2}}>
+                      When RapidAPI returns wrong/stale data, enter correct scores here. Saved instantly to Firestore — all users see the correction within 30 s. These rows take <strong>priority over API data</strong> for the banner, locking, and fireworks.
+                    </div>
+                  </div>
+                </div>
+                {manualLive.length===0&&(
+                  <div style={{textAlign:'center',padding:'20px 0',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic'}}>No overrides set. Click "Add Match" when a game is live and the API is wrong.</div>
+                )}
+                {manualLive.length>0&&(
+                  <div style={{overflowX:'auto'}} className="scrollbar">
+                    <table style={{width:'100%',fontSize:13,borderCollapse:'collapse',marginBottom:10}}>
+                      <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
+                        {['Home Team','Score','Away Team','Min','Status',''].map(h=>(
+                          <th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:11,textAlign:'left',color:'var(--ink-soft)',whiteSpace:'nowrap'}}>{h}</th>
+                        ))}
+                      </tr></thead>
+                      <tbody>
+                        {manualLive.map((row,i)=>(
+                          <tr key={i} style={{borderBottom:'1px solid var(--line-soft)'}}>
+                            <td style={{padding:'4px 6px'}}><TeamSearchInput value={row.home} onChange={v=>updateRow(i,'home',v)} placeholder="Home team…"/></td>
+                            <td style={{padding:'4px 6px'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:4}}>
+                                <input type="number" min="0" max="20" value={row.hs} onChange={e=>updateRow(i,'hs',e.target.value)} className="input-score" style={{width:36,height:30,fontSize:13,textAlign:'center'}}/>
+                                <span style={{fontWeight:700,color:'var(--ink-soft)'}}>–</span>
+                                <input type="number" min="0" max="20" value={row.as} onChange={e=>updateRow(i,'as',e.target.value)} className="input-score" style={{width:36,height:30,fontSize:13,textAlign:'center'}}/>
+                              </div>
+                            </td>
+                            <td style={{padding:'4px 6px'}}><TeamSearchInput value={row.away} onChange={v=>updateRow(i,'away',v)} placeholder="Away team…"/></td>
+                            <td style={{padding:'4px 6px'}}><input type="number" min="0" max="120" value={row.minute} onChange={e=>updateRow(i,'minute',e.target.value)} placeholder="45" style={{width:46,padding:'5px 6px',fontSize:12,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/></td>
+                            <td style={{padding:'4px 6px'}}>
+                              <select value={row.status} onChange={e=>updateRow(i,'status',e.target.value)} style={{padding:'5px 6px',fontSize:12,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit',background:'white'}}>
+                                {STATUS_OPTS.map(s=><option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </td>
+                            <td style={{padding:'4px 6px'}}>
+                              <button onClick={()=>removeRow(i)} style={{background:'var(--burgundy)',color:'white',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12,fontWeight:700}}>✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
+                  <button onClick={addRow} style={{background:'#c0392b',color:'white',border:'none',borderRadius:6,padding:'8px 18px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>+ Add Match</button>
+                  {mlSaving&&<span style={{fontSize:12,color:'var(--ink-soft)'}}>⏳ Saving…</span>}
+                  {!mlSaving&&manualLive.length>0&&<span style={{fontSize:12,color:'var(--forest)'}}>✓ Saved to Firestore</span>}
+                  {manualLive.length>0&&(
+                    <button onClick={()=>{ if(window.confirm('Clear all live overrides?')) saveManualLive([]); }} style={{marginLeft:'auto',background:'transparent',color:'var(--ink-soft)',border:'1px solid var(--line)',borderRadius:6,padding:'6px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>🗑 Clear All</button>
+                  )}
+                </div>
+                <div style={{marginTop:12,padding:'8px 12px',background:'rgba(214,137,42,.08)',borderRadius:6,border:'1px solid rgba(214,137,42,.3)',fontSize:12,color:'var(--ink)'}}>
+                  <strong>💡 Tip:</strong> Set status to <code>FT</code> once the match ends so the fireworks and score freeze immediately. Remove the row once the API catches up and you've confirmed it's correct.
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         {section==='users'&&(
           <div style={{marginTop:16}}>
             {/* Add user */}
@@ -2743,12 +3118,12 @@
             </div>
             {/* User list */}
             <div className="card" style={{overflow:'hidden'}}>
-              <div style={{padding:'10px 16px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 100px',gap:8,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em'}}>
+              <div style={{padding:'10px 16px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 170px',gap:8,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em'}}>
                 <span>Name</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Group</span><span style={{textAlign:'right'}}>KO</span><span>Reset PIN</span><span>Rename</span><span>Actions</span>
               </div>
               {scores.length===0&&<div style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic'}}>No participants yet.</div>}
               {scores.map((s,i)=>(
-                <div key={s.name} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 100px',gap:8,alignItems:'center',background:i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
+                <div key={s.name} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 170px',gap:8,alignItems:'center',background:i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <span style={{fontSize:14}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':'👤'}</span>
                     <span style={{fontWeight:600,fontSize:13}}>{s.name}</span>
@@ -2773,6 +3148,7 @@
                     )}
                   </div>
                   <div style={{display:'flex',gap:6}}>
+                    <button onClick={()=>handleResetPredictions(s.name)} title="Clear all predictions — score resets to 0" style={{background:'#e67e22',color:'white',border:'none',borderRadius:3,padding:'5px 8px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>🔄 Reset Picks</button>
                     <button onClick={()=>handleDeleteUser(s.name)} style={{background:'var(--burgundy)',color:'white',border:'none',borderRadius:3,padding:'5px 10px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>🗑 Delete</button>
                   </div>
                 </div>
@@ -3025,14 +3401,18 @@
               {upcoming.length>0&&<span style={{width:1,height:16,background:'rgba(255,255,255,.2)',flexShrink:0}}/>}
             </>
           )}
-          {upcoming.length>0&&(
-            <>
-              <span style={{fontSize:9,fontWeight:700,color:'#f0932b',letterSpacing:1,flexShrink:0}}>📅 TODAY</span>
-              {upcoming.map((m,i)=>{
+          {upcoming.length>0&&(()=>{
+              const todayLocal=new Date().toLocaleDateString('sv');
+              const tomorrowLocal=new Date(Date.now()+86400000).toLocaleDateString('sv');
+              const kickoffOf=m=>m.kickoff??m.datetime??m.matchDate??m.date??m.time;
+              const toLocalDate=v=>v?new Date(v).toLocaleDateString('sv'):'';
+              const todayGames=upcoming.filter(m=>toLocalDate(kickoffOf(m))===todayLocal);
+              const tomorrowGames=upcoming.filter(m=>toLocalDate(kickoffOf(m))===tomorrowLocal);
+              const laterGames=upcoming.filter(m=>{const d=toLocalDate(kickoffOf(m));return d!==todayLocal&&d!==tomorrowLocal;});
+              const matchCard=(m,i)=>{
                 const h=tn(m.home||m.homeTeam||m.home_team), a=tn(m.away||m.awayTeam||m.away_team);
-                const dt=String(m.kickoff??m.datetime??m.matchDate??m.date??m.time??'').slice(11,16)||'TBD';
-                const dtDate=String(m.kickoff??m.datetime??m.matchDate??m.date??m.time??'').slice(0,10);
-                const {time:localTime,local:isLocal}=formatMatchTime(m.kickoff??m.datetime??m.matchDate??m.date??m.time);
+                const dt=String(kickoffOf(m)??'').slice(11,16)||'TBD';
+                const {time:localTime,local:isLocal}=formatMatchTime(kickoffOf(m));
                 const displayTime=isLocal?localTime:dt;
                 const teamBtn=(name)=>(
                   <span onClick={()=>onTeamClick&&onTeamClick(name)} style={{fontWeight:600,cursor:onTeamClick?'pointer':'default',borderBottom:'1px dotted rgba(255,255,255,.35)',paddingBottom:1}} title={onTeamClick?`Go to ${name}'s group`:''}>{teamShort(name)}</span>
@@ -3048,9 +3428,33 @@
                     {isLocal&&<span style={{fontSize:8,color:'rgba(255,255,255,.4)',marginLeft:1}} title="Local time">local</span>}
                   </span>
                 );
-              })}
-            </>
-          )}
+              };
+              const Divider=()=><span style={{width:1,height:16,background:'rgba(255,255,255,.2)',flexShrink:0,margin:'0 4px'}}/>;
+              return(
+                <>
+                  {todayGames.length>0&&(
+                    <>
+                      <span style={{fontSize:9,fontWeight:700,color:'#f0932b',letterSpacing:1,flexShrink:0}}>📅 TODAY</span>
+                      {todayGames.map(matchCard)}
+                    </>
+                  )}
+                  {tomorrowGames.length>0&&(
+                    <>
+                      {todayGames.length>0&&<Divider/>}
+                      <span style={{fontSize:9,fontWeight:700,color:'#3498db',letterSpacing:1,flexShrink:0}}>📅 TOMORROW</span>
+                      {tomorrowGames.map(matchCard)}
+                    </>
+                  )}
+                  {laterGames.length>0&&(
+                    <>
+                      {(todayGames.length>0||tomorrowGames.length>0)&&<Divider/>}
+                      <span style={{fontSize:9,fontWeight:700,color:'#95a5a6',letterSpacing:1,flexShrink:0}}>📅 UPCOMING</span>
+                      {laterGames.map(matchCard)}
+                    </>
+                  )}
+                </>
+              );
+            })()}
         </div>
       </div>
     );
@@ -3288,20 +3692,47 @@
     const[goalNotif,setGoalNotif]=useState(null);
     const prevLiveScoresRef=useRef(new Map());
     const[liveMatches,setLiveMatches]=useState([]); // live + today's upcoming matches
+    const[manualLiveRows,setManualLiveRows]=useState([]); // admin manual override rows
     const[liveLoading,setLiveLoading]=useState(false);
     const[jumpToGroup,setJumpToGroup]=useState(null); // group letter to jump to in PredictionsView
     // Tick every 30 s so lockedMatchIds recomputes near kickoff even if liveMatches hasn't changed
     const[nowMs,setNowMs]=useState(()=>Date.now());
     useEffect(()=>{ const t=setInterval(()=>setNowMs(Date.now()),30000); return()=>clearInterval(t); },[]);
+
+    // ── MANUAL LIVE OVERRIDE: read from Firestore every 30 s ─────────
+    useEffect(()=>{
+      const load=()=>storage.getShared('manual-live').then(d=>{ if(d&&Array.isArray(d.rows)) setManualLiveRows(d.rows); }).catch(()=>{});
+      load();
+      const t=setInterval(load,30000);
+      return()=>clearInterval(t);
+    },[]);
+
+    // Merge manual overrides into liveMatches with priority over API data
+    const mergedLiveMatches=useMemo(()=>{
+      if(!manualLiveRows.length) return liveMatches;
+      // Convert manual rows into match-shaped objects
+      const overrides=manualLiveRows.filter(r=>r.home&&r.away).map(r=>({
+        home:r.home, away:r.away,
+        homeScore:r.hs!==''?r.hs:undefined, awayScore:r.as!==''?r.as:undefined,
+        minute:r.minute, status:r.status,
+        _manual:true,
+      }));
+      if(!liveMatches.length) return overrides;
+      // Replace any matching API entry with the manual one; append new ones
+      const tn=v=>{ if(!v)return''; if(typeof v==='string')return normTeam(v)||v; if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;} return''; };
+      const manualKeys=new Set(overrides.map(o=>normTeam(o.home)+'|'+normTeam(o.away)));
+      const filtered=liveMatches.filter(m=>{ const h=tn(m.home||m.homeTeam||m.home_team||m.team_home); const a=tn(m.away||m.awayTeam||m.away_team||m.team_away); return !manualKeys.has(h+'|'+a)&&!manualKeys.has(a+'|'+h); });
+      return [...overrides,...filtered];
+    },[liveMatches,manualLiveRows]);
     const[toasts,setToasts]=useState([]); // unified notification stack
     const toastIdRef=useRef(0);
 
     // ── GOAL DETECTION: fires fireworks when live score changes ────────
     useEffect(()=>{
-      if(!liveMatches.length) return;
+      if(!mergedLiveMatches.length) return;
       const prev=prevLiveScoresRef.current;
       const tnG=v=>{if(!v)return'';if(typeof v==='string')return normTeam(v)||v;if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;}return'';};
-      liveMatches.forEach(m=>{
+      mergedLiveMatches.forEach(m=>{
         const h=tnG(m.home||m.homeTeam||m.home_team||m.team_home);
         const a=tnG(m.away||m.awayTeam||m.away_team||m.team_away);
         const hs=parseInt(m.homeScore??m.home_score??m.score?.home??-1);
@@ -3315,7 +3746,7 @@
         }
         prev.set(key,{hs,as_});
       });
-    },[liveMatches]);
+    },[mergedLiveMatches]);
     const addToast=useCallback((type,data)=>{
       const id=++toastIdRef.current;
       setToasts(prev=>[...prev.slice(-2),{id,type,...data}]); // max 3
@@ -3437,90 +3868,73 @@
 
     // ── END AUTO-POLL ─────────────────────────────────────────────────
 
-    // ── FETCH LIVE MATCHES ON MOUNT ───────────────────────────────────
+    // ── FETCH LIVE MATCHES ON MOUNT (ESPN primary, cache fallback) ───
     useEffect(()=>{
-      const savedKey=(() => { try{ return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||''; }catch{ return window.__RAPID_KEY||''; } })();
-      const hdrs = savedKey ? {'X-RapidAPI-Key':savedKey,'X-RapidAPI-Host':API_HOST} : null;
-      const normDt=s=>{if(!s)return null;let v=String(s).trim();if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v))v=v.replace(' ','T');if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v))v+='+05:00';return v;};
-      const tryFetch = async (ep, params='') => {
-        try {
-          const url = FUNC_BASE ? `${FUNC_BASE}/proxy?ep=${ep}${params?'&'+params:''}` : `https://${API_HOST}/${ep}${params?'?'+params:''}`;
-          const r = await fetch(url, hdrs ? {headers:hdrs} : {});
-          const d = await r.json();
-          const flatten = obj => {
-            if(!obj) return [];
-            if(Array.isArray(obj)) return obj;
-            const candidates=[obj?.data?.matches,obj?.data?.results,obj?.data?.live,obj?.data?.upcoming,obj?.data,obj?.matches,obj?.live,obj?.upcoming,obj?.results];
-            for(const c of candidates) { if(Array.isArray(c)&&c.length>0) return c; }
-            return [];
-          };
-          return flatten(d).map(m=>({...m,_kickoffNorm:normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null)}));
-        } catch{ return []; }
+      const ESPN_SB=`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard`;
+      const espnToMatch=comp=>{
+        const hC=comp.competitors?.find(c=>c.homeAway==='home');
+        const aC=comp.competitors?.find(c=>c.homeAway==='away');
+        if(!hC||!aC) return null;
+        const st=comp.status?.type||{};
+        const min=parseInt(comp.status?.displayClock)||0;
+        let status='scheduled';
+        if(st.name==='STATUS_IN_PROGRESS') status=min>45?'2H':'1H';
+        else if(st.name==='STATUS_HALFTIME') status='HT';
+        else if(st.name==='STATUS_FULL_TIME'||st.completed) status='FT';
+        return{home:normTeam(hC.team?.displayName||''),away:normTeam(aC.team?.displayName||''),homeScore:hC.score??'',awayScore:aC.score??'',minute:min||'',status,kickoff:comp.date||null};
       };
       const loadFromCache=async()=>{
-        // Fallback: load from Firestore live-cache when no API key available
         try{
-          const [cl,cu]=await Promise.all([
-            storage.getShared('live-cache-live').catch(()=>null),
-            storage.getShared('live-cache-upcoming').catch(()=>null),
-          ]);
-          const flat=obj=>{ if(!obj||!obj.data)return[]; const d=obj.data; if(Array.isArray(d))return d; const cands=[d?.data?.matches,d?.data?.live,d?.data?.upcoming,d?.data,d?.matches,d?.live,d?.upcoming]; for(const c of cands){if(Array.isArray(c)&&c.length>0)return c;} return[]; };
-          const all=[...flat(cl),...flat(cu)].map(m=>({...m,_kickoffNorm:normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null)}));
+          const [cl,cu]=await Promise.all([storage.getShared('live-cache-live').catch(()=>null),storage.getShared('live-cache-upcoming').catch(()=>null)]);
+          const flat=obj=>{if(!obj||!obj.data)return[];const d=obj.data;if(Array.isArray(d))return d;const cands=[d?.data?.matches,d?.data?.live,d?.data?.upcoming,d?.data,d?.matches,d?.live,d?.upcoming];for(const c of cands){if(Array.isArray(c)&&c.length>0)return c;}return[];};
+          const all=[...flat(cl),...flat(cu)];
           if(all.length>0) setLiveMatches(all);
         }catch{}
       };
       setLiveLoading(true);
-      if(!savedKey && !FUNC_BASE){
-        loadFromCache().finally(()=>setLiveLoading(false));
-        return;
-      }
       (async()=>{
-        const [live, upToday, upTomorrow] = await Promise.all([
-          tryFetch('live'),
-          tryFetch('upcoming','day=today'),
-          tryFetch('upcoming','day=tomorrow'),
-        ]);
-        const all = [...live, ...upToday, ...upTomorrow];
-        if(all.length>0) setLiveMatches(all);
-        else await loadFromCache(); // API returned nothing — use cache
+        try{
+          const todayStr=new Date().toISOString().slice(0,10).replace(/-/g,'');
+          const tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10).replace(/-/g,'');
+          const [r1,r2]=await Promise.all([fetch(`${ESPN_SB}?dates=${todayStr}`).then(r=>r.json()),fetch(`${ESPN_SB}?dates=${tomorrowStr}`).then(r=>r.json())]);
+          const all=[...(r1.events||[]),...(r2.events||[])].map(ev=>espnToMatch(ev.competitions?.[0])).filter(Boolean);
+          if(all.length>0){setLiveMatches(all);setLiveLoading(false);return;}
+        }catch{}
+        await loadFromCache();
         setLiveLoading(false);
       })();
     },[]);
 
-    // ── BANNER AUTO-REFRESH every 5 minutes ──────────────────────────
+    // ── BANNER AUTO-REFRESH every 5 minutes (ESPN primary, cache fallback) ──
     useEffect(()=>{
-      const savedKey=()=>{ try{ return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||''; }catch{ return window.__RAPID_KEY||''; } };
-      const normDt=s=>{if(!s)return null;let v=String(s).trim();if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v))v=v.replace(' ','T');if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v))v+='+05:00';return v;};
+      const ESPN_SB=`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard`;
+      const espnToMatch=comp=>{
+        const hC=comp.competitors?.find(c=>c.homeAway==='home');
+        const aC=comp.competitors?.find(c=>c.homeAway==='away');
+        if(!hC||!aC) return null;
+        const st=comp.status?.type||{};
+        const min=parseInt(comp.status?.displayClock)||0;
+        let status='scheduled';
+        if(st.name==='STATUS_IN_PROGRESS') status=min>45?'2H':'1H';
+        else if(st.name==='STATUS_HALFTIME') status='HT';
+        else if(st.name==='STATUS_FULL_TIME'||st.completed) status='FT';
+        return{home:normTeam(hC.team?.displayName||''),away:normTeam(aC.team?.displayName||''),homeScore:hC.score??'',awayScore:aC.score??'',minute:min||'',status,kickoff:comp.date||null};
+      };
       const refreshBanner=async()=>{
-        const key=savedKey();
-        const hdrs=key?{'X-RapidAPI-Key':key,'X-RapidAPI-Host':API_HOST}:null;
-        const flatG=obj=>{ if(!obj)return[]; if(Array.isArray(obj))return obj; const r=[]; Object.entries(obj).forEach(([k,v])=>{if(Array.isArray(v))v.forEach(m=>r.push({...m,_groupKey:k}));}); return r; };
-        const addNorm=arr=>arr.map(m=>({...m,_kickoffNorm:normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null)}));
-        if(!key&&!FUNC_BASE){
-          // No API key — silently refresh from Firestore cache
-          try{
-            const [cl,cu]=await Promise.all([
-              storage.getShared('live-cache-live').catch(()=>null),
-              storage.getShared('live-cache-upcoming').catch(()=>null),
-            ]);
-            const flat=obj=>{ if(!obj||!obj.data)return[]; const d=obj.data; if(Array.isArray(d))return d; const cands=[d?.data?.matches,d?.data?.live,d?.data?.upcoming,d?.data,d?.matches,d?.live,d?.upcoming]; for(const c of cands){if(Array.isArray(c)&&c.length>0)return c;} return[]; };
-            const combined=addNorm([...flat(cl),...flat(cu)]);
-            if(combined.length>0) setLiveMatches(combined);
-          }catch(e){}
-          return;
-        }
         try{
-          const [lr,ur,ur2]=await Promise.all([
-            fetch(FUNC_BASE?`${FUNC_BASE}/proxy?ep=live`:`https://${API_HOST}/live`,hdrs?{headers:hdrs}:{}).then(r=>r.json()).catch(()=>({})),
-            fetch(FUNC_BASE?`${FUNC_BASE}/proxy?ep=upcoming&day=today`:`https://${API_HOST}/upcoming?day=today`,hdrs?{headers:hdrs}:{}).then(r=>r.json()).catch(()=>({})),
-            fetch(FUNC_BASE?`${FUNC_BASE}/proxy?ep=upcoming&day=tomorrow`:`https://${API_HOST}/upcoming?day=tomorrow`,hdrs?{headers:hdrs}:{}).then(r=>r.json()).catch(()=>({})),
-          ]);
-          const liveArr=flatG(lr?.data||lr?.live||lr)||[];
-          const upArr=flatG(ur?.data?.upcoming||ur?.data||ur?.upcoming||ur)||[];
-          const up2Arr=flatG(ur2?.data?.upcoming||ur2?.data||ur2?.upcoming||ur2)||[];
-          const combined=addNorm([...liveArr,...upArr,...up2Arr]);
+          const todayStr=new Date().toISOString().slice(0,10).replace(/-/g,'');
+          const tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10).replace(/-/g,'');
+          const [r1,r2]=await Promise.all([fetch(`${ESPN_SB}?dates=${todayStr}`).then(r=>r.json()).catch(()=>({})),fetch(`${ESPN_SB}?dates=${tomorrowStr}`).then(r=>r.json()).catch(()=>({}))]);
+          const all=[...(r1.events||[]),...(r2.events||[])].map(ev=>espnToMatch(ev.competitions?.[0])).filter(Boolean);
+          if(all.length>0){setLiveMatches(all);return;}
+        }catch{}
+        // ESPN failed — fall back to Firestore cache
+        try{
+          const [cl,cu]=await Promise.all([storage.getShared('live-cache-live').catch(()=>null),storage.getShared('live-cache-upcoming').catch(()=>null)]);
+          const flat=obj=>{if(!obj||!obj.data)return[];const d=obj.data;if(Array.isArray(d))return d;const cands=[d?.data?.matches,d?.data?.live,d?.data?.upcoming,d?.data,d?.matches,d?.live,d?.upcoming];for(const c of cands){if(Array.isArray(c)&&c.length>0)return c;}return[];};
+          const combined=[...flat(cl),...flat(cu)];
           if(combined.length>0) setLiveMatches(combined);
-        }catch(e){}
+        }catch{}
       };
       const t=setInterval(refreshBanner,300000); // every 5 minutes
       return()=>clearInterval(t);
@@ -3529,15 +3943,14 @@
     // Set of GROUP_MATCHES IDs that are live or within 5 min of kickoff
     const lockedMatchIds = useMemo(()=>{
       const ids = new Set();
-      const LIVE_STATUS=/^(1h|2h|ht|et|pen|live|in.?progress|playing)$/i;
+      const LIVE_STATUS=/^(1h|2h|ht|et|pen|live|in.?progress|playing|ft)$/i;
       const tn = v => { if(!v)return''; if(typeof v==='string')return normTeam(v)||v; if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;} return''; };
       const normDt=s=>{if(!s)return null;let v=String(s).trim();if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v))v=v.replace(' ','T');if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v))v+='+05:00';return v;};
-      liveMatches.forEach(m=>{
+      mergedLiveMatches.forEach(m=>{
         const status=(m.status||m.matchStatus||m.state||'').toLowerCase().trim();
         const minute=m.minute??m.elapsed??m.time??null;
         const minuteNum=minute!=null&&minute!==''?Number(minute):NaN;
         const isLive = LIVE_STATUS.test(status) || (!isNaN(minuteNum) && minuteNum > 0);
-        // Use pre-normalised field if available, else normalise now
         const rawDt = m._kickoffNorm ?? normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null);
         let kicksOffSoon = false;
         if(rawDt){
@@ -3554,14 +3967,14 @@
         if(gm) ids.add(gm.id);
       });
       return ids;
-    },[liveMatches, nowMs]); // nowMs re-triggers every 30 s near kickoff
+    },[mergedLiveMatches, nowMs]); // nowMs re-triggers every 30 s near kickoff
 
     // Map: GROUP_MATCHES ID → kickoff timestamp (ms) — used for countdown timer
     const kickoffTimes = useMemo(()=>{
       const map = new Map();
       const tn = v => { if(!v)return''; if(typeof v==='string')return normTeam(v)||v; if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;} return''; };
       const normDt=s=>{if(!s)return null;let v=String(s).trim();if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(v))v=v.replace(' ','T');if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v))v+='+05:00';return v;};
-      liveMatches.forEach(m=>{
+      mergedLiveMatches.forEach(m=>{
         const rawDt=m._kickoffNorm??normDt(m.kickoff??m.datetime??m.matchDate??m.date??m.scheduled??null);
         if(!rawDt) return;
         const kickoff=new Date(rawDt).getTime();
@@ -3572,7 +3985,7 @@
         if(gm) map.set(gm.id,kickoff);
       });
       return map;
-    },[liveMatches]);
+    },[mergedLiveMatches]);
 
     // Show winner popup on login (track previous user to detect login event)
     const prevUserRef = React.useRef(null);
@@ -3763,7 +4176,7 @@
       <div className="app">
         <style>{CSS}</style>
         <Header user={currentUser} onLogout={handleLogout} view={view} setView={v=>{if(v==='admin'&&!adminAuthed&&v!==view){handleAdminLogin(prompt('Admin password:'));return;}setView(v);}} saveStatus={saveStatus} locked={locked}/>
-        <LiveMatchBanner matches={liveMatches} loading={liveLoading} onTeamClick={handleBannerTeamClick}/>
+        <LiveMatchBanner matches={mergedLiveMatches} loading={liveLoading} onTeamClick={handleBannerTeamClick}/>
         {locked&&view!=='admin'&&(
           <div style={{background:'var(--burgundy)',color:'white',textAlign:'center',padding:'7px 16px',fontSize:12,fontWeight:600}}>
             🔒 COMPETITION LOCKED — predictions are now closed. Good luck!
