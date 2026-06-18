@@ -544,36 +544,16 @@
       if(breakdown.correctDraw) detail.correctDraws++;
       if(breakdown.underdogBonus) detail.underdogWins++;
     });
-    const{bracket:userBracket}=buildBracket(userPreds.group||{},userPreds.ko||{});
+    // KO scoring: bracket slots come from actual results — all users share the same bracket
     const{bracket:actualDerived}=buildActualBracket(actualGroupResults,actualKoResults);
-    // bracket scoring
-    for(let mId=73;mId<=104;mId++){
-      const round=mId<=88?'R32':ROUND_FOR(mId); if(!round||!SCORING.bracketTeam[round]) continue;
-      const um=mId<=88?userBracket[mId]:userBracket[mId]; if(!um) continue;
-      const v=SCORING.bracketTeam[round];
-      const aR=actualKoResults[mId];
-      if(!aR||aR.h==null||aR.h==='') continue;
-      const aHome=aR.homeTeam||actualDerived[mId]?.home,aAway=aR.awayTeam||actualDerived[mId]?.away;
-      [[um.home,'home'],[um.away,'away']].forEach(([team,side])=>{
-        if(!team) return;
-        const inRound=aHome===team||aAway===team;
-        if(!inRound) return;
-        const exactSide=(side==='home'&&aHome===team)||(side==='away'&&aAway===team);
-        const pts=exactSide?v:v*SCORING.halfMultiplier;
-        bracketPoints+=pts;koRoundPts[round]=(koRoundPts[round]||0)+pts;
-      });
-    }
-    // KO match score predictions
     for(let mId=73;mId<=104;mId++){
       const actual=actualKoResults[mId];
       if(!actual||actual.h===''||actual.a===''||actual.h==null) continue;
-      const um=userBracket[mId]; if(!um||!um.home||!um.away) continue;
-      const pred={h:um.hScore,a:um.aScore};
+      const am=actualDerived[mId]; if(!am||!am.home||!am.away) continue;
+      const pred=userPreds.ko?.[mId]||{};
       if(pred.h===''||pred.h==null) continue;
-      const aHome=actual.homeTeam||actualDerived[mId]?.home,aAway=actual.awayTeam||actualDerived[mId]?.away;
-      const swap=um.home===aAway&&um.away===aHome;
-      const eH=swap?parseInt(actual.a):parseInt(actual.h),eA=swap?parseInt(actual.h):parseInt(actual.a);
       const pH=parseInt(pred.h),pA=parseInt(pred.a);
+      const eH=parseInt(actual.h),eA=parseInt(actual.a);
       if(isNaN(pH)||isNaN(pA)||isNaN(eH)||isNaN(eA)) continue;
       let pts=0;
       const pRes=pH>pA?'H':pH<pA?'A':'D',aRes=eH>eA?'H':eH<eA?'A':'D';
@@ -1103,7 +1083,8 @@
 
   const BracketView = ({predictions,onSave,results,locked}) => {
     const[mode,setMode]=useState('list');
-    const{bracket,completeGroups,allGroupsComplete}=useMemo(()=>buildBracket(predictions.group||{},predictions.ko||{}),[predictions]);
+    // Bracket slots are always driven by actual results — not individual user predictions
+    const{bracket,completeGroups,allComplete:allGroupsComplete}=useMemo(()=>buildActualBracket(results.group||{},results.ko||{}),[results]);
     const setKoScore=(mId,side,val)=>{
       if(locked) return;
       if(val!==''&&(isNaN(parseInt(val))||parseInt(val)<0||parseInt(val)>20)) return;
@@ -1133,7 +1114,7 @@
     ];
     return(
       <div>
-        <SectionHeader kicker="Stage 2 of 2" title="Knockout Bracket" subtitle="Auto-populated from your group predictions."/>
+        <SectionHeader kicker="Stage 2 of 2" title="Knockout Bracket" subtitle="Bracket populates from actual match results — predict scores as teams are confirmed."/>
         <div style={{marginTop:14,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           <div style={{display:'inline-flex',background:'var(--cream2)',borderRadius:6,padding:2,border:'1px solid var(--line)'}}>
             {[['list','List'],['bracket','Visual']].map(([k,l])=>(
@@ -1144,7 +1125,7 @@
         {completeGroups.size<12&&(
           <div className="card" style={{marginTop:14,padding:12,background:'rgba(214,137,42,.07)',borderColor:'var(--amber)',display:'flex',gap:8,alignItems:'flex-start'}}>
             <AlertCirc size={16} style={{color:'var(--amber)',flexShrink:0,marginTop:1}}/>
-            <div style={{fontSize:13}}><strong>{completeGroups.size}/12 groups predicted.</strong> R32 teams appear once each group is fully scored.</div>
+            <div style={{fontSize:13}}><strong>{completeGroups.size}/12 groups completed.</strong> R32 teams will appear as each group's real matches finish.</div>
           </div>
         )}
         <ProgressBar done={koProgress.done} total={koProgress.total} label="knockout predictions complete"/>
@@ -1343,7 +1324,7 @@
       <div className="card" style={{padding:18,marginTop:14,background:'linear-gradient(135deg,rgba(159,27,27,.04) 0%,var(--paper) 60%)',borderColor:'var(--burgundy)'}}>
         <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>📋 Quick Summary</h3>
         <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:0}}>
-          Predict the score of every group stage match, then pick your knockout bracket. Points are awarded for correct goals, results, and exact scores. A <strong>Joker multiplier</strong> can double or triple your points on chosen matches. Bonus picks (Winner, Runner-Up, 3rd Place, Golden Boot) are worth 10 pts each. The player with the most points at the end wins! 🏆
+          Predict the score of every group stage match, then predict the score of each knockout match as the real bracket fills in. Points are awarded for correct goals, results, and exact scores. A <strong>Joker multiplier</strong> can double or triple your points on chosen group stage matches. Bonus picks (Winner, Runner-Up, 3rd Place, Golden Boot) are worth 10 pts each. The player with the most points at the end wins! 🏆
         </p>
       </div>
 
@@ -1372,7 +1353,7 @@
       <div className="card" style={{padding:18,marginTop:14,borderColor:'var(--amber)',background:'linear-gradient(135deg,rgba(214,137,42,.06) 0%,var(--paper) 60%)'}}>
         <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 6px'}}>🃏 Joker Picks — How They Work</h3>
         <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 14px',lineHeight:1.7}}>
-          Before the tournament starts, pick one <strong>Joker Team</strong> and one <strong>Joker Group</strong>. These multiply your points for group stage matches only — no effect on knockouts.
+          Before the tournament starts, pick one <strong>Joker Team</strong> and one <strong>Joker Group</strong>. These multiply your points for group stage matches only — no effect on knockouts. <strong>Changes are time-stamped</strong>: if you change your joker after matchday 1 has been played, your original joker is preserved for those already-scored matches.
         </p>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:10,marginBottom:16}}>
           {[
@@ -1410,8 +1391,23 @@
       <div className="card" style={{padding:18,marginTop:14}}>
         <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>🏟 Bracket Logic</h3>
         <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:'0 0 8px'}}>The 2026 World Cup has <strong>48 teams</strong>. Top 2 from each of 12 groups plus the 8 best 3rd-placed teams advance to the <strong>Round of 32</strong>.</p>
-        <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:'0 0 8px'}}>Your knockout bracket <strong>auto-populates</strong> from your group stage score predictions — you don't pick teams for the bracket manually. Instead, you predict the <em>scores</em> in each KO match once the teams are known.</p>
-        <p style={{fontSize:13,color:'var(--ink-soft)',lineHeight:1.7,margin:0}}>Bracket placement bonuses reward you for correctly predicting which teams reach each round, even if you have them on the wrong side of the bracket (half points).</p>
+        <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:'0 0 8px'}}>The knockout bracket <strong>auto-populates from actual match results</strong> — everyone sees the same bracket. As real-world teams are confirmed in each slot, you predict the <em>score</em> of that match. You do <strong>not</strong> pick which teams reach each round; the bracket slots fill automatically.</p>
+        <p style={{fontSize:13,color:'var(--ink-soft)',lineHeight:1.7,margin:'0 0 8px'}}>KO match scoring uses the same rules as group matches: +1 per correct team goals, +1 correct result, +2 correct draw, +1 exact score.</p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:8,marginTop:4}}>
+          {[
+            {rnd:'Round of 32',teams:'48 → 32'},
+            {rnd:'Round of 16',teams:'32 → 16'},
+            {rnd:'Quarter-Finals',teams:'16 → 8'},
+            {rnd:'Semi-Finals',teams:'8 → 4'},
+            {rnd:'3rd Place Play-off',teams:'2 losers'},
+            {rnd:'Final',teams:'Top 2'},
+          ].map(({rnd,teams})=>(
+            <div key={rnd} style={{padding:'8px 12px',borderRadius:6,background:'var(--cream2)',border:'1px solid var(--line)',fontSize:12}}>
+              <div style={{fontWeight:700,color:'var(--ink)'}}>{rnd}</div>
+              <div style={{color:'var(--ink-soft)',marginTop:2}}>{teams}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Tiebreak */}
