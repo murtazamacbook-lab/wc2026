@@ -1003,15 +1003,23 @@
                   </div>
                 </div>
               )}
-              <div style={{marginTop:14,display:'flex',alignItems:'center',gap:12}}>
-                <button onClick={submitJokerForToday} disabled={!joker.team&&!joker.group} style={{padding:'9px 22px',borderRadius:6,border:'none',background:(joker.team||joker.group)?'var(--burgundy)':'var(--line)',color:(joker.team||joker.group)?'white':'var(--ink-soft)',fontWeight:700,fontSize:13,cursor:(joker.team||joker.group)?'pointer':'not-allowed',fontFamily:'inherit'}}>
-                  🔒 Submit Joker for Today
-                </button>
-                {jokerLockedDate&&jokerLockedDate!==todayDateStr&&(
-                  <span style={{fontSize:11,color:'var(--ink-soft)'}}>Last locked: {jokerLockedDate}</span>
-                )}
-                {!joker.team&&!joker.group&&(
-                  <span style={{fontSize:11,color:'var(--ink-soft)',fontStyle:'italic'}}>Select a team and/or group first</span>
+              <div style={{marginTop:14,display:'flex',flexDirection:'column',gap:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:12}}>
+                  <button onClick={submitJokerForToday} disabled={!joker.team&&!joker.group} style={{padding:'9px 22px',borderRadius:6,border:'none',background:(joker.team||joker.group)?'var(--burgundy)':'var(--line)',color:(joker.team||joker.group)?'white':'var(--ink-soft)',fontWeight:700,fontSize:13,cursor:(joker.team||joker.group)?'pointer':'not-allowed',fontFamily:'inherit'}}>
+                    🔒 Submit Joker for Today
+                  </button>
+                  {jokerLockedDate&&jokerLockedDate!==todayDateStr&&(
+                    <span style={{fontSize:11,color:'var(--ink-soft)'}}>Last locked: {jokerLockedDate}</span>
+                  )}
+                  {!joker.team&&!joker.group&&(
+                    <span style={{fontSize:11,color:'var(--ink-soft)',fontStyle:'italic'}}>Select a team and/or group first</span>
+                  )}
+                </div>
+                {(joker.team||joker.group)&&!jokerLockedToday&&(
+                  <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 12px',background:'rgba(214,137,42,.12)',border:'1px solid rgba(214,137,42,.4)',borderRadius:5}}>
+                    <span style={{fontSize:13}}>⚠️</span>
+                    <span style={{fontSize:11,color:'var(--amber)',fontWeight:600}}>Your joker is not locked yet — click Submit before today's matches start or anyone could change it.</span>
+                  </div>
                 )}
               </div>
             </>
@@ -3882,8 +3890,9 @@
             count++;
           });
           if(count===0) return; // nothing new
-          // 3. Save + update state
+          // 3. Save + update state — only if newGR has valid data
           const newResults={...stored,group:newGR};
+          if(Object.keys(newGR).length===0){return;} // nothing to save
           await storage.setJSON('results',newResults,true);
           setResults(newResults);
           // Refresh allPredictions so leaderboard recalculates
@@ -4292,8 +4301,28 @@
   }
 
   // ── MOUNT ────────────────────────────────────────────────────────
+  class ErrorBoundary extends React.Component {
+    constructor(props){ super(props); this.state={crashed:false,error:null}; }
+    static getDerivedStateFromError(e){ return{crashed:true,error:e}; }
+    componentDidCatch(e,info){ console.error('App crashed:',e,info); }
+    render(){
+      if(!this.state.crashed) return this.props.children;
+      return(
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#FBF8F0',fontFamily:'sans-serif',padding:20}}>
+          <div style={{maxWidth:420,textAlign:'center'}}>
+            <div style={{fontSize:48,marginBottom:16}}>⚽</div>
+            <div style={{fontSize:22,fontWeight:700,marginBottom:8}}>Something went wrong</div>
+            <div style={{fontSize:14,color:'#6B635B',marginBottom:24,lineHeight:1.6}}>The app hit an unexpected error. Your predictions are safe — they're saved automatically. Just refresh the page to continue.</div>
+            <button onClick={()=>window.location.reload()} style={{padding:'10px 28px',background:'#9F1B1B',color:'white',border:'none',borderRadius:6,fontSize:14,fontWeight:700,cursor:'pointer'}}>🔄 Refresh Page</button>
+            {this.state.error&&<div style={{marginTop:16,fontSize:10,color:'#aaa',fontFamily:'monospace',wordBreak:'break-all'}}>{String(this.state.error)}</div>}
+          </div>
+        </div>
+      );
+    }
+  }
+
   const root = ReactDOM.createRoot(document.getElementById('root'));
-  root.render(<App />);
+  root.render(<ErrorBoundary><App /></ErrorBoundary>);
   </script>
 </body>
 </html>
