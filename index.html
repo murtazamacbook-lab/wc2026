@@ -1497,6 +1497,7 @@
     const[loadingPanel,setLoadingPanel]=useState(null);
     const[cacheInfo,setCacheInfo]=useState({});  // {panelKey:{updatedAt}}
     const[cacheLoading,setCacheLoading]=useState(null);
+    const[liveAutoTs,setLiveAutoTs]=useState(null); // last auto-refresh timestamp
 
     // ── Auto-load cached data from Firestore on mount ─────────────────────────
     useEffect(()=>{
@@ -1511,6 +1512,44 @@
           }
         }catch(e){}
       });
+    },[]);
+
+    // ── Auto-refresh Live panel every 60 seconds ──────────────────────────────
+    const adminRoleRef=useRef(adminRole);
+    adminRoleRef.current=adminRole;
+    const syncKeyRef=useRef(syncKey);
+    syncKeyRef.current=syncKey;
+    useEffect(()=>{
+      const refreshLive=async()=>{
+        const role=adminRoleRef.current;
+        const key=syncKeyRef.current;
+        try{
+          if((role==='superadmin'||role==='subadmin')&&(key.trim()||FUNC_BASE)){
+            // Admin: fetch fresh from API and save to cache
+            let r;
+            if(FUNC_BASE){
+              r=await fetch(`${FUNC_BASE}/proxy?ep=live`);
+            }else{
+              r=await fetch(`https://${API_HOST}/live`,{headers:{'X-RapidAPI-Key':key.trim(),'X-RapidAPI-Host':API_HOST}});
+            }
+            const d=await r.json();
+            setLiveData(prev=>({...prev,live:d}));
+            const cEntry={data:d,updatedAt:new Date().toISOString()};
+            await storage.setJSON('live-cache-live',cEntry,true);
+            setCacheInfo(prev=>({...prev,live:{updatedAt:cEntry.updatedAt}}));
+          }else{
+            // Non-admin: silently pull latest from Firestore cache
+            const cached=await storage.getShared('live-cache-live');
+            if(cached&&cached.data){
+              setLiveData(prev=>({...prev,live:cached.data}));
+              setCacheInfo(prev=>({...prev,live:{updatedAt:cached.updatedAt}}));
+            }
+          }
+          setLiveAutoTs(new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+        }catch(e){}
+      };
+      const t=setInterval(refreshLive,60000); // every 60 seconds
+      return()=>clearInterval(t);
     },[]);
 
     const loadFromCache=async(key)=>{
@@ -1705,6 +1744,10 @@
           return(
             <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#c0392b'}}>
               <PanelHdr bg="#c0392b" title="🔴 Live Matches" count={arr.length} panelKey="live"/>
+              <div style={{padding:'4px 12px',background:'rgba(192,57,43,.06)',borderBottom:'1px solid rgba(192,57,43,.15)',display:'flex',alignItems:'center',gap:6,fontSize:10,color:'#c0392b'}}>
+                <span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#c0392b',animation:'liveBlink 1.2s ease-in-out infinite'}}/>
+                <span>Auto-refreshing every 60 s{liveAutoTs?` — last updated ${liveAutoTs}`:''}</span>
+              </div>
               {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No live matches right now.</div>:(
                 <div style={{overflowX:'auto',maxHeight:360,overflowY:'auto'}} className="scrollbar">
                   <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
