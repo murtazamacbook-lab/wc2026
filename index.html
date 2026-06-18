@@ -621,6 +621,8 @@
   @keyframes popIn{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
   @keyframes liveBlink{0%,100%{opacity:1}50%{opacity:.3}}
   @keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+  @keyframes fwParticle{0%{transform:rotate(var(--a)) translateX(0);opacity:1}100%{transform:rotate(var(--a)) translateX(var(--d));opacity:0}}
+  @keyframes fwCard{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1);opacity:1}}
   .fadein{animation:fadein .25s ease}
   a{color:var(--burgundy);text-decoration:none}
   a:hover{text-decoration:underline}
@@ -3086,6 +3088,40 @@
     );
   }
 
+  // ── FIREWORKS OVERLAY ─────────────────────────────────────────────
+  function FireworksOverlay({notif,onClose}){
+    const[visible,setVisible]=React.useState(false);
+    React.useEffect(()=>{
+      if(!notif)return;
+      setVisible(true);
+      const t=setTimeout(()=>{setVisible(false);setTimeout(onClose,500);},3500);
+      return()=>clearTimeout(t);
+    },[notif]);
+    if(!notif)return null;
+    const FW_COLORS=['#e74c3c','#f39c12','#2ecc71','#3498db','#9b59b6','#f1c40f','#e91e63','#1abc9c','#e67e22','#00bcd4'];
+    const particles=React.useMemo(()=>Array.from({length:60},(_,i)=>({
+      angle:(i/60)*360,
+      dist:100+(i%3)*50,
+      color:FW_COLORS[i%FW_COLORS.length],
+      size:4+(i%4)*2,
+      delay:((i%10)*0.05).toFixed(2),
+      dur:(0.8+(i%3)*0.2).toFixed(1),
+    })),[notif]);
+    return(
+      <div style={{position:'fixed',inset:0,zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',opacity:visible?1:0,transition:'opacity .5s ease'}}>
+        {particles.map((p,i)=>(
+          <div key={i} style={{'--a':p.angle+'deg','--d':p.dist+'px',position:'absolute',width:p.size,height:p.size,borderRadius:'50%',background:p.color,animation:visible?`fwParticle ${p.dur}s ease-out ${p.delay}s both`:'none'}}/>
+        ))}
+        <div style={{background:'linear-gradient(135deg,#1a1a2e,#16213e)',border:'2px solid #f9ca24',borderRadius:20,padding:'24px 40px',textAlign:'center',boxShadow:'0 0 80px rgba(249,202,36,.5)',animation:visible?'fwCard .4s cubic-bezier(.34,1.56,.64,1) both':'none',position:'relative',zIndex:10001}}>
+          <div style={{fontSize:52,lineHeight:1,filter:'drop-shadow(0 0 12px rgba(249,202,36,.8))'}}>&#x26BD;</div>
+          <div style={{fontSize:13,fontWeight:900,letterSpacing:4,textTransform:'uppercase',color:'#f9ca24',marginTop:8}}>GOAL!</div>
+          <div style={{fontSize:26,fontWeight:900,color:'white',marginTop:4}}>{notif.flag} {notif.team}</div>
+          <div style={{fontSize:22,fontWeight:700,color:'#f9ca24',fontFamily:'monospace',marginTop:6}}>{notif.score}</div>
+        </div>
+      </div>
+    );
+  }
+
   // ── WINNER TOAST (right-side slide-in, auto-fades) ───────────────
   function WinnerPopup({notif, onClose}) {
     const [visible, setVisible] = React.useState(false);
@@ -3173,11 +3209,34 @@
     const[adminPws,setAdminPws]=useState({super:DEFAULT_SUPER_PW,sub:DEFAULT_SUB_PW});
     const[winnerNotif,setWinnerNotif]=useState(null);
     const[balloonNotif,setBalloonNotif]=useState(null);
+    const[goalNotif,setGoalNotif]=useState(null);
+    const prevLiveScoresRef=useRef(new Map());
     const[liveMatches,setLiveMatches]=useState([]); // live + today's upcoming matches
     const[liveLoading,setLiveLoading]=useState(false);
     const[jumpToGroup,setJumpToGroup]=useState(null); // group letter to jump to in PredictionsView
     const[toasts,setToasts]=useState([]); // unified notification stack
     const toastIdRef=useRef(0);
+
+    // ── GOAL DETECTION: fires fireworks when live score changes ────────
+    useEffect(()=>{
+      if(!liveMatches.length) return;
+      const prev=prevLiveScoresRef.current;
+      const tnG=v=>{if(!v)return'';if(typeof v==='string')return normTeam(v)||v;if(typeof v==='object'){const x=v.name||v.common_name||v.short_name||v.display_name||v.team||'';return normTeam(x)||x;}return'';};
+      liveMatches.forEach(m=>{
+        const h=tnG(m.home||m.homeTeam||m.home_team||m.team_home);
+        const a=tnG(m.away||m.awayTeam||m.away_team||m.team_away);
+        const hs=parseInt(m.homeScore??m.home_score??m.score?.home??-1);
+        const as_=parseInt(m.awayScore??m.away_score??m.score?.away??-1);
+        if(isNaN(hs)||isNaN(as_)||hs<0||as_<0) return;
+        const key=h+'|'+a;
+        const old=prev.get(key);
+        if(old&&prev.size>0){
+          if(hs>old.hs) setGoalNotif({team:h,flag:TEAM_FLAGS[h]||'⚽',score:`${hs}–${as_}`});
+          else if(as_>old.as_) setGoalNotif({team:a,flag:TEAM_FLAGS[a]||'⚽',score:`${hs}–${as_}`});
+        }
+        prev.set(key,{hs,as_});
+      });
+    },[liveMatches]);
     const addToast=useCallback((type,data)=>{
       const id=++toastIdRef.current;
       setToasts(prev=>[...prev.slice(-2),{id,type,...data}]); // max 3
@@ -3610,8 +3669,9 @@
           {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws}/>}
         </main>
         <footer style={{borderTop:'1px solid var(--line)',padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>
-          {COMP_NAME} · FIFA World Cup 2026 · Built with ❤️
+          {COMP_NAME} · FIFA World Cup 2026 · Built with Passion!
         </footer>
+        <FireworksOverlay notif={goalNotif} onClose={()=>setGoalNotif(null)}/>
         <BalloonPopup notif={balloonNotif} onClose={()=>setBalloonNotif(null)}/>
         <WinnerPopup notif={balloonNotif?null:winnerNotif} onClose={()=>setWinnerNotif(null)}/>
         {/* Unified notification stack — bottom-right */}
