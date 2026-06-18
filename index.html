@@ -936,7 +936,13 @@
     const setJoker=(k,v)=>{
       if(locked) return;
       const newJoker={...joker,[k]:v};
-      const newHist=[...(predictions.jokerHistory||[]),{team:newJoker.team||null,group:newJoker.group||null,setAt:Date.now()}];
+      const existingHist=predictions.jokerHistory||[];
+      // On the very first change, snapshot the ORIGINAL joker as setAt=0 so all
+      // prior matchdays that already happened still get the correct multiplier.
+      const baseHist= existingHist.length===0 && (joker.team||joker.group)
+        ? [{team:joker.team||null,group:joker.group||null,setAt:0}]
+        : existingHist;
+      const newHist=[...baseHist,{team:newJoker.team||null,group:newJoker.group||null,setAt:Date.now()}];
       onSave({...predictions,joker:newJoker,jokerHistory:newHist});
     };
     const groupProgress=useMemo(()=>{
