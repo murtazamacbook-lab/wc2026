@@ -575,12 +575,18 @@
         bonusPoints+=SCORING.bonusPick;
       }
     });
+    // Tiebreak: parse user's tiebreak pick into seconds for leaderboard sorting
+    const parseTiebreak=s=>{ if(!s) return null; const m=String(s).match(/^(\d{1,3}):([0-5]\d)$/); return m?parseInt(m[1])*60+parseInt(m[2]):null; };
+    const tiebreakSecs=parseTiebreak(userBonus.tiebreak);
     return{
       total:groupPoints+koPoints+bracketPoints+bonusPoints,
-      groupPoints,koPoints,bracketPoints,bonusPoints,detail,
+      groupPoints,koPoints,bracketPoints,bonusPoints,detail,tiebreakSecs,
       sectionPts:{total:groupPoints+koPoints+bracketPoints+bonusPoints,group:groupPoints,md1:mdPts[1]||0,md2:mdPts[2]||0,md3:mdPts[3]||0,ko:koPoints+bracketPoints,...koRoundPts,bonus:bonusPoints},
     };
   };
+
+  // Parse "MM:SS" tiebreak string → total seconds (shared use)
+  const parseTiebreakTime=s=>{ if(!s) return null; const m=String(s).match(/^(\d{1,3}):([0-5]\d)$/); return m?parseInt(m[1])*60+parseInt(m[2]):null; };
 
   const range = (a,b) => Array.from({length:b-a+1},(_,i)=>a+i);
 
@@ -1264,7 +1270,11 @@
           {picks.map(({key,label,icon,isTeam})=>{
             const pick=bonus[key],actual=actualBonus[key];
             const actualLocked=!!actual;
-            const correct=actualLocked&&pick&&actual.trim().toLowerCase()===pick.trim().toLowerCase();
+            const correct=actualLocked&&pick&&(
+              actual.trim().toLowerCase()===pick.trim().toLowerCase()||
+              actual.trim().toLowerCase().includes(pick.trim().toLowerCase())||
+              pick.trim().toLowerCase().includes(actual.trim().toLowerCase())
+            );
             return(
               <div key={key} className="card" style={{padding:18,borderColor:correct?'var(--forest)':'var(--line)',background:correct?'rgba(27,94,63,.04)':'var(--paper)'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
@@ -1310,13 +1320,25 @@
 
   // ── LEADERBOARD ──────────────────────────────────────────────────
   const LeaderboardView = React.memo(({participants,allPredictions,results}) => {
-    const scores=useMemo(()=>(
-      participants.map(p=>{
+    const actualTiebreakSecs=parseTiebreakTime(results.bonus?.tiebreak);
+    const scores=useMemo(()=>{
+      const rows=participants.map(p=>{
         const preds=allPredictions[p]||{group:{},ko:{}};
         const score=computeUserScore(preds,results.group||{},results.ko||{},results.bonus||{});
         return{name:p,...score};
-      }).sort((a,b)=>b.total-a.total)
-    ),[participants,allPredictions,results]);
+      });
+      rows.sort((a,b)=>{
+        if(b.total!==a.total) return b.total-a.total;
+        // Tiebreak: closest guess to actual first-goal time in the Final
+        if(actualTiebreakSecs!=null){
+          const aDiff=a.tiebreakSecs!=null?Math.abs(a.tiebreakSecs-actualTiebreakSecs):Infinity;
+          const bDiff=b.tiebreakSecs!=null?Math.abs(b.tiebreakSecs-actualTiebreakSecs):Infinity;
+          if(aDiff!==bDiff) return aDiff-bDiff;
+        }
+        return 0;
+      });
+      return rows;
+    },[participants,allPredictions,results,actualTiebreakSecs]);
     const maxScore=Math.max(...scores.map(s=>s.total),1);
     const matchesDone=Object.values(results.group||{}).filter(r=>r&&r.h!==''&&r.h!=null).length;
     return(
@@ -1334,9 +1356,9 @@
                   <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:2,display:'flex',gap:10,flexWrap:'wrap'}}>
                     <span>Group: <strong className="mono">{s.groupPoints}</strong></span>
                     <span>KO: <strong className="mono">{s.koPoints}</strong></span>
-                    <span>Bracket: <strong className="mono">{s.bracketPoints.toFixed(1).replace('.0','')}</strong></span>
                     {s.bonusPoints>0&&<span style={{color:'var(--amber)'}}>Bonus: <strong className="mono">{s.bonusPoints}</strong></span>}
                     <span>Exact: <strong className="mono">{s.detail.exactScores}</strong></span>
+                    {s.tiebreakSecs!=null&&<span style={{color:'var(--ink-soft)'}}>⏱ {Math.floor(s.tiebreakSecs/60)}:{String(s.tiebreakSecs%60).padStart(2,'0')}{actualTiebreakSecs!=null&&<span style={{marginLeft:4,color:Math.abs(s.tiebreakSecs-actualTiebreakSecs)===Math.min(...scores.filter(x=>x.tiebreakSecs!=null).map(x=>Math.abs(x.tiebreakSecs-actualTiebreakSecs)))?'var(--forest)':'inherit',fontWeight:Math.abs(s.tiebreakSecs-actualTiebreakSecs)===Math.min(...scores.filter(x=>x.tiebreakSecs!=null).map(x=>Math.abs(x.tiebreakSecs-actualTiebreakSecs)))?700:400}}>({Math.abs(s.tiebreakSecs-actualTiebreakSecs)===0?'exact':'+'+Math.abs(s.tiebreakSecs-actualTiebreakSecs)+'s off'})</span>}</span>}
                   </div>
                   <div style={{height:3,background:'var(--cream2)',borderRadius:2,marginTop:8,overflow:'hidden'}}>
                     <div style={{width:`${(s.total/maxScore)*100}%`,height:'100%',background:i===0?'var(--amber)':'var(--burgundy)'}}/>
@@ -1371,7 +1393,7 @@
       {[
         {title:'Per Match — Group Stage',rows:[['Correct home goals','+1'],['Correct away goals','+1'],['Correct result (win/loss)','+1'],['Correct draw result','+2'],['Exact score bonus','+1'],['Underdog win (team ranked 20+ spots lower wins)','+2']]},
         {title:'Per Match — Knockout Stage',rows:[['Correct home goals','+1'],['Correct away goals','+1'],['Correct result (win/loss)','+1'],['Correct draw result','+2'],['Exact score bonus','+1']]},
-        {title:'Bonus Picks — 10 pts each',rows:[['World Cup Winner (team)','+10'],['Runner-Up (team)','+10'],['3rd Place (team)','+10'],['Golden Boot (player name)','+10'],['Tie-break: time of first goal in the Final (MM:SS)','Breaks ties only']]},
+        {title:'Bonus Picks — 10 pts each',rows:[['World Cup Winner (team)','+10'],['Runner-Up (team)','+10'],['3rd Place (team)','+10'],['Golden Boot (player name)','+10'],['Tie-break: time of first goal in the Final (MM:SS)','Closest guess wins ties — auto-ranked']]},
       ].map(({title,rows})=>(
         <div key={title} className="card" style={{padding:18,marginTop:14}}>
           <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 12px'}}>{title}</h3>
@@ -1452,7 +1474,23 @@
       {/* Tiebreak */}
       <div className="card" style={{padding:18,marginTop:14}}>
         <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 10px'}}>⏱ Tie-Break Rule</h3>
-        <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:0}}>If two or more players finish with the same total points, the tie is broken by whose <strong>time of first goal in the Final</strong> (MM:SS) is closest to the actual time. Set this in the Bonus Picks tab.</p>
+        <p style={{fontSize:13,color:'var(--ink)',lineHeight:1.7,margin:'0 0 12px'}}>If two or more players finish with the same total points, the tie is broken <strong>automatically</strong> by whose predicted <strong>time of first goal in the Final</strong> (MM:SS) is closest to the actual time — no admin intervention required.</p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8,marginBottom:12}}>
+          {[
+            {icon:'1️⃣',label:'Enter your guess',sub:'Set MM:SS in Bonus Picks tab before the Final'},
+            {icon:'2️⃣',label:'Admin enters actual time',sub:'After the Final, admin inputs the real first-goal minute'},
+            {icon:'3️⃣',label:'Closest guess wins',sub:'Leaderboard re-ranks tied players automatically'},
+          ].map(({icon,label,sub})=>(
+            <div key={label} style={{padding:'10px 12px',borderRadius:6,background:'var(--cream2)',border:'1px solid var(--line)',fontSize:12}}>
+              <div style={{fontSize:18,marginBottom:4}}>{icon}</div>
+              <div style={{fontWeight:700,color:'var(--ink)'}}>{label}</div>
+              <div style={{color:'var(--ink-soft)',marginTop:2,lineHeight:1.5}}>{sub}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:'10px 14px',background:'rgba(214,137,42,.08)',border:'1px solid rgba(214,137,42,.3)',borderRadius:6,fontSize:12,color:'var(--ink)',lineHeight:1.6}}>
+          <strong>Edge cases:</strong> Players who don't enter a tiebreak time are ranked below those who do. If two players are equally close, their order remains the same. The tiebreak only activates when the admin has set the actual Final time.
+        </div>
       </div>
     </div>
   );
@@ -1731,10 +1769,15 @@
       const minuteRaw=comp.status?.displayClock||'';
       const minuteNum=parseInt(minuteRaw)||0;
       // Normalise status → short code app understands
+      // ESPN uses STATUS_FIRST_HALF / STATUS_SECOND_HALF (not STATUS_IN_PROGRESS)
       const stName=st.name||'';
       let status='scheduled';
-      if(stName==='STATUS_IN_PROGRESS') status=minuteNum>45?'2H':'1H';
+      if(stName==='STATUS_FIRST_HALF') status='1H';
+      else if(stName==='STATUS_SECOND_HALF') status='2H';
       else if(stName==='STATUS_HALFTIME') status='HT';
+      else if(stName==='STATUS_EXTRA_TIME') status='ET';
+      else if(stName==='STATUS_PENALTY') status='PEN';
+      else if(stName==='STATUS_IN_PROGRESS') status=minuteNum>45?'2H':'1H'; // fallback
       else if(stName==='STATUS_FULL_TIME'||st.completed) status='FT';
       else if(stName==='STATUS_SCHEDULED') status='scheduled';
       return{
@@ -2560,7 +2603,7 @@
     const{bracket}=useMemo(()=>buildActualBracket(results.group||{},results.ko||{}),[results]);
     const standings=useMemo(()=>computeAllStandings(results.group||{}),[results]);
     const totalGroupDone=GROUP_MATCHES.filter(m=>{const r=results.group?.[m.id];return r&&r.h!==''&&r.h!=null;}).length; // flat scan OK here — only once per admin render
-    const BONUS_PICKS=[{k:'winner',l:'🏆 World Cup Winner'},{k:'runnerUp',l:'🥈 Runner-Up'},{k:'thirdPlace',l:'🥉 3rd Place'},{k:'goldenBoot',l:'⚽ Golden Boot (player)'}];
+    const BONUS_PICKS=[{k:'winner',l:'🏆 World Cup Winner',isTeam:true},{k:'runnerUp',l:'🥈 Runner-Up',isTeam:true},{k:'thirdPlace',l:'🥉 3rd Place',isTeam:true},{k:'goldenBoot',l:'⚽ Golden Boot (player)',isTeam:false}];
     const koRounds=[{ids:range(73,88),label:'Round of 32'},{ids:range(89,96),label:'Round of 16'},{ids:range(97,100),label:'Quarter-Finals'},{ids:[101,102],label:'Semi-Finals'},{ids:[103],label:'3rd Place'},{ids:[104],label:'Final'}];
     return(
       <div>
@@ -2676,12 +2719,28 @@
           <div style={{marginTop:16}}>
             <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 14px'}}>Enter actual answers — participants' picks are scored once set.</p>
             <div className="card" style={{padding:20,maxWidth:500}}>
-              {BONUS_PICKS.map(({k,l})=>(
+              {BONUS_PICKS.map(({k,l,isTeam})=>(
                 <div key={k} style={{marginBottom:14}}>
                   <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>{l}</div>
-                  <input value={results.bonus?.[k]||''} onChange={e=>setBonus(k,e.target.value)} placeholder="Enter actual answer…" style={{width:'100%',padding:'9px 12px',fontSize:14,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                  {isTeam?(
+                    <TeamSearchInput value={results.bonus?.[k]||''} onChange={v=>setBonus(k,v)} placeholder="Search team…"/>
+                  ):(
+                    <input value={results.bonus?.[k]||''} onChange={e=>setBonus(k,e.target.value)} placeholder="Enter player name…" style={{width:'100%',padding:'9px 12px',fontSize:14,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit'}}/>
+                  )}
+                  {results.bonus?.[k]&&<div style={{fontSize:11,color:'var(--forest)',marginTop:4}}>✅ Set: <strong>{results.bonus[k]}</strong></div>}
                 </div>
               ))}
+              <div style={{marginTop:4,paddingTop:14,borderTop:'1px solid var(--line)'}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>⏱ Actual First Goal in the Final (MM:SS)</div>
+                <div style={{fontSize:11,color:'var(--ink-soft)',marginBottom:8}}>Used to break ties on the leaderboard. Enter once the Final is played.</div>
+                <input value={results.bonus?.tiebreak||''} onChange={e=>setBonus('tiebreak',e.target.value)} placeholder="e.g. 23:45" style={{width:'100%',padding:'9px 12px',fontSize:14,border:'1px solid var(--line)',borderRadius:4,fontFamily:'JetBrains Mono,monospace'}}/>
+                {results.bonus?.tiebreak&&!parseTiebreakTime(results.bonus.tiebreak)&&(
+                  <div style={{fontSize:11,color:'var(--burgundy)',marginTop:4}}>⚠️ Format must be MM:SS (e.g. 23:45)</div>
+                )}
+                {results.bonus?.tiebreak&&parseTiebreakTime(results.bonus.tiebreak)&&(
+                  <div style={{fontSize:11,color:'var(--forest)',marginTop:4}}>✅ Valid — {parseTiebreakTime(results.bonus.tiebreak)}s into the match</div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -3878,8 +3937,12 @@
         const st=comp.status?.type||{};
         const min=parseInt(comp.status?.displayClock)||0;
         let status='scheduled';
-        if(st.name==='STATUS_IN_PROGRESS') status=min>45?'2H':'1H';
+        if(st.name==='STATUS_FIRST_HALF') status='1H';
+        else if(st.name==='STATUS_SECOND_HALF') status='2H';
         else if(st.name==='STATUS_HALFTIME') status='HT';
+        else if(st.name==='STATUS_EXTRA_TIME') status='ET';
+        else if(st.name==='STATUS_PENALTY') status='PEN';
+        else if(st.name==='STATUS_IN_PROGRESS') status=min>45?'2H':'1H'; // fallback
         else if(st.name==='STATUS_FULL_TIME'||st.completed) status='FT';
         return{home:normTeam(hC.team?.displayName||''),away:normTeam(aC.team?.displayName||''),homeScore:hC.score??'',awayScore:aC.score??'',minute:min||'',status,kickoff:comp.date||null};
       };
@@ -3915,8 +3978,12 @@
         const st=comp.status?.type||{};
         const min=parseInt(comp.status?.displayClock)||0;
         let status='scheduled';
-        if(st.name==='STATUS_IN_PROGRESS') status=min>45?'2H':'1H';
+        if(st.name==='STATUS_FIRST_HALF') status='1H';
+        else if(st.name==='STATUS_SECOND_HALF') status='2H';
         else if(st.name==='STATUS_HALFTIME') status='HT';
+        else if(st.name==='STATUS_EXTRA_TIME') status='ET';
+        else if(st.name==='STATUS_PENALTY') status='PEN';
+        else if(st.name==='STATUS_IN_PROGRESS') status=min>45?'2H':'1H'; // fallback
         else if(st.name==='STATUS_FULL_TIME'||st.completed) status='FT';
         return{home:normTeam(hC.team?.displayName||''),away:normTeam(aC.team?.displayName||''),homeScore:hC.score??'',awayScore:aC.score??'',minute:min||'',status,kickoff:comp.date||null};
       };
