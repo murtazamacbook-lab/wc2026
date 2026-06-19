@@ -2705,7 +2705,7 @@
             ['sync','🔄 Auto-Sync',true],
             ['liveoverride','🔴 Live Override',true],
             ['users',`Users (${participants.length})`,isSuperAdmin],
-            ['settings','Settings',isSuperAdmin],
+            ['settings','Settings',true],
             ['faq','❓ Admin FAQ',true],
           ].filter(([,, allowed])=>allowed).map(([k,l])=>(
             <button key={k} className="tab-btn" style={{padding:'6px 14px',borderRadius:4,border:'1px solid var(--line)',background:section===k?'var(--ink)':'transparent',color:section===k?'var(--cream)':'var(--ink)',fontSize:12,fontWeight:600}} onClick={()=>setSection(k)}>{l}</button>
@@ -3351,7 +3351,8 @@
         )}
         {section==='settings'&&(
           <div style={{marginTop:16,display:'flex',flexDirection:'column',gap:14,maxWidth:520}}>
-            {/* Tournament Phase */}
+            {/* Tournament Phase — superadmin only */}
+            {isSuperAdmin&&(
             <div className="card" style={{padding:20}}>
               <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 6px'}}>🏟 Tournament Phase</h3>
               <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 16px'}}>Controls which predictions are open. Switch phase as the tournament progresses.</p>
@@ -3379,7 +3380,8 @@
                 );
               })()}
             </div>
-            {/* Chat Toggle */}
+            )}
+            {/* Chat Toggle — all admins */}
             <div className="card" style={{padding:20}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16}}>
                 <div>
@@ -3427,7 +3429,8 @@
                 </div>
               )}
             </div>
-            {/* Change Super Admin password */}
+            {/* Change Super Admin password — superadmin only */}
+            {isSuperAdmin&&(<>
             <div className="card" style={{padding:20,borderLeft:'3px solid var(--burgundy)'}}>
               <h3 className="display" style={{fontSize:16,fontWeight:700,margin:'0 0 4px'}}>👑 Change Super-Admin Password</h3>
               <p style={{fontSize:12,color:'var(--ink-soft)',margin:'0 0 14px'}}>Full access — results, users, sync, settings.</p>
@@ -3462,13 +3465,14 @@
                 }}>Update Sub-Admin Password</button>
               </div>
             </div>
+            </>)}
             {/* Role summary */}
             <div className="card" style={{padding:16,background:'var(--cream2)'}}>
               <div className="micro-caps" style={{marginBottom:8}}>Role Comparison</div>
               <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
                 <thead><tr><th style={{textAlign:'left',padding:'4px 8px',color:'var(--ink-soft)'}}>Feature</th><th style={{textAlign:'center',padding:'4px 8px'}}>👑 Super</th><th style={{textAlign:'center',padding:'4px 8px'}}>🔧 Sub</th></tr></thead>
                 <tbody>
-                  {[['Enter group results','✅','✅'],['Enter KO results','✅','✅'],['Enter bonus results','✅','✅'],['Auto-Sync from API','✅','✅'],['Manage users','✅','❌'],['Lock/unlock competition','✅','❌'],['Change passwords','✅','❌'],].map(([f,s,b])=>(
+                  {[['Enter group results','✅','✅'],['Enter KO results','✅','✅'],['Enter bonus results','✅','✅'],['Auto-Sync from API','✅','✅'],['Manage users','✅','❌'],['Lock/unlock competition','✅','❌'],['Chat enable/disable','✅','✅'],['Suspend all logins','✅','✅'],['Suspend individual user','✅','❌'],['Change passwords','✅','❌'],].map(([f,s,b])=>(
                     <tr key={f} style={{borderBottom:'1px solid var(--line-soft)'}}><td style={{padding:'5px 8px'}}>{f}</td><td style={{textAlign:'center',padding:'5px 8px'}}>{s}</td><td style={{textAlign:'center',padding:'5px 8px'}}>{b}</td></tr>
                   ))}
                 </tbody>
