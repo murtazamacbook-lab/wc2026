@@ -7019,6 +7019,7 @@ const AdminView = ({
       };
     setParticipants(np);
     setUserPins(npins);
+    lastLocalWriteRef.current = Date.now();
     await storage.setJSON('participants', np, true);
     await storage.setJSON('pins', npins, true);
     setNewName('');
@@ -7038,6 +7039,7 @@ const AdminView = ({
     };
     delete na[name];
     setAllPredictions(na);
+    lastLocalWriteRef.current = Date.now();
     await storage.setJSON('participants', np, true);
     await storage.setJSON('pins', npins, true);
   };
@@ -7052,6 +7054,7 @@ const AdminView = ({
       [name]: pin
     };
     setUserPins(npins);
+    lastLocalWriteRef.current = Date.now();
     await storage.setJSON('pins', npins, true);
     setResetPins(p => ({
       ...p,
@@ -7095,6 +7098,7 @@ const AdminView = ({
     setParticipants(np);
     setUserPins(npins);
     setAllPredictions(na);
+    lastLocalWriteRef.current = Date.now();
     await storage.setJSON('participants', np, true);
     await storage.setJSON('pins', npins, true);
     setRenameTarget(null);
@@ -11983,6 +11987,7 @@ function App() {
         if (Object.keys(newGR).length === 0) {
           return;
         } // nothing to save
+        lastLocalWriteRef.current = Date.now();
         await storage.setJSON('results', newResults, true);
         setResults(newResults);
         // No prediction re-read — leaderboard useMemo recomputes from existing allPredictions state
@@ -12429,12 +12434,12 @@ function App() {
     setTimeout(() => setSaveStatus(''), 2000);
   }, [currentUser]);
   const saveResults = useCallback(async newRes => {
+    lastLocalWriteRef.current = Date.now();
     setResults(newRes);
     await storage.setJSON('results', newRes, true);
-    // allPredictions already in state — no need to re-read from Firebase
-    // (leaderboard recomputes via useMemo when results state changes)
   }, []);
   const saveConfig = useCallback(async newCfg => {
+    lastLocalWriteRef.current = Date.now();
     setConfig(newCfg);
     await storage.setJSON('config', newCfg, true);
   }, []);
@@ -12464,6 +12469,7 @@ function App() {
     };
     setParticipants(newParts);
     setUserPins(newPins);
+    lastLocalWriteRef.current = Date.now();
     await storage.setJSON('participants', newParts, true);
     await storage.setJSON('pins', newPins, true);
     await savePendingUsers(updated);
@@ -12585,6 +12591,7 @@ function App() {
       };
       setParticipants(finalParts);
       setUserPins(newPins);
+      lastLocalWriteRef.current = Date.now();
       await storage.setJSON('participants', finalParts, true);
       await storage.setJSON('pins', newPins, true);
     }
@@ -12617,6 +12624,66 @@ function App() {
       others: finalParts.filter(x => x !== name)
     });
   }, [participants, userPins]);
+
+  // ── LIVE DATA LISTENERS (participants, pins, results, config) ──
+  // These replace the 1-hour poll — all users see changes instantly
+  const lastLocalWriteRef = useRef(0); // track our own writes so we don't loop
+  useEffect(() => {
+    if (!FB_ON) return;
+    const parse = (snap, fallback) => {
+      try {
+        return snap.exists ? JSON.parse(snap.data().value || 'null') : fallback;
+      } catch (_e) {
+        return fallback;
+      }
+    };
+    const unsubParts = db.collection('wc26').doc('participants').onSnapshot(snap => {
+      try {
+        if (Date.now() - lastLocalWriteRef.current < 2000) return; // ignore echo of our own write
+        const parts = parse(snap, null);
+        if (Array.isArray(parts)) {
+          setParticipants(parts);
+          lsSet('participants', parts);
+        }
+      } catch (_e) {}
+    }, () => {});
+    const unsubPins = db.collection('wc26').doc('pins').onSnapshot(snap => {
+      try {
+        if (Date.now() - lastLocalWriteRef.current < 2000) return;
+        const pins = parse(snap, null);
+        if (pins && typeof pins === 'object') {
+          setUserPins(pins);
+          lsSet('pins', pins);
+        }
+      } catch (_e) {}
+    }, () => {});
+    const unsubResults = db.collection('wc26').doc('results').onSnapshot(snap => {
+      try {
+        if (Date.now() - lastLocalWriteRef.current < 2000) return;
+        const res = parse(snap, null);
+        if (res && typeof res === 'object') {
+          setResults(res);
+          lsSet('results', res);
+        }
+      } catch (_e) {}
+    }, () => {});
+    const unsubConfig = db.collection('wc26').doc('config').onSnapshot(snap => {
+      try {
+        if (Date.now() - lastLocalWriteRef.current < 2000) return;
+        const cfg = parse(snap, null);
+        if (cfg && typeof cfg === 'object') {
+          setConfig(cfg);
+          lsSet('config', cfg);
+        }
+      } catch (_e) {}
+    }, () => {});
+    return () => {
+      unsubParts();
+      unsubPins();
+      unsubResults();
+      unsubConfig();
+    };
+  }, []);
 
   // ── PENDING USERS LISTENER ────────────────────────────────────
   useEffect(() => {
@@ -12652,6 +12719,7 @@ function App() {
         };
         setParticipants(finalParts);
         setUserPins(newPins);
+        lastLocalWriteRef.current = Date.now();
         await storage.setJSON('participants', finalParts, true);
         await storage.setJSON('pins', newPins, true);
         setCurrentUser(pendingName);
