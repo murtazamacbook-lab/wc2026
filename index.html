@@ -3363,6 +3363,29 @@
                 );
               })()}
             </div>
+            {/* Chat Toggle */}
+            <div className="card" style={{padding:20}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16}}>
+                <div>
+                  <h3 className="display" style={{fontSize:17,fontWeight:700,margin:'0 0 4px'}}>💬 Match Chat</h3>
+                  <p style={{fontSize:12,color:'var(--ink-soft)',margin:0}}>Allow players to send messages and reactions during the tournament.</p>
+                </div>
+                <button onClick={()=>setConfig({...config,chatEnabled:!(config.chatEnabled!==false)})} style={{
+                  position:'relative',width:52,height:28,borderRadius:14,border:'none',cursor:'pointer',
+                  background:config.chatEnabled!==false?'var(--forest)':'var(--line)',
+                  transition:'background .2s',flexShrink:0,
+                }}>
+                  <div style={{
+                    position:'absolute',top:3,left:config.chatEnabled!==false?26:3,
+                    width:22,height:22,borderRadius:'50%',background:'white',
+                    boxShadow:'0 1px 4px rgba(0,0,0,.25)',transition:'left .2s',
+                  }}/>
+                </button>
+              </div>
+              <div style={{marginTop:8,fontSize:11,color:config.chatEnabled!==false?'var(--forest)':'var(--ink-soft)',fontWeight:600}}>
+                {config.chatEnabled!==false?'✓ Chat is enabled — players can send messages':'✗ Chat is disabled — chat panel is hidden for all players'}
+              </div>
+            </div>
             {/* Change Super Admin password */}
             <div className="card" style={{padding:20,borderLeft:'3px solid var(--burgundy)'}}>
               <h3 className="display" style={{fontSize:16,fontWeight:700,margin:'0 0 4px'}}>👑 Change Super-Admin Password</h3>
@@ -4488,7 +4511,7 @@
           {COMP_NAME} · FIFA World Cup 2026 · Built with Passion!
         </footer>
         <FireworksOverlay notif={goalNotif} onClose={()=>setGoalNotif(null)}/>
-        <ChatWidget currentUser={currentUser} db={db} NS={NS} adminRole={adminRole}/>
+        <ChatWidget currentUser={currentUser} db={db} NS={NS} adminRole={adminRole} chatEnabled={config.chatEnabled!==false}/>
         <BalloonPopup notif={balloonNotif} onClose={()=>setBalloonNotif(null)}/>
         <WinnerPopup notif={balloonNotif?null:winnerNotif} onClose={()=>setWinnerNotif(null)}/>
         {/* Unified notification stack — bottom-right */}
@@ -4540,7 +4563,10 @@
 
   // ── CHAT WIDGET ──────────────────────────────────────────────────────────────
   const CHAT_REACTIONS=['⚽','🔥','🎉','😂','💀','👑','🐐','❤️','😱','🤩'];
-  const ChatWidget=({currentUser,db,NS,adminRole})=>{
+  const ChatWidget=({currentUser,db,NS,adminRole,chatEnabled})=>{
+    const canAdmin=adminRole==='superadmin'||adminRole==='subadmin';
+    // Non-admins see nothing when chat is disabled
+    if(!chatEnabled&&!canAdmin) return null;
     const[open,setOpen]=useState(false);
     const[msgs,setMsgs]=useState([]);
     const[input,setInput]=useState('');
@@ -4626,7 +4652,6 @@
       setInput('');
     };
 
-    const canAdmin=adminRole==='superadmin'||adminRole==='subadmin';
     const timeStr=ts=>{ if(!ts) return ''; const d=new Date(ts); return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0'); };
 
     return(
@@ -4645,7 +4670,7 @@
         <button onClick={()=>setOpen(o=>!o)} style={{
           position:'fixed',bottom:24,left:24,zIndex:9998,
           width:52,height:52,borderRadius:'50%',border:'none',cursor:'pointer',
-          background:'var(--burgundy)',color:'white',fontSize:22,
+          background:chatEnabled?'var(--burgundy)':'#999',color:'white',fontSize:22,
           boxShadow:'0 4px 20px rgba(0,0,0,.28)',
           display:'flex',alignItems:'center',justifyContent:'center',
           transition:'transform .15s, box-shadow .15s',
@@ -4672,7 +4697,7 @@
             animation:'chatSlideUp .25s cubic-bezier(.34,1.3,.64,1)',
           }}>
             {/* Header */}
-            <div style={{background:'var(--burgundy)',color:'white',padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+            <div style={{background:chatEnabled?'var(--burgundy)':'#888',color:'white',padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <span style={{fontSize:18}}>💬</span>
                 <div>
@@ -4680,7 +4705,7 @@
                   <div style={{fontSize:10,opacity:.75}}>{msgs.length} message{msgs.length!==1?'s':''} · last 60</div>
                 </div>
               </div>
-              <div style={{fontSize:10,opacity:.6}}>React with emojis → they fly! 🚀</div>
+              <div style={{fontSize:10,opacity:.6}}>{chatEnabled?'React with emojis → they fly! 🚀':'⛔ Chat disabled'}</div>
             </div>
 
             {/* Messages */}
@@ -4728,7 +4753,7 @@
             </div>
 
             {/* Reaction bar */}
-            <div style={{padding:'6px 10px',borderTop:'1px solid var(--line-soft)',display:'flex',gap:4,flexWrap:'wrap',flexShrink:0,background:'var(--cream)'}}>
+            <div style={{padding:'6px 10px',borderTop:'1px solid var(--line-soft)',display:'flex',gap:4,flexWrap:'wrap',flexShrink:0,background:'var(--cream)',opacity:chatEnabled?1:.4,pointerEvents:chatEnabled?'auto':'none'}}>
               {CHAT_REACTIONS.map(e=>(
                 <button key={e} onClick={()=>{ send(e,true); }} style={{
                   fontSize:20,background:'none',border:'1px solid var(--line)',
@@ -4744,7 +4769,12 @@
 
             {/* Text input */}
             <div style={{padding:'8px 10px',borderTop:'1px solid var(--line)',display:'flex',gap:6,flexShrink:0}}>
-              {currentUser?(
+              {!chatEnabled?(
+                <div style={{flex:1,textAlign:'center',fontSize:12,color:'var(--ink-soft)',padding:'6px 0'}}>
+                  ⛔ Chat is currently disabled by the admin
+                  {canAdmin&&<span style={{color:'var(--amber)',marginLeft:4}}>(go to Admin → Settings to re-enable)</span>}
+                </div>
+              ):currentUser?(
                 <>
                   <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value.slice(0,200))}
                     onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),handleSend())}
