@@ -1711,7 +1711,7 @@ const MatchCells = ({
   const isLocked = resultLocked || compLocked || matchLocked;
   const [nowMs, setNowMs] = useState(() => Date.now());
   const minsUntilKickoff = kickoffMs && !resultLocked && !matchLocked ? (kickoffMs - nowMs) / 60000 : null;
-  const showCountdown = minsUntilKickoff !== null && minsUntilKickoff > 0 && minsUntilKickoff <= 60;
+  const showCountdown = minsUntilKickoff !== null && minsUntilKickoff > 0 && minsUntilKickoff <= 60; // countdown shows from 60 min; lock triggers at 10 min
   useEffect(() => {
     if (!showCountdown) return;
     const t = setInterval(() => setNowMs(Date.now()), 15000); // refresh every 15s
@@ -4021,7 +4021,7 @@ const RulesView = () => /*#__PURE__*/React.createElement("div", null, /*#__PURE_
   a: 'Yes — predictions save automatically and can be changed any time until a match kicks off (it locks automatically 🔴) or until the admin locks that phase.'
 }, {
   q: 'Why is a match showing as 🔴 LIVE / LOCKED?',
-  a: 'That match has kicked off. The lock is automatic and fair for all players. You cannot change predictions once a match starts.'
+  a: 'Predictions lock 10 minutes before kickoff. This gives everyone a fair cut-off regardless of any live data delays. You cannot change predictions once the lock triggers.'
 }, {
   q: 'Why can\'t I see the Bracket tab?',
   a: 'The Bracket tab is only available during the Knockout phase. It opens after all 48 group matches are complete and the admin switches the phase.'
@@ -11480,7 +11480,6 @@ function FireworksOverlay({
     }, 3500);
     return () => clearTimeout(t);
   }, [notif]);
-  if (!notif) return null;
   const FW_COLORS = ['#e74c3c', '#f39c12', '#2ecc71', '#3498db', '#9b59b6', '#f1c40f', '#e91e63', '#1abc9c', '#e67e22', '#00bcd4'];
   const particles = React.useMemo(() => Array.from({
     length: 60
@@ -11492,6 +11491,7 @@ function FireworksOverlay({
     delay: (i % 10 * 0.05).toFixed(2),
     dur: (0.8 + i % 3 * 0.2).toFixed(1)
   })), [notif]);
+  if (!notif) return null;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
@@ -12267,7 +12267,7 @@ function App() {
         const kickoff = new Date(rawDt).getTime();
         if (!isNaN(kickoff)) {
           const minsUntil = (kickoff - nowMs) / 60000;
-          kicksOffSoon = minsUntil <= 5 && minsUntil > -200;
+          kicksOffSoon = minsUntil <= 10 && minsUntil > -200;
         }
       }
       if (!isLive && !kicksOffSoon) return;
