@@ -1993,7 +1993,7 @@
 
     return(
       <div style={{maxWidth:900,margin:'0 auto',padding:'24px 16px'}}>
-        <SectionHeader kicker="Tournament" title="Live API Data" subtitle="Read-only — fetches live tournament data directly from the API."/>
+        <SectionHeader kicker="Tournament" title="Live FIFA Tournament Record" subtitle="Read-only — fetches live tournament data."/>
         {/* Raw JSON debug modal */}
         {rawDebug&&(
           <div style={{position:'fixed',inset:0,zIndex:12000,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={()=>setRawDebug(null)}>
@@ -2081,7 +2081,7 @@
         ):(
           <div style={{marginBottom:20}}>
             <div style={{fontSize:11,color:'var(--ink-soft)',marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-              <span>📦 Data cached by admin — click to load from Firestore</span>
+              <span>📦 Data cached by admin — click to load from Database</span>
             </div>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
               {[
