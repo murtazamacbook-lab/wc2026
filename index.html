@@ -873,7 +873,7 @@
   };
 
   // ── GROUP CARD ───────────────────────────────────────────────────
-  const GroupCard = ({groupKey,isOpen,onToggle,predictions,actualResults,onSet,standings,progress,jokerTeam,jokerGroup,jokerHistory=null,locked,lockedMatchIds=new Set(),kickoffTimes=new Map()}) => {
+  const GroupCard = ({groupKey,isOpen,onToggle,predictions,actualResults,onSet,standings,progress,jokerTeam,jokerGroup,jokerHistory=null,locked,lockedMatchIds=new Set(),kickoffTimes=new Map(),matchCommentary={}}) => {
     const teams=GROUPS[groupKey];
     const matches=GROUP_MATCHES_BY_GROUP[groupKey]||[];
     const isJG=jokerGroup===groupKey,jTIG=jokerTeam&&teams.includes(jokerTeam);
@@ -920,9 +920,21 @@
                 {[1,2,3].map(md=>(
                   <React.Fragment key={md}>
                     <div style={{gridColumn:'1/-1',fontSize:11,color:'var(--ink-soft)',fontWeight:500,padding:'6px 0 2px'}}>Matchday {md}</div>
-                    {matches.filter(m=>m.matchday===md).map(m=>(
-                      <MatchCells key={m.id} match={m} pred={predictions[m.id]||{h:'',a:''}} actual={actualResults?.[m.id]} onSet={onSet} jokerMultiplier={getMatchMult(m)} locked={locked} matchLocked={lockedMatchIds.has(m.id)} kickoffMs={kickoffTimes.get(m.id)||null}/>
-                    ))}
+                    {matches.filter(m=>m.matchday===md).map(m=>{
+                      const c=matchCommentary[m.id];
+                      return(
+                        <React.Fragment key={m.id}>
+                          <MatchCells match={m} pred={predictions[m.id]||{h:'',a:''}} actual={actualResults?.[m.id]} onSet={onSet} jokerMultiplier={getMatchMult(m)} locked={locked} matchLocked={lockedMatchIds.has(m.id)} kickoffMs={kickoffTimes.get(m.id)||null}/>
+                          {c&&(
+                            <div style={{gridColumn:'1/-1',margin:'0 0 6px',padding:'8px 12px',background:'linear-gradient(135deg,rgba(27,94,63,.05),rgba(27,94,63,.02))',borderRadius:4,borderLeft:'3px solid var(--forest)',fontSize:12,color:'var(--ink)',lineHeight:1.6}}>
+                              <span style={{fontWeight:700,color:'var(--forest)',marginRight:6}}>📝 Admin Commentary</span>
+                              <span style={{fontSize:10,color:'var(--ink-soft)',marginRight:8}}>{c.author} · {new Date(c.ts).toLocaleString()}</span>
+                              <div style={{marginTop:4,whiteSpace:'pre-wrap'}}>{c.text}</div>
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </React.Fragment>
                 ))}
               </div>
@@ -943,7 +955,7 @@
   };
 
   // ── PREDICTIONS VIEW ─────────────────────────────────────────────
-  const PredictionsView = ({predictions,onSave,results,locked,lockedMatchIds=new Set(),kickoffTimes=new Map(),jumpToGroup=null}) => {
+  const PredictionsView = ({predictions,onSave,results,locked,lockedMatchIds=new Set(),kickoffTimes=new Map(),jumpToGroup=null,matchCommentary={}}) => {
     const [openGroup,setOpenGroup]=useState('A');
     // Jump to a specific group when requested from outside (e.g. banner click)
     useEffect(()=>{ if(jumpToGroup) setOpenGroup(jumpToGroup); },[jumpToGroup]);
@@ -1069,7 +1081,7 @@
         </div>
         <div style={{marginTop:20,display:'flex',flexDirection:'column',gap:10}}>
           {GROUP_KEYS.map(g=>(
-            <GroupCard key={g} groupKey={g} isOpen={openGroup===g} onToggle={()=>setOpenGroup(openGroup===g?null:g)} predictions={predictions.group||{}} actualResults={results.group} onSet={setMatch} standings={standings[g]} progress={groupProgress[g]} jokerTeam={joker.team||null} jokerGroup={joker.group||null} jokerHistory={predictions.jokerHistory||null} locked={locked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes}/>
+            <GroupCard key={g} groupKey={g} isOpen={openGroup===g} onToggle={()=>setOpenGroup(openGroup===g?null:g)} predictions={predictions.group||{}} actualResults={results.group} onSet={setMatch} standings={standings[g]} progress={groupProgress[g]} jokerTeam={joker.team||null} jokerGroup={joker.group||null} jokerHistory={predictions.jokerHistory||null} locked={locked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} matchCommentary={matchCommentary}/>
           ))}
         </div>
       </div>
@@ -2429,8 +2441,116 @@
     );
   });
 
+  // ── COMMENTARY PANEL (proper component — hooks must not be in IIFE) ──
+  const CommentaryPanel = ({matchCommentary,saveCommentary,adminRole}) => {
+    const[selMatch,setSelMatch]=useState(null);
+    const[commentText,setCommentText]=useState('');
+    const[saving,setSaving]=useState(false);
+    const[saved,setSaved]=useState(false);
+    useEffect(()=>{
+      if(selMatch){ setCommentText(matchCommentary?.[selMatch.id]?.text||''); }
+      else { setCommentText(''); }
+    },[selMatch,matchCommentary]);
+    const handlePublish=async()=>{
+      if(!selMatch||!commentText.trim()) return;
+      setSaving(true);
+      const matchLabel=`${selMatch.home} vs ${selMatch.away}`;
+      const updated={
+        ...(matchCommentary||{}),
+        [selMatch.id]:{text:commentText.trim(),author:adminRole==='superadmin'?'Super Admin':'Sub Admin',ts:Date.now(),matchLabel},
+      };
+      await saveCommentary(updated);
+      setSaving(false); setSaved(true); setTimeout(()=>setSaved(false),3000);
+    };
+    const handleDelete=async(matchId)=>{
+      if(!window.confirm('Delete commentary for this match?')) return;
+      const updated={...(matchCommentary||{})}; delete updated[matchId];
+      await saveCommentary(updated);
+      if(selMatch?.id===matchId){ setSelMatch(null); setCommentText(''); }
+    };
+    const matchesByGroup=GROUP_KEYS.reduce((acc,g)=>{ acc[g]=GROUP_MATCHES_BY_GROUP[g]; return acc; },{});
+    return(
+      <div style={{marginTop:16}}>
+        <p style={{fontSize:13,color:'var(--ink-soft)',margin:'0 0 14px'}}>Write post-match commentary for any group stage match. Published commentary is visible to all users inline under the match.</p>
+        <div style={{display:'flex',gap:16,flexWrap:'wrap',alignItems:'flex-start'}}>
+          <div className="card" style={{flex:'0 0 300px',overflow:'hidden'}}>
+            <div style={{padding:'10px 14px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',fontSize:12,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.06em'}}>Select Match</div>
+            <div style={{maxHeight:420,overflowY:'auto'}} className="scrollbar">
+              {GROUP_KEYS.map(g=>(
+                <div key={g}>
+                  <div style={{padding:'6px 14px',fontSize:10,fontWeight:700,color:'var(--ink-soft)',background:'var(--cream2)',borderBottom:'1px solid var(--line-soft)',textTransform:'uppercase',letterSpacing:'.07em'}}>Group {g}</div>
+                  {matchesByGroup[g].map(m=>{
+                    const hasC=!!(matchCommentary&&matchCommentary[m.id]);
+                    const isSel=selMatch?.id===m.id;
+                    return(
+                      <div key={m.id} onClick={()=>setSelMatch(m)} style={{padding:'8px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid var(--line-soft)',background:isSel?'rgba(159,27,27,.07)':'',transition:'background .15s'}}>
+                        <Flag team={m.home} size={13}/>
+                        <span style={{fontSize:12,fontWeight:isSel?700:400,flex:1}}>{m.home} vs {m.away}</span>
+                        <Flag team={m.away} size={13}/>
+                        {hasC&&<span title="Has commentary" style={{fontSize:10,color:'var(--forest)',fontWeight:700}}>📝</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{flex:1,minWidth:280}}>
+            {!selMatch?(
+              <div className="card" style={{padding:24,textAlign:'center',color:'var(--ink-soft)',fontSize:13}}>← Select a match to write commentary</div>
+            ):(
+              <div className="card" style={{padding:20}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+                  <Flag team={selMatch.home} size={20}/>
+                  <span className="display" style={{fontSize:16,fontWeight:700}}>{selMatch.home} vs {selMatch.away}</span>
+                  <Flag team={selMatch.away} size={20}/>
+                  <span className="pill" style={{marginLeft:'auto',fontSize:10}}>Group {selMatch.group} · MD{selMatch.matchday}</span>
+                </div>
+                <textarea value={commentText} onChange={e=>setCommentText(e.target.value)}
+                  placeholder={`Write match commentary for ${selMatch.home} vs ${selMatch.away}…\n\nE.g. What happened, key moments, surprises, stand-out players…`}
+                  rows={8} style={{width:'100%',padding:'10px 12px',fontSize:13,border:'1px solid var(--line)',borderRadius:4,fontFamily:'inherit',resize:'vertical',lineHeight:1.6}}/>
+                <div style={{display:'flex',gap:8,marginTop:10,alignItems:'center'}}>
+                  <button onClick={handlePublish} disabled={saving||!commentText.trim()} style={{background:'var(--forest)',color:'white',border:'none',borderRadius:4,padding:'8px 20px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!commentText.trim()||saving)?0.6:1}}>
+                    {saving?'Publishing…':saved?'✅ Published!':'📢 Publish to Users'}
+                  </button>
+                  {matchCommentary&&matchCommentary[selMatch.id]&&(
+                    <button onClick={()=>handleDelete(selMatch.id)} style={{background:'transparent',color:'var(--burgundy)',border:'1px solid var(--burgundy)',borderRadius:4,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>🗑 Delete</button>
+                  )}
+                  <span style={{fontSize:11,color:'var(--ink-soft)',marginLeft:'auto'}}>{commentText.length} chars</span>
+                </div>
+                {matchCommentary&&matchCommentary[selMatch.id]&&(
+                  <div style={{marginTop:12,padding:'8px 12px',background:'rgba(27,94,63,.06)',borderRadius:4,fontSize:11,color:'var(--ink-soft)',borderLeft:'3px solid var(--forest)'}}>
+                    Last published by <strong>{matchCommentary[selMatch.id].author}</strong> · {new Date(matchCommentary[selMatch.id].ts).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            )}
+            {Object.keys(matchCommentary||{}).length>0&&(
+              <div className="card" style={{marginTop:14,overflow:'hidden'}}>
+                <div style={{padding:'8px 14px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',fontSize:11,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.06em'}}>Published ({Object.keys(matchCommentary).length})</div>
+                {Object.entries(matchCommentary).map(([id,c])=>{
+                  const m=GROUP_MATCHES.find(x=>x.id===id);
+                  return(
+                    <div key={id} style={{padding:'9px 14px',borderBottom:'1px solid var(--line-soft)',display:'flex',alignItems:'flex-start',gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{c.matchLabel||id}</div>
+                        <div style={{fontSize:11,color:'var(--ink-soft)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.text}</div>
+                      </div>
+                      <button onClick={()=>{setSelMatch(m||null);setCommentText(c.text);}} style={{flexShrink:0,background:'none',border:'1px solid var(--line)',borderRadius:3,padding:'3px 8px',fontSize:10,cursor:'pointer',fontFamily:'inherit'}}>✏️ Edit</button>
+                      <button onClick={()=>handleDelete(id)} style={{flexShrink:0,background:'none',border:'1px solid var(--burgundy)',borderRadius:3,padding:'3px 8px',fontSize:10,cursor:'pointer',color:'var(--burgundy)',fontFamily:'inherit'}}>🗑</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ── ADMIN VIEW ───────────────────────────────────────────────────
-  const AdminView = ({results,onSave,config,setConfig,participants,setParticipants,userPins,setUserPins,allPredictions,setAllPredictions,adminRole,adminPws,saveAdminPws,pendingUsers,onApprovePending,onRejectPending,onForceRefreshUser}) => {
+  const AdminView = ({results,onSave,config,setConfig,participants,setParticipants,userPins,setUserPins,allPredictions,setAllPredictions,adminRole,adminPws,saveAdminPws,pendingUsers,onApprovePending,onRejectPending,onForceRefreshUser,matchCommentary,saveCommentary}) => {
     const isSuperAdmin=adminRole==='superadmin';
     const isSubAdmin=adminRole==='subadmin';
     const[section,setSection]=useState('group');
@@ -2443,6 +2563,35 @@
     const[renameValue,setRenameValue]=useState('');
     const[refreshingUsers,setRefreshingUsers]=useState(false);
     const[pendingCollapsed,setPendingCollapsed]=useState(false);
+    const[recovering,setRecovering]=useState(false);
+    const[recoverLog,setRecoverLog]=useState('');
+    const handleRecoverApproved=async()=>{
+      if(!FB_ON){setRecoverLog('Firebase not available.');return;}
+      setRecovering(true); setRecoverLog('Reading pending-users from Firebase…');
+      try{
+        const [pendingSnap,partsSnap,pinsSnap]=await Promise.all([
+          db.collection('wc26').doc('pending-users').get(),
+          db.collection('wc26').doc('participants').get(),
+          db.collection('wc26').doc('pins').get(),
+        ]);
+        const pending=pendingSnap.exists?JSON.parse(pendingSnap.data().value||'{}'):{};
+        const currentParts=partsSnap.exists?JSON.parse(partsSnap.data().value||'[]'):[];
+        const currentPins=pinsSnap.exists?JSON.parse(pinsSnap.data().value||'{}'):{};
+        const approved=Object.values(pending).filter(p=>p.status==='approved');
+        const missing=approved.filter(p=>!currentParts.includes(p.name));
+        if(missing.length===0){setRecoverLog('✅ No missing users — participants list is already up to date.');setRecovering(false);return;}
+        const newParts=[...currentParts,...missing.map(p=>p.name)];
+        const newPins={...currentPins};
+        missing.forEach(p=>{ if(p.pin) newPins[p.name]=p.pin; });
+        await Promise.all([
+          db.collection('wc26').doc('participants').set({value:JSON.stringify(newParts)}),
+          db.collection('wc26').doc('pins').set({value:JSON.stringify(newPins)}),
+        ]);
+        setParticipants(newParts); setUserPins(newPins);
+        setRecoverLog(`✅ Recovered ${missing.length} user(s): ${missing.map(p=>p.name).join(', ')}`);
+      }catch(e){ setRecoverLog(`❌ Error: ${e.message}`); }
+      setRecovering(false);
+    };
     const handleRefreshUsers=async()=>{
       setRefreshingUsers(true);
       try{
@@ -2794,6 +2943,7 @@
             ['bonus','Bonus Results',true],
             ['sync','🔄 Auto-Sync',true],
             ['liveoverride','🔴 Live Override',true],
+            ['commentary','📝 Commentary',true],
             ['users',`Users (${participants.length})${Object.values(pendingUsers||{}).filter(p=>p.status==='pending').length>0?' 🔔':''}`,true],
             ['settings','Settings',true],
             ['faq','❓ Admin FAQ',true],
@@ -3368,6 +3518,7 @@
             </div>
           );
         })()}
+        {section==='commentary'&&<CommentaryPanel matchCommentary={matchCommentary} saveCommentary={saveCommentary} adminRole={adminRole}/>}
         {section==='users'&&(
           <div style={{marginTop:16}}>
             {/* Pending approval requests */}
@@ -3449,6 +3600,18 @@
             </div>
             )}
             {/* User list — superadmin only */}
+            {isSuperAdmin&&(
+            <div className="card" style={{marginBottom:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',background:'rgba(214,137,42,.05)',borderColor:'rgba(214,137,42,.3)'}}>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{fontSize:13,fontWeight:700}}>🔧 Recover Approved Users</div>
+                <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:2}}>If approved users are missing from the list, click to re-sync them from the pending-users table in Firebase.</div>
+                {recoverLog&&<div style={{marginTop:6,fontSize:11,fontWeight:600,color:recoverLog.startsWith('✅')?'var(--forest)':recoverLog.startsWith('❌')?'var(--burgundy)':'var(--ink-soft)'}}>{recoverLog}</div>}
+              </div>
+              <button onClick={handleRecoverApproved} disabled={recovering} style={{background:'var(--amber)',color:'white',border:'none',borderRadius:4,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',opacity:recovering?0.6:1}}>
+                {recovering?'⏳ Recovering…':'⚡ Recover Now'}
+              </button>
+            </div>
+            )}
             {isSuperAdmin&&(
             <div className="card" style={{overflowX:'auto'}}>
               <div style={{padding:'8px 12px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'flex',alignItems:'center',gap:8,minWidth:860}}>
@@ -4279,6 +4442,8 @@
     const[balloonNotif,setBalloonNotif]=useState(null);
     const[goalNotif,setGoalNotif]=useState(null);
     const[supportByUser,setSupportByUser]=useState({});
+    const[matchCommentary,setMatchCommentary]=useState({}); // matchId → {text,author,ts,matchLabel}
+    const commentarySessionStart=useRef(Date.now());
     const prevLiveScoresRef=useRef(new Map());
     const[liveMatches,setLiveMatches]=useState([]); // live + today's upcoming matches
     const[manualLiveRows,setManualLiveRows]=useState([]); // admin manual override rows
@@ -4539,8 +4704,38 @@
     },[]);
 
     const supportCooldownRef=useRef(0);
-    const onToggleSupport=useCallback(async(team)=>{
-      const now=Date.now();
+
+    // ── MATCH COMMENTARY LISTENER ──────────────────────────────────
+    useEffect(()=>{
+      const cached=lsGet('match-commentary');
+      if(cached&&typeof cached==='object') setMatchCommentary(cached);
+      if(!FB_ON) return;
+      const unsub=db.collection('wc26').doc('match-commentary').onSnapshot(snap=>{
+        try{
+          const d=snap.exists?JSON.parse(snap.data().value||'{}'):{};
+          setMatchCommentary(d);
+          lsSet('match-commentary',d);
+          // Toast for new commentary (newer than session start, skip if admin wrote it)
+          const entries=Object.values(d);
+          const newest=entries.length?entries.reduce((a,b)=>(b.ts||0)>(a.ts||0)?b:a,entries[0]):null;
+          if(newest&&newest.ts>commentarySessionStart.current){
+            commentarySessionStart.current=Date.now(); // reset so next publish triggers too
+            addToast('commentary',{matchLabel:newest.matchLabel,text:newest.text,author:newest.author});
+          }
+        }catch(_e){}
+      },()=>{});
+      return()=>unsub();
+    },[]);
+
+    const saveCommentary=useCallback(async(updated)=>{
+      setMatchCommentary(updated);
+      lsSet('match-commentary',updated);
+      if(FB_ON){
+        await db.collection('wc26').doc('match-commentary').set({value:JSON.stringify(updated)}).catch(()=>{});
+      }
+    },[]);
+
+    const onToggleSupport=useCallback(async(team)=>{      const now=Date.now();
       if(now-supportCooldownRef.current<2000) return; // 2s anti-spam cooldown
       supportCooldownRef.current=now;
       const supporterId=getSupporterId();
@@ -4742,9 +4937,13 @@
     const onApprovePending=useCallback(async(name,approverRole)=>{
       const approverLabel=approverRole==='superadmin'?'Super Admin':'Sub Admin';
       const updated={...pendingUsers,[name]:{...pendingUsers[name],status:'approved',approvedBy:approverLabel,approvedAt:Date.now()}};
-      // Add to participants + pins immediately
-      const newParts=[...participants,name];
-      const newPins={...userPins,[name]:pendingUsers[name].pin};
+      // Read fresh from Firebase to avoid stale-closure overwrite when approving multiple users quickly
+      const [freshParts,freshPins]=await Promise.all([
+        FB_ON?fbTimeout(db.collection('wc26').doc('participants').get()).then(s=>s.exists?JSON.parse(s.data().value):participants).catch(()=>participants):Promise.resolve(participants),
+        FB_ON?fbTimeout(db.collection('wc26').doc('pins').get()).then(s=>s.exists?JSON.parse(s.data().value):userPins).catch(()=>userPins):Promise.resolve(userPins),
+      ]);
+      const newParts=Array.isArray(freshParts)&&!freshParts.includes(name)?[...freshParts,name]:freshParts.includes?.(name)?freshParts:[...freshParts,name];
+      const newPins={...freshPins,[name]:pendingUsers[name].pin};
       setParticipants(newParts); setUserPins(newPins);
       await storage.setJSON('participants',newParts,true);
       await storage.setJSON('pins',newPins,true);
@@ -4992,14 +5191,14 @@
         <main style={{maxWidth:1420,margin:'0 auto',padding:'24px 16px 80px'}}>
           <div className="main-shell">
             <div className="main-primary">
-              {view==='predictions'&&!isGuest&&<ViewErrorBoundary label="Group Stage"><PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={groupLocked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup}/></ViewErrorBoundary>}
+              {view==='predictions'&&!isGuest&&<ViewErrorBoundary label="Group Stage"><PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={groupLocked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup} matchCommentary={matchCommentary}/></ViewErrorBoundary>}
               {view==='bracket'&&!isGuest&&<ViewErrorBoundary label="Bracket"><BracketView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/></ViewErrorBoundary>}
               {view==='bonus'&&!isGuest&&<ViewErrorBoundary label="Bonus Picks"><BonusView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/></ViewErrorBoundary>}
               {view==='leaderboard'&&<ViewErrorBoundary label="Leaderboard"><LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/></ViewErrorBoundary>}
               {view==='browse'&&<ViewErrorBoundary label="Browse Picks"><BrowseView participants={participants} allPredictions={allPredictions} results={results}/></ViewErrorBoundary>}
               {view==='live'&&<ViewErrorBoundary label="Live Data"><LiveDataView adminRole={adminRole}/></ViewErrorBoundary>}
               {view==='rules'&&<ViewErrorBoundary label="Rules"><RulesView/></ViewErrorBoundary>}
-              {view==='admin'&&adminAuthed&&<ViewErrorBoundary label="Admin"><AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws} pendingUsers={pendingUsers} onApprovePending={onApprovePending} onRejectPending={onRejectPending} onForceRefreshUser={onForceRefreshUser}/></ViewErrorBoundary>}
+              {view==='admin'&&adminAuthed&&<ViewErrorBoundary label="Admin"><AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws} pendingUsers={pendingUsers} onApprovePending={onApprovePending} onRejectPending={onRejectPending} onForceRefreshUser={onForceRefreshUser} matchCommentary={matchCommentary} saveCommentary={saveCommentary}/></ViewErrorBoundary>}
             </div>
             {view!=='admin'&&<SupportWall supportByUser={supportByUser} currentSupportTeam={currentSupportTeam} onToggle={onToggleSupport}/>}
           </div>
@@ -5049,6 +5248,14 @@
                 <div style={{minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:12,color:'var(--ink)'}}>{t.count} result{t.count!==1?'s':''} auto-imported</div>
                   <div style={{fontSize:10,color:'var(--ink-soft)',fontFamily:'monospace',marginTop:1}}>{t.time}</div>
+                </div></>
+              )}
+              {t.type==='commentary'&&(
+                <><span style={{fontSize:18}}>📝</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:12,color:'var(--ink)'}}>New Commentary</div>
+                  <div style={{fontSize:11,fontWeight:600,color:'var(--forest)',marginTop:1}}>{t.matchLabel}</div>
+                  <div style={{fontSize:10,color:'var(--ink-soft)',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:210}}>{t.text}</div>
                 </div></>
               )}
             </div>
