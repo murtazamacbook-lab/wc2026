@@ -2145,33 +2145,68 @@
 
         {/* ✅ MATCH RESULTS */}
         {liveData.results&&(()=>{
-          const arr=flatten(liveData.results);
+          const all=flatten(liveData.results);
+          // Filter to last 7 days
+          const cutoff=Date.now()-7*24*60*60*1000;
+          const getDateKey=m=>{
+            const raw=m.kickoff??m.date??m.matchDate??m.datetime??m.utcDate??'';
+            if(!raw) return null;
+            const d=new Date(raw);
+            if(isNaN(d.getTime())) return 'unknown';
+            if(d.getTime()<cutoff) return null;
+            return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+          };
+          const filtered=all.filter(m=>getDateKey(m)!==null);
+          // Group by date string, sort dates descending
+          const byDate={};
+          filtered.forEach(m=>{
+            const dk=getDateKey(m);
+            if(!byDate[dk]) byDate[dk]=[];
+            byDate[dk].push(m);
+          });
+          const sortedDates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+          // Label helper: Today / Yesterday / date
+          const localToday=new Date();
+          const localYest=new Date(localToday); localYest.setDate(localYest.getDate()-1);
+          const fmt=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+          const todayKey=fmt(localToday); const yesterdayKey=fmt(localYest);
+          const dayLabel=dk=>{ if(dk==='unknown') return 'Date Unknown'; if(dk===todayKey) return 'Today'; if(dk===yesterdayKey) return 'Yesterday'; const [y,mo,d]=dk.split('-'); return `${d} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1]} ${y}`; };
           return(
             <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#27ae60'}}>
-              <PanelHdr bg="#27ae60" title="✅ Match Results" count={arr.length} panelKey="results"/>
-              {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No results yet.</div>:(
-                <div style={{overflowX:'auto',maxHeight:360,overflowY:'auto'}} className="scrollbar">
-                  <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
-                    <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
-                      {['#','Home','Score','Away','Date','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='Score'||h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
-                    </tr></thead>
-                    <tbody>{arr.map((m,i)=>{
-                      const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
-                      const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
-                      const hs=m.homeScore??m.home_score??m.score?.home??m.goalsHome??'–';
-                      const as_=m.awayScore??m.away_score??m.score?.away??m.goalsAway??'–';
-                      const date=String(m.date??m.matchDate??m.datetime??'–').slice(0,10);
-                      const grp=m.group??m.round??m._groupKey??'–';
-                      return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
-                        <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
-                        <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
-                        <td style={{padding:'6px 8px',textAlign:'center',fontFamily:'monospace',fontWeight:800,color:'var(--forest)'}}>{hs}–{as_}</td>
-                        <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
-                        <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)',fontFamily:'monospace'}}>{date}</td>
-                        <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
-                      </tr>);
-                    })}</tbody>
-                  </table>
+              <PanelHdr bg="#27ae60" title="✅ Match Results" count={`${filtered.length} in last 7 days`} panelKey="results"/>
+              {sortedDates.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No results in the last 7 days.</div>:(
+                <div style={{padding:'8px 14px 14px'}}>
+                  {sortedDates.map(dk=>{
+                    const matches=byDate[dk];
+                    return(
+                      <div key={dk} style={{marginBottom:12}}>
+                        <div style={{fontSize:10,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'var(--ink-soft)',padding:'6px 0 4px',borderBottom:'1px solid var(--line-soft)',marginBottom:6}}>
+                          {dayLabel(dk)} <span style={{fontFamily:'monospace',fontWeight:400,marginLeft:4}}>{dk}</span>
+                        </div>
+                        {matches.map((m,i)=>{
+                          const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+                          const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+                          const hs=m.homeScore??m.home_score??m.score?.home??m.goalsHome??'–';
+                          const as_=m.awayScore??m.away_score??m.score?.away??m.goalsAway??'–';
+                          const grp=m.group??m.round??m._groupKey??'';
+                          return(
+                            <div key={i} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto minmax(0,1fr)',alignItems:'center',borderBottom:'1px solid var(--line-soft)'}}>
+                              <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:5,padding:'7px 8px 7px 0'}}>
+                                <span style={{fontSize:12,fontWeight:600,textAlign:'right'}}>{home}</span><Flag team={home} size={13}/>
+                              </div>
+                              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:1,padding:'7px 10px'}}>
+                                <span style={{fontFamily:'monospace',fontWeight:800,fontSize:14,color:'var(--forest)',letterSpacing:2}}>{hs}–{as_}</span>
+                                {grp&&<span style={{fontSize:9,color:'var(--ink-soft)',fontWeight:600,letterSpacing:.5}}>{grp}</span>}
+                              </div>
+                              <div style={{display:'flex',alignItems:'center',gap:5,padding:'7px 0 7px 8px'}}>
+                                <Flag team={away} size={13}/><span style={{fontSize:12,fontWeight:600}}>{away}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2695,26 +2730,37 @@
                     </button>
                     {isOpen&&(
                       <div className="fadein" style={{borderTop:'1px solid var(--line)',padding:'12px 16px'}}>
-                        <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto minmax(0,1fr)',alignItems:'center'}}>
-                          {ms.map(m=>{
-                            const r=results.group?.[m.id]||{h:'',a:''};
-                            return(
-                              <React.Fragment key={m.id}>
-                                <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:4,padding:'7px 8px 7px 0',borderBottom:'1px solid var(--line-soft)'}}>
-                                  <span style={{fontSize:12}}>{teamShort(m.home)}</span><Flag team={m.home} size={13}/>
-                                </div>
-                                <div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'center',padding:'7px 8px',borderBottom:'1px solid var(--line-soft)'}}>
-                                  <input type="number" min="0" max="20" className="input-score" style={{width:36,height:32}} value={r.h??''} onChange={e=>setGroupResult(m.id,'h',e.target.value)}/>
-                                  <span style={{fontSize:11,color:'var(--ink-soft)'}}>:</span>
-                                  <input type="number" min="0" max="20" className="input-score" style={{width:36,height:32}} value={r.a??''} onChange={e=>setGroupResult(m.id,'a',e.target.value)}/>
-                                </div>
-                                <div style={{display:'flex',alignItems:'center',gap:4,padding:'7px 0 7px 8px',borderBottom:'1px solid var(--line-soft)'}}>
-                                  <Flag team={m.away} size={13}/><span style={{fontSize:12}}>{teamShort(m.away)}</span>
-                                </div>
-                              </React.Fragment>
-                            );
-                          })}
-                        </div>
+                        {[1,2,3].map(md=>{
+                          const mdMatches=ms.filter(m=>m.matchday===md);
+                          return(
+                            <div key={md} style={{marginBottom:12}}>
+                              <div style={{fontSize:10,fontWeight:700,color:'var(--ink-soft)',letterSpacing:1,textTransform:'uppercase',marginBottom:6,paddingBottom:4,borderBottom:'1px solid var(--line-soft)'}}>
+                                Matchday {md}
+                              </div>
+                              <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto minmax(0,1fr)',alignItems:'center'}}>
+                                {mdMatches.map(m=>{
+                                  const r=results.group?.[m.id]||{h:'',a:''};
+                                  const isDone=r.h!==''&&r.h!=null&&r.a!==''&&r.a!=null;
+                                  return(
+                                    <React.Fragment key={m.id}>
+                                      <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:4,padding:'7px 8px 7px 0',borderBottom:'1px solid var(--line-soft)'}}>
+                                        <span style={{fontSize:12,fontWeight:isDone?600:400}}>{teamShort(m.home)}</span><Flag team={m.home} size={13}/>
+                                      </div>
+                                      <div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'center',padding:'7px 8px',borderBottom:'1px solid var(--line-soft)'}}>
+                                        <input type="number" min="0" max="20" className="input-score" style={{width:36,height:32,background:isDone?'rgba(27,94,63,.07)':undefined,borderColor:isDone?'var(--forest)':undefined}} value={r.h??''} onChange={e=>setGroupResult(m.id,'h',e.target.value)}/>
+                                        <span style={{fontSize:11,color:'var(--ink-soft)'}}>:</span>
+                                        <input type="number" min="0" max="20" className="input-score" style={{width:36,height:32,background:isDone?'rgba(27,94,63,.07)':undefined,borderColor:isDone?'var(--forest)':undefined}} value={r.a??''} onChange={e=>setGroupResult(m.id,'a',e.target.value)}/>
+                                      </div>
+                                      <div style={{display:'flex',alignItems:'center',gap:4,padding:'7px 0 7px 8px',borderBottom:'1px solid var(--line-soft)'}}>
+                                        <Flag team={m.away} size={13}/><span style={{fontSize:12,fontWeight:isDone?600:400}}>{teamShort(m.away)}</span>
+                                      </div>
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
                         <div style={{marginTop:10,background:'var(--cream2)',padding:10,borderRadius:4}}>
                           <div className="micro-caps" style={{marginBottom:6}}>Actual standings</div>
                           <StandingsTable standings={standings[g]||[]}/>
@@ -2964,33 +3010,52 @@
 
                   {/* ✅ MATCH RESULTS */}
                   {liveData.results&&(()=>{
-                    const arr=flatten(liveData.results);
+                    const all=flatten(liveData.results);
+                    const cutoff=Date.now()-7*24*60*60*1000;
+                    const getDateKey=m=>{ const raw=m.kickoff??m.date??m.matchDate??m.datetime??m.utcDate??''; if(!raw) return null; const d=new Date(raw); if(isNaN(d.getTime())) return 'unknown'; if(d.getTime()<cutoff) return null; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+                    const filtered=all.filter(m=>getDateKey(m)!==null);
+                    const byDate={}; filtered.forEach(m=>{ const dk=getDateKey(m); if(!byDate[dk]) byDate[dk]=[]; byDate[dk].push(m); });
+                    const sortedDates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+                    const localToday=new Date(); const localYest=new Date(localToday); localYest.setDate(localYest.getDate()-1);
+                    const fmt=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+                    const todayKey=fmt(localToday); const yesterdayKey=fmt(localYest);
+                    const dayLabel=dk=>{ if(dk==='unknown') return 'Date Unknown'; if(dk===todayKey) return 'Today'; if(dk===yesterdayKey) return 'Yesterday'; const [y,mo,d]=dk.split('-'); return `${d} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1]} ${y}`; };
                     return(
                       <div className="card fadein" style={{marginBottom:14,overflow:'hidden',borderColor:'#27ae60'}}>
-                        <PanelHdr bg="#27ae60" title="✅ Match Results" count={arr.length} panelKey="results"/>
-                        {arr.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No results. Raw keys: {Object.keys(liveData.results||{}).join(', ')}</div>:(
-                          <div style={{overflowX:'auto',maxHeight:320,overflowY:'auto'}} className="scrollbar">
-                            <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
-                              <thead><tr style={{background:'var(--cream2)',borderBottom:'1px solid var(--line)'}}>
-                                {['#','Home','Score','Away','Date','Group'].map(h=><th key={h} style={{padding:'6px 8px',fontWeight:700,fontSize:10,textAlign:h==='Score'||h==='#'?'center':'left',color:'var(--ink-soft)'}}>{h}</th>)}
-                              </tr></thead>
-                              <tbody>{arr.map((m,i)=>{
-                                const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
-                                const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
-                                const hs=m.homeScore??m.home_score??m.score?.home??m.goalsHome??'–';
-                                const as_=m.awayScore??m.away_score??m.score?.away??m.goalsAway??'–';
-                                const date=String(m.date??m.matchDate??m.datetime??'–').slice(0,10);
-                                const grp=m.group??m.round??m._groupKey??'–';
-                                return(<tr key={i} style={{borderBottom:'1px solid var(--line-soft)',background:i%2?'var(--cream2)':''}}>
-                                  <td style={{padding:'6px 8px',textAlign:'center',color:'var(--ink-soft)',fontSize:11}}>{i+1}</td>
-                                  <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={home} size={13}/> {home}</td>
-                                  <td style={{padding:'6px 8px',textAlign:'center',fontFamily:'monospace',fontWeight:800,color:'var(--forest)'}}>{hs}–{as_}</td>
-                                  <td style={{padding:'6px 8px',fontWeight:600}}><Flag team={away} size={13}/> {away}</td>
-                                  <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)',fontFamily:'monospace'}}>{date}</td>
-                                  <td style={{padding:'6px 8px',fontSize:11,color:'var(--ink-soft)'}}>{grp}</td>
-                                </tr>);
-                              })}</tbody>
-                            </table>
+                        <PanelHdr bg="#27ae60" title="✅ Match Results" count={`${filtered.length} in last 7 days`} panelKey="results"/>
+                        {sortedDates.length===0?<div style={{padding:16,textAlign:'center',color:'var(--ink-soft)',fontSize:12,fontStyle:'italic'}}>No results in the last 7 days. Raw keys: {Object.keys(liveData.results||{}).join(', ')}</div>:(
+                          <div style={{padding:'8px 14px 14px'}}>
+                            {sortedDates.map(dk=>{
+                              const matches=byDate[dk];
+                              return(
+                                <div key={dk} style={{marginBottom:12}}>
+                                  <div style={{fontSize:10,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:'var(--ink-soft)',padding:'6px 0 4px',borderBottom:'1px solid var(--line-soft)',marginBottom:6}}>
+                                    {dayLabel(dk)} <span style={{fontFamily:'monospace',fontWeight:400,marginLeft:4}}>{dk}</span>
+                                  </div>
+                                  {matches.map((m,i)=>{
+                                    const home=tn(m.home||m.homeTeam||m.home_team||m.team_home);
+                                    const away=tn(m.away||m.awayTeam||m.away_team||m.team_away);
+                                    const hs=m.homeScore??m.home_score??m.score?.home??m.goalsHome??'–';
+                                    const as_=m.awayScore??m.away_score??m.score?.away??m.goalsAway??'–';
+                                    const grp=m.group??m.round??m._groupKey??'';
+                                    return(
+                                      <div key={i} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto minmax(0,1fr)',alignItems:'center',borderBottom:'1px solid var(--line-soft)'}}>
+                                        <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:5,padding:'7px 8px 7px 0'}}>
+                                          <span style={{fontSize:12,fontWeight:600,textAlign:'right'}}>{home}</span><Flag team={home} size={13}/>
+                                        </div>
+                                        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:1,padding:'7px 10px'}}>
+                                          <span style={{fontFamily:'monospace',fontWeight:800,fontSize:14,color:'var(--forest)',letterSpacing:2}}>{hs}–{as_}</span>
+                                          {grp&&<span style={{fontSize:9,color:'var(--ink-soft)',fontWeight:600,letterSpacing:.5}}>{grp}</span>}
+                                        </div>
+                                        <div style={{display:'flex',alignItems:'center',gap:5,padding:'7px 0 7px 8px'}}>
+                                          <Flag team={away} size={13}/><span style={{fontSize:12,fontWeight:600}}>{away}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -3348,6 +3413,26 @@
             <div className="card" style={{padding:20,marginBottom:14,background:'linear-gradient(135deg,rgba(159,27,27,.04) 0%,var(--paper) 60%)',borderColor:'var(--burgundy)'}}>
               <h3 className="display" style={{fontSize:18,fontWeight:700,margin:'0 0 4px'}}>❓ Admin FAQ</h3>
               <p style={{fontSize:13,color:'var(--ink-soft)',margin:0}}>Common questions and answers for running the pool.</p>
+            </div>
+            {/* Tournament checklist */}
+            <div className="card" style={{padding:20,marginBottom:14,borderColor:'var(--amber)',background:'linear-gradient(135deg,rgba(214,137,42,.05) 0%,var(--paper) 60%)'}}>
+              <h3 className="display" style={{fontSize:16,fontWeight:700,margin:'0 0 12px'}}>📋 Your Admin Checklist — Nothing Else Needed</h3>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {[
+                  {when:'Each match finishes',action:'Enter the score',where:'Group Results'},
+                  {when:'Group stage ends (~July 2)',action:'Flip phase',where:'Settings → Knockout Open'},
+                  {when:'Each KO match finishes',action:'Enter score + penalty winner if draw',where:'Knockout Results'},
+                  {when:'After the Final',action:'Enter Winner, Runner-Up, 3rd, Golden Boot, Tiebreak time',where:'Bonus Results'},
+                  {when:'After the Final',action:'Flip phase',where:'Settings → Complete'},
+                ].map(({when,action,where},i)=>(
+                  <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1.4fr auto',gap:8,alignItems:'center',padding:'8px 10px',borderRadius:6,background:'var(--cream2)',fontSize:12}}>
+                    <div style={{color:'var(--ink-soft)',fontWeight:500}}>{when}</div>
+                    <div style={{fontWeight:700,color:'var(--ink)'}}>{action}</div>
+                    <div style={{background:'var(--burgundy)',color:'white',padding:'2px 8px',borderRadius:4,fontWeight:700,fontSize:11,whiteSpace:'nowrap'}}>{where}</div>
+                  </div>
+                ))}
+              </div>
+              <p style={{fontSize:12,color:'var(--ink-soft)',margin:'12px 0 0',fontStyle:'italic'}}>That's it. No code, no deployment, no other fixes needed.</p>
             </div>
             {[
               {cat:'Results',qs:[
