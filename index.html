@@ -1230,6 +1230,10 @@ const CSS = `
   @keyframes fwParticle{0%{transform:rotate(var(--a)) translateX(0);opacity:1}100%{transform:rotate(var(--a)) translateX(var(--d));opacity:0}}
   @keyframes fwCard{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1);opacity:1}}
   @keyframes emojiFloat{0%{transform:translateY(0) scale(1) rotate(0deg);opacity:1}70%{opacity:1}100%{transform:translateY(-260px) scale(1.8) rotate(var(--spin,12deg));opacity:0}}
+  @keyframes koCountPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+  @keyframes koFadeIn{from{opacity:0;transform:translate(-50%,-50%) scale(.85)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+  @keyframes koFadeOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-50%) scale(1.08)}}
+  @keyframes koRingPulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(2.4);opacity:0}}
   @keyframes chatSlideUp{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
   @keyframes msgIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
   @keyframes reactionPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
@@ -1711,12 +1715,15 @@ const MatchCells = ({
   const isLocked = resultLocked || compLocked || matchLocked;
   const [nowMs, setNowMs] = useState(() => Date.now());
   const minsUntilKickoff = kickoffMs && !resultLocked && !matchLocked ? (kickoffMs - nowMs) / 60000 : null;
-  const showCountdown = minsUntilKickoff !== null && minsUntilKickoff > 0 && minsUntilKickoff <= 60; // countdown shows from 60 min; lock triggers at 10 min
+  const showCountdown = minsUntilKickoff !== null && minsUntilKickoff > 0 && minsUntilKickoff <= 45; // countdown shows from 45 min
+  const secsUntilKickoff = kickoffMs ? Math.max(0, kickoffMs - nowMs) / 1000 : null;
+  const inLastMinute = secsUntilKickoff !== null && secsUntilKickoff <= 60 && secsUntilKickoff > 0;
   useEffect(() => {
     if (!showCountdown) return;
-    const t = setInterval(() => setNowMs(Date.now()), 15000); // refresh every 15s
+    const interval = inLastMinute ? 1000 : 15000; // tick every 1s in last 60s, 15s otherwise
+    const t = setInterval(() => setNowMs(Date.now()), interval);
     return () => clearInterval(t);
-  }, [showCountdown]);
+  }, [showCountdown, inLastMinute]);
   const countdownStr = showCountdown ? (() => {
     const totalSec = Math.max(0, kickoffMs - nowMs) / 1000;
     const m = Math.floor(totalSec / 60),
@@ -11477,6 +11484,116 @@ function BalloonPopup({
   }))));
 }
 
+// ── KICKOFF COUNTDOWN OVERLAY ──────────────────────────────────────
+// Shows a full-screen dramatic countdown in the last 15 seconds before any match
+function KickoffCountdownOverlay({
+  matchLabel,
+  secsLeft,
+  onDone
+}) {
+  const [phase, setPhase] = React.useState('in'); // 'in' | 'visible' | 'out'
+  const prevSecs = React.useRef(secsLeft);
+  React.useEffect(() => {
+    if (secsLeft <= 0) {
+      setPhase('out');
+      const t = setTimeout(onDone, 700);
+      return () => clearTimeout(t);
+    }
+    prevSecs.current = secsLeft;
+    setPhase('visible');
+  }, [secsLeft]);
+  // animation for the number changing
+  const [numKey, setNumKey] = React.useState(secsLeft);
+  React.useEffect(() => {
+    setNumKey(secsLeft);
+  }, [secsLeft]);
+  const ringColor = secsLeft > 10 ? '#27ae60' : secsLeft > 5 ? '#d4890a' : '#c0392b';
+  const overlayAnim = phase === 'in' ? 'koFadeIn .35s ease forwards' : phase === 'out' ? 'koFadeOut .6s ease forwards' : 'none';
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      zIndex: 10100,
+      pointerEvents: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      background: 'rgba(0,0,0,.55)',
+      opacity: phase === 'out' ? 0 : 1,
+      transition: 'opacity .6s'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%,-50%)',
+      animation: overlayAnim,
+      textAlign: 'center',
+      userSelect: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      width: 180,
+      height: 180,
+      borderRadius: '50%',
+      border: `3px solid ${ringColor}`,
+      transform: 'translate(-50%,-50%)',
+      animation: 'koRingPulse 1s ease-out infinite',
+      opacity: .6
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'rgba(26,23,21,.92)',
+      border: `2px solid ${ringColor}`,
+      borderRadius: 20,
+      padding: '32px 48px',
+      boxShadow: `0 0 60px ${ringColor}55, 0 20px 60px rgba(0,0,0,.6)`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 800,
+      letterSpacing: '.15em',
+      textTransform: 'uppercase',
+      color: 'rgba(255,255,255,.5)',
+      marginBottom: 8
+    }
+  }, "Kickoff in"), /*#__PURE__*/React.createElement("div", {
+    key: numKey,
+    style: {
+      fontSize: 96,
+      fontWeight: 800,
+      fontFamily: 'Fraunces,serif',
+      color: ringColor,
+      lineHeight: 1,
+      animation: 'koCountPulse .4s ease',
+      minWidth: 140,
+      textAlign: 'center'
+    }
+  }, Math.ceil(secsLeft)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: 'rgba(255,255,255,.7)',
+      marginTop: 10,
+      maxWidth: 220
+    }
+  }, matchLabel), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: 'rgba(255,255,255,.35)',
+      marginTop: 6,
+      letterSpacing: '.05em'
+    }
+  }, "PREDICTIONS LOCK AT KICKOFF"))));
+}
+
 // ── FIREWORKS OVERLAY ─────────────────────────────────────────────
 function FireworksOverlay({
   notif,
@@ -11759,6 +11876,8 @@ function App() {
   const [winnerNotif, setWinnerNotif] = useState(null);
   const [balloonNotif, setBalloonNotif] = useState(null);
   const [goalNotif, setGoalNotif] = useState(null);
+  const [kickoffCountdown, setKickoffCountdown] = useState(null); // {matchLabel,secsLeft} for last-15s overlay
+  const kickoffShownRef = useRef(new Set()); // track which match IDs have already shown overlay
   const [supportByUser, setSupportByUser] = useState({});
   const [matchCommentary, setMatchCommentary] = useState({}); // matchId → {text,author,ts,matchLabel}
   const commentarySessionStart = useRef(Date.now());
@@ -12323,6 +12442,39 @@ function App() {
     });
     return map;
   }, [mergedLiveMatches]);
+
+  // ── KICKOFF COUNTDOWN: watch kickoffTimes for last-15s window ─────
+  useEffect(() => {
+    if (!kickoffTimes.size) return;
+    const check = () => {
+      const now = Date.now();
+      let soonest = null;
+      kickoffTimes.forEach((ko, id) => {
+        const secs = (ko - now) / 1000;
+        if (secs > 0 && secs <= 15 && !kickoffShownRef.current.has(id)) {
+          if (!soonest || secs < soonest.secs) {
+            const gm = GROUP_MATCHES.find(m => m.id === id);
+            soonest = {
+              id,
+              secs,
+              label: gm ? `${gm.home} vs ${gm.away}` : 'Upcoming Match'
+            };
+          }
+        }
+        // Once past kickoff, mark as shown so it never re-triggers
+        if (secs <= -1) kickoffShownRef.current.add(id);
+      });
+      if (soonest) {
+        setKickoffCountdown({
+          matchLabel: soonest.label,
+          secsLeft: Math.ceil(soonest.secs)
+        });
+      }
+    };
+    const t = setInterval(check, 1000);
+    check();
+    return () => clearInterval(t);
+  }, [kickoffTimes]); // eslint-disable-line
 
   // Show winner popup on login (track previous user to detect login event)
   const prevUserRef = React.useRef(null);
@@ -13065,6 +13217,10 @@ function App() {
   }, COMP_NAME, " · FIFA World Cup 2026 · Built with Passion!"), /*#__PURE__*/React.createElement(FireworksOverlay, {
     notif: goalNotif,
     onClose: () => setGoalNotif(null)
+  }), kickoffCountdown && /*#__PURE__*/React.createElement(KickoffCountdownOverlay, {
+    matchLabel: kickoffCountdown.matchLabel,
+    secsLeft: kickoffCountdown.secsLeft,
+    onDone: () => setKickoffCountdown(null)
   }), /*#__PURE__*/React.createElement(ChatWidget, {
     currentUser: currentUser,
     db: db,
