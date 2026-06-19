@@ -2354,7 +2354,7 @@
   });
 
   // ── ADMIN VIEW ───────────────────────────────────────────────────
-  const AdminView = ({results,onSave,config,setConfig,participants,setParticipants,userPins,setUserPins,allPredictions,setAllPredictions,adminRole,adminPws,saveAdminPws}) => {
+  const AdminView = ({results,onSave,config,setConfig,participants,setParticipants,userPins,setUserPins,allPredictions,setAllPredictions,adminRole,adminPws,saveAdminPws,pendingUsers,onApprovePending,onRejectPending,onForceRefreshUser}) => {
     const isSuperAdmin=adminRole==='superadmin';
     const isSubAdmin=adminRole==='subadmin';
     const[section,setSection]=useState('group');
@@ -2365,6 +2365,20 @@
     const[resetPins,setResetPins]=useState({});
     const[renameTarget,setRenameTarget]=useState(null); // name being renamed
     const[renameValue,setRenameValue]=useState('');
+    const[refreshingUsers,setRefreshingUsers]=useState(false);
+    const[pendingCollapsed,setPendingCollapsed]=useState(false);
+    const handleRefreshUsers=async()=>{
+      setRefreshingUsers(true);
+      try{
+        const [parts,pins]=await Promise.all([
+          storage.getShared('participants'),
+          storage.getShared('pins'),
+        ]);
+        if(Array.isArray(parts)) setParticipants(parts);
+        if(pins&&typeof pins==='object') setUserPins(pins);
+      }catch(_e){}
+      setRefreshingUsers(false);
+    };
     const[syncKey,setSyncKey]=useState(()=>{ try{return localStorage.getItem('wc26_synckey')||window.__RAPID_KEY||'';}catch{return window.__RAPID_KEY||'';} });
     const[syncing,setSyncing]=useState(false);
     const[syncLog,setSyncLog]=useState('');
@@ -2696,7 +2710,7 @@
     const koRounds=[{ids:range(73,88),label:'Round of 32'},{ids:range(89,96),label:'Round of 16'},{ids:range(97,100),label:'Quarter-Finals'},{ids:[101,102],label:'Semi-Finals'},{ids:[103],label:'3rd Place'},{ids:[104],label:'Final'}];
     return(
       <div>
-        <SectionHeader kicker={isSuperAdmin?'👑 Super Admin':'🔧 Sub Admin'} title="Admin Console" subtitle={isSuperAdmin?'Full access — results, users, sync, settings.':'Limited access — enter results only.'}/>
+        <SectionHeader kicker={isSuperAdmin?'👑 Super Admin':'🔧 Sub Admin'} title="Admin Console" subtitle={isSuperAdmin?'Full access — results, users, sync, settings.':'Limited access — results, approvals, chat & login controls.'}/>
         <div style={{display:'flex',gap:4,marginTop:16,flexWrap:'wrap'}}>
           {[
             ['group','Group Results',true],
@@ -2704,7 +2718,7 @@
             ['bonus','Bonus Results',true],
             ['sync','🔄 Auto-Sync',true],
             ['liveoverride','🔴 Live Override',true],
-            ['users',`Users (${participants.length})`,isSuperAdmin],
+            ['users',`Users (${participants.length})${Object.values(pendingUsers||{}).filter(p=>p.status==='pending').length>0?' 🔔':''}`,true],
             ['settings','Settings',true],
             ['faq','❓ Admin FAQ',true],
           ].filter(([,, allowed])=>allowed).map(([k,l])=>(
@@ -3280,7 +3294,69 @@
         })()}
         {section==='users'&&(
           <div style={{marginTop:16}}>
-            {/* Add user */}
+            {/* Pending approval requests */}
+            {(()=>{
+              const pending=Object.values(pendingUsers||{}).filter(p=>p.status==='pending');
+              const reviewed=Object.values(pendingUsers||{}).filter(p=>p.status!=='pending').sort((a,b)=>(b.approvedAt||b.rejectedAt||0)-(a.approvedAt||a.rejectedAt||0)).slice(0,10);
+              if(pending.length===0&&reviewed.length===0) return null;
+              return(
+                <div className="card" style={{marginBottom:16,overflow:'hidden',borderColor:pending.length>0?'var(--amber)':'var(--line)'}}>
+                  <div onClick={()=>setPendingCollapsed(c=>!c)} style={{padding:'10px 16px',background:pending.length>0?'rgba(214,137,42,.08)':'var(--cream2)',borderBottom:pendingCollapsed?'none':'1px solid var(--line)',display:'flex',alignItems:'center',gap:8,cursor:'pointer',userSelect:'none'}}>
+                    <span style={{fontSize:16}}>{pending.length>0?'🔔':'📋'}</span>
+                    <span style={{fontWeight:700,fontSize:13}}>Access Requests</span>
+                    {pending.length>0&&<span className="pill pill-warn" style={{fontSize:11}}>{pending.length} pending</span>}
+                    <span style={{marginLeft:'auto',fontSize:12,color:'var(--ink-soft)',transition:'transform .2s',display:'inline-block',transform:pendingCollapsed?'rotate(-90deg)':'rotate(0deg)'}}>▾</span>
+                  </div>
+                  {!pendingCollapsed&&(
+                  <div style={{maxHeight:320,overflowY:'auto'}}>
+                  {pending.length>0&&(
+                    <div>
+                      {pending.map(p=>(
+                        <div key={p.name} style={{padding:'12px 16px',borderBottom:'1px solid var(--line-soft)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',background:'rgba(214,137,42,.04)'}}>
+                          <Avatar name={p.name} size={36}/>
+                          <div style={{flex:1,minWidth:120}}>
+                            <div style={{fontWeight:700,fontSize:14}}>{p.name}</div>
+                            <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:2}}>
+                              Requested {new Date(p.requestedAt).toLocaleString()} · PIN set ✓
+                            </div>
+                          </div>
+                          <div style={{display:'flex',gap:8,flexShrink:0}}>
+                            <button onClick={e=>{e.stopPropagation();onApprovePending(p.name,adminRole);}} style={{background:'var(--forest)',color:'white',border:'none',borderRadius:4,padding:'7px 16px',fontSize:12,fontWeight:700,cursor:'pointer'}}>✅ Approve</button>
+                            <button onClick={e=>{e.stopPropagation();onRejectPending(p.name,adminRole);}} style={{background:'var(--burgundy)',color:'white',border:'none',borderRadius:4,padding:'7px 14px',fontSize:12,fontWeight:700,cursor:'pointer'}}>❌ Reject</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {reviewed.length>0&&isSuperAdmin&&(
+                    <div>
+                      <div style={{padding:'8px 16px',fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em',background:'var(--cream2)',borderBottom:'1px solid var(--line-soft)'}}>
+                        Recent decisions (superadmin audit log)
+                      </div>
+                      {reviewed.map(p=>(
+                        <div key={p.name} style={{padding:'9px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'36px 1fr 1fr 1fr',gap:10,alignItems:'center',opacity:.8}}>
+                          <Avatar name={p.name} size={28}/>
+                          <div style={{fontSize:12,fontWeight:600}}>{p.name}</div>
+                          <div>
+                            <span className={`pill ${p.status==='approved'?'pill-success':''}`} style={{fontSize:10,background:p.status==='approved'?undefined:'rgba(159,27,27,.1)',color:p.status==='approved'?undefined:'var(--burgundy)'}}>
+                              {p.status==='approved'?'✅ Approved':'❌ Rejected'}
+                            </span>
+                          </div>
+                          <div style={{fontSize:11,color:'var(--ink-soft)'}}>
+                            by <strong>{p.approvedBy||p.rejectedBy||'?'}</strong><br/>
+                            {new Date(p.approvedAt||p.rejectedAt||0).toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  </div>
+                  )}
+                </div>
+              );
+            })()}
+            {/* Add user — superadmin only */}
+            {isSuperAdmin&&(
             <div className="card" style={{padding:18,marginBottom:16,maxWidth:520}}>
               <div className="display" style={{fontWeight:700,fontSize:16,marginBottom:12}}>➕ Pre-register a User</div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end'}}>
@@ -3295,12 +3371,20 @@
                 <button className="btn btn-green" onClick={handleAddUser} style={{whiteSpace:'nowrap'}}>Add User</button>
               </div>
             </div>
-            {/* User list */}
-            <div className="card" style={{overflow:'hidden'}}>
-              <div style={{padding:'10px 16px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 170px 100px',gap:8,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em'}}>
-                <span>Name</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Group</span><span style={{textAlign:'right'}}>KO</span><span>Reset PIN</span><span>Rename</span><span>Actions</span><span>Access</span>
+            )}
+            {/* User list — superadmin only */}
+            {isSuperAdmin&&(
+            <div className="card" style={{overflowX:'auto'}}>
+              <div style={{padding:'8px 12px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'flex',alignItems:'center',gap:8,minWidth:860}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 55px 55px 50px 125px 140px 160px 88px 82px',gap:6,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em',flex:1}}>
+                  <span>Name</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Group</span><span style={{textAlign:'right'}}>KO</span><span>Reset PIN</span><span>Rename</span><span>Actions</span><span>Access</span><span>Force</span>
+                </div>
+                <button onClick={handleRefreshUsers} disabled={refreshingUsers} title="Reload user list from Firebase" style={{flexShrink:0,background:'none',border:'1px solid var(--line)',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12,color:'var(--ink-soft)',display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}>
+                  <span style={{display:'inline-block',animation:refreshingUsers?'spin 1s linear infinite':undefined}}>↻</span>
+                  {refreshingUsers?'Refreshing…':'Refresh'}
+                </button>
               </div>
-              {scores.length===0&&<div style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic'}}>No participants yet.</div>}
+              {scores.length===0&&<div style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic',minWidth:860}}>No participants yet.</div>}
               {scores.map((s,i)=>{
                 const isSuspended=(config.suspendedUsers||[]).includes(s.name);
                 const toggleSuspend=()=>{
@@ -3309,7 +3393,7 @@
                   setConfig({...config,suspendedUsers:next});
                 };
                 return(
-                <div key={s.name} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 170px 100px',gap:8,alignItems:'center',background:isSuspended?'rgba(159,27,27,.06)':i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
+                <div key={s.name} style={{padding:'8px 12px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 55px 55px 50px 125px 140px 160px 88px 82px',gap:6,alignItems:'center',minWidth:860,background:isSuspended?'rgba(159,27,27,.06)':i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <span style={{fontSize:14}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':'👤'}</span>
                     <span style={{fontWeight:600,fontSize:13,textDecoration:isSuspended?'line-through':'none',color:isSuspended?'var(--ink-soft)':'inherit'}}>{s.name}</span>
@@ -3343,10 +3427,16 @@
                       {isSuspended?'✅ Restore':'🚫 Suspend'}
                     </button>
                   </div>
+                  <div>
+                    <button onClick={()=>{ if(window.confirm(`Force-refresh ${s.name}'s session? Their page will reload immediately.`)) onForceRefreshUser(s.name); }} title="Force the user's browser to reload immediately" style={{background:'#2980b9',color:'white',border:'none',borderRadius:3,padding:'5px 8px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',width:'100%',whiteSpace:'nowrap'}}>
+                      ⟳ Refresh
+                    </button>
+                  </div>
                 </div>
                 );
               })}
             </div>
+            )}
           </div>
         )}
         {section==='settings'&&(
@@ -3379,6 +3469,27 @@
                   </div>
                 );
               })()}
+            </div>
+            )}
+            {/* Require Approval — superadmin only */}
+            {isSuperAdmin&&(
+            <div className="card" style={{padding:20}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16}}>
+                <div>
+                  <h3 className="display" style={{fontSize:17,fontWeight:700,margin:'0 0 4px'}}>🔐 Require Approval for New Users</h3>
+                  <p style={{fontSize:12,color:'var(--ink-soft)',margin:0}}>New players must be approved by an admin before they can access the app.</p>
+                </div>
+                <button onClick={()=>setConfig({...config,requireApproval:!config.requireApproval})} style={{
+                  position:'relative',width:52,height:28,borderRadius:14,border:'none',cursor:'pointer',
+                  background:config.requireApproval?'var(--forest)':'var(--line)',
+                  transition:'background .2s',flexShrink:0,
+                }}>
+                  <div style={{position:'absolute',top:3,left:config.requireApproval?26:3,width:22,height:22,borderRadius:'50%',background:'white',boxShadow:'0 1px 4px rgba(0,0,0,.25)',transition:'left .2s'}}/>
+                </button>
+              </div>
+              <div style={{marginTop:8,fontSize:11,color:config.requireApproval?'var(--forest)':'var(--ink-soft)',fontWeight:600}}>
+                {config.requireApproval?'✓ Approval required — new users wait in queue (Admin → Users)':'○ Open registration — anyone with the link can join immediately'}
+              </div>
             </div>
             )}
             {/* Chat Toggle — all admins */}
@@ -3472,7 +3583,7 @@
               <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
                 <thead><tr><th style={{textAlign:'left',padding:'4px 8px',color:'var(--ink-soft)'}}>Feature</th><th style={{textAlign:'center',padding:'4px 8px'}}>👑 Super</th><th style={{textAlign:'center',padding:'4px 8px'}}>🔧 Sub</th></tr></thead>
                 <tbody>
-                  {[['Enter group results','✅','✅'],['Enter KO results','✅','✅'],['Enter bonus results','✅','✅'],['Auto-Sync from API','✅','✅'],['Manage users','✅','❌'],['Lock/unlock competition','✅','❌'],['Chat enable/disable','✅','✅'],['Suspend all logins','✅','✅'],['Suspend individual user','✅','❌'],['Change passwords','✅','❌'],].map(([f,s,b])=>(
+                  {[['Enter group results','✅','✅'],['Enter KO results','✅','✅'],['Enter bonus results','✅','✅'],['Auto-Sync from API','✅','✅'],['Approve/reject new users','✅','✅'],['Manage users (add/delete)','✅','❌'],['Lock/unlock competition','✅','❌'],['Require approval toggle','✅','❌'],['Chat enable/disable','✅','✅'],['Suspend all logins','✅','✅'],['Suspend individual user','✅','❌'],['Change passwords','✅','❌'],].map(([f,s,b])=>(
                     <tr key={f} style={{borderBottom:'1px solid var(--line-soft)'}}><td style={{padding:'5px 8px'}}>{f}</td><td style={{textAlign:'center',padding:'5px 8px'}}>{s}</td><td style={{textAlign:'center',padding:'5px 8px'}}>{b}</td></tr>
                   ))}
                 </tbody>
@@ -3554,6 +3665,41 @@
       </div>
     );
   };
+  // ── PENDING APPROVAL SCREEN ──────────────────────────────────────────────
+  const PendingScreen=({name,status,onCancel})=>{
+    return(
+      <div className="app" style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+        <style>{CSS}</style>
+        <div style={{maxWidth:420,width:'100%',textAlign:'center'}}>
+          <div style={{fontSize:56,marginBottom:16}}>{status==='rejected'?'❌':'⏳'}</div>
+          <h2 className="display" style={{fontSize:26,fontWeight:800,margin:'0 0 8px'}}>
+            {status==='rejected'?'Access Declined':'Waiting for Approval'}
+          </h2>
+          {status==='waiting'&&(
+            <>
+              <p style={{color:'var(--ink-soft)',fontSize:14,margin:'0 0 20px',lineHeight:1.6}}>
+                Your request to join as <strong>{name}</strong> has been sent to the admin.<br/>
+                This page will update automatically — no need to refresh.
+              </p>
+              <div style={{display:'flex',justifyContent:'center',gap:8,marginBottom:24}}>
+                <div style={{width:10,height:10,borderRadius:'50%',background:'var(--burgundy)',animation:'liveBlink 1s infinite'}}/>
+                <div style={{width:10,height:10,borderRadius:'50%',background:'var(--burgundy)',animation:'liveBlink 1s .3s infinite'}}/>
+                <div style={{width:10,height:10,borderRadius:'50%',background:'var(--burgundy)',animation:'liveBlink 1s .6s infinite'}}/>
+              </div>
+            </>
+          )}
+          {status==='rejected'&&(
+            <p style={{color:'var(--ink-soft)',fontSize:14,margin:'0 0 24px',lineHeight:1.6}}>
+              Your request to join as <strong>{name}</strong> was declined by the admin.<br/>
+              Please contact the tournament organiser for more information.
+            </p>
+          )}
+          <button className="btn btn-ghost" onClick={onCancel}>← Go Back</button>
+        </div>
+      </div>
+    );
+  };
+
   const LoginScreen = ({onLogin,onGuest,participants,locked,loginSuspended:loginSuspendedProp}) => {
     const[name,setName]=useState('');
     const[pin,setPin]=useState('');
@@ -4039,6 +4185,10 @@
     const[predictions,setPredictions]=useState({group:{},ko:{},bonus:{},joker:{}});
     const[results,setResults]=useState({group:{},ko:{},bonus:{}});
     const[config,setConfig]=useState({locked:false});
+    const[pendingUsers,setPendingUsers]=useState({}); // name → {name,pin,requestedAt,status,approvedBy?,rejectedBy?}
+    const[pendingStatus,setPendingStatus]=useState(null); // null | 'waiting' | 'approved' | 'rejected'
+    const[pendingName,setPendingName]=useState(null);
+    const[pendingPin,setPendingPin]=useState(null);
     const[view,setView]=useState('predictions');
     const[loading,setLoading]=useState(true);
     const[saveStatus,setSaveStatus]=useState('');
@@ -4458,6 +4608,39 @@
       await storage.setJSON('config',newCfg,true);
     },[]);
 
+    const savePendingUsers=useCallback(async(updated)=>{
+      setPendingUsers(updated);
+      if(FB_ON) await db.collection('wc26').doc('pending-users').set({value:JSON.stringify(updated)}).catch(()=>{});
+    },[]);
+
+    const onApprovePending=useCallback(async(name,approverRole)=>{
+      const approverLabel=approverRole==='superadmin'?'Super Admin':'Sub Admin';
+      const updated={...pendingUsers,[name]:{...pendingUsers[name],status:'approved',approvedBy:approverLabel,approvedAt:Date.now()}};
+      // Add to participants + pins immediately
+      const newParts=[...participants,name];
+      const newPins={...userPins,[name]:pendingUsers[name].pin};
+      setParticipants(newParts); setUserPins(newPins);
+      await storage.setJSON('participants',newParts,true);
+      await storage.setJSON('pins',newPins,true);
+      await savePendingUsers(updated);
+    },[pendingUsers,participants,userPins,savePendingUsers]);
+
+    const onRejectPending=useCallback(async(name,approverRole)=>{
+      const approverLabel=approverRole==='superadmin'?'Super Admin':'Sub Admin';
+      const updated={...pendingUsers,[name]:{...pendingUsers[name],status:'rejected',rejectedBy:approverLabel,rejectedAt:Date.now()}};
+      await savePendingUsers(updated);
+    },[pendingUsers,savePendingUsers]);
+
+    const onForceRefreshUser=useCallback(async(name)=>{
+      if(!FB_ON) return;
+      try{
+        const snap=await db.collection('wc26').doc('force-refresh').get();
+        const existing=snap.exists?JSON.parse(snap.data().value||'{}'):{};
+        const updated={...existing,[name]:Date.now()};
+        await db.collection('wc26').doc('force-refresh').set({value:JSON.stringify(updated)});
+      }catch(e){ console.warn('forceRefresh write error:',e); }
+    },[]);
+
     const handleLogin=useCallback(async(name,pin)=>{
       // Check live config for suspension (read fresh from Firestore)
       try{
@@ -4493,6 +4676,24 @@
         if(storedPin&&storedPin!==pin){alert('Incorrect PIN. Try again.');return;}
       } else {
         if(!pin||pin.length<3){alert('Please enter at least a 3-character PIN.');return;}
+        // ── Approval gate ──────────────────────────────────────────────
+        if(config.requireApproval&&FB_ON){
+          // Check if already in pending
+          const existingEntry=pendingUsers[name];
+          if(existingEntry?.status==='pending'){
+            setPendingName(name); setPendingPin(pin); setPendingStatus('waiting'); return;
+          }
+          if(existingEntry?.status==='rejected'){
+            alert('❌ Your access request was declined by the admin.'); return;
+          }
+          // Submit new pending request
+          const updated={...pendingUsers,[name]:{name,pin,requestedAt:Date.now(),status:'pending'}};
+          await db.collection('wc26').doc('pending-users').set({value:JSON.stringify(updated)}).catch(()=>{});
+          setPendingUsers(updated);
+          setPendingName(name); setPendingPin(pin); setPendingStatus('waiting');
+          return;
+        }
+        // ── No approval required — create immediately ──────────────────
         finalParts=[...participants,name];
         const newPins={...userPins,[name]:pin};
         setParticipants(finalParts); setUserPins(newPins);
@@ -4514,6 +4715,49 @@
       setBalloonNotif({name,isNew:!existing,rank,total:finalParts.length,others:finalParts.filter(x=>x!==name)});
     },[participants,userPins]);
 
+    // ── PENDING USERS LISTENER ────────────────────────────────────
+    useEffect(()=>{
+      if(!FB_ON) return;
+      const unsub=db.collection('wc26').doc('pending-users').onSnapshot(snap=>{
+        try{
+          const data=snap.exists?JSON.parse(snap.data().value||'{}'):{};
+          setPendingUsers(data);
+          // If current user is waiting, check if their status changed
+          setPendingStatus(prev=>{
+            if(!pendingName) return prev;
+            const entry=data[pendingName];
+            if(!entry) return prev;
+            if(entry.status==='approved') return 'approved';
+            if(entry.status==='rejected') return 'rejected';
+            return prev;
+          });
+        }catch(_e){}
+      },()=>{});
+      return()=>unsub();
+    },[FB_ON,pendingName]);
+
+    // When approved, auto-complete login
+    useEffect(()=>{
+      if(pendingStatus==='approved'&&pendingName&&pendingPin){
+        (async()=>{
+          const entry=pendingUsers[pendingName];
+          if(!entry) return;
+          const finalParts=[...participants,pendingName];
+          const newPins={...userPins,[pendingName]:pendingPin};
+          setParticipants(finalParts); setUserPins(newPins);
+          await storage.setJSON('participants',finalParts,true);
+          await storage.setJSON('pins',newPins,true);
+          setCurrentUser(pendingName);
+          const p=(await storage.getJSON(`pred-${pendingName}`,true))||{group:{},ko:{},bonus:{},joker:{}};
+          setPredictions(p);
+          setPendingStatus(null); setPendingName(null); setPendingPin(null);
+          setView('predictions');
+          if(FB_ON) db.collection('wc26').doc('presence').set({name:pendingName,type:'join',ts:Date.now()}).catch(()=>{});
+          setBalloonNotif({name:pendingName,isNew:true,rank:finalParts.length,total:finalParts.length,others:finalParts.filter(x=>x!==pendingName)});
+        })();
+      }
+    },[pendingStatus]);// eslint-disable-line
+
     // ── PRESENCE LISTENER: show toast when anyone logs in ────────────
     useEffect(()=>{
       if(!FB_ON||!currentUser) return;
@@ -4529,6 +4773,23 @@
           addToast('presence',{name,loginType});
         }catch(e){ console.warn('Presence listener error:',e); }
       },err=>console.warn('Presence onSnapshot error:',err));
+      return()=>unsub();
+    },[currentUser]);
+
+    // ── FORCE-REFRESH LISTENER: superadmin can trigger a reload for a specific user ──
+    const forceRefreshSessionStart=useRef(Date.now());
+    useEffect(()=>{
+      if(!FB_ON||!currentUser) return;
+      const unsub=db.collection('wc26').doc('force-refresh').onSnapshot(snap=>{
+        try{
+          if(!snap.exists) return;
+          const data=JSON.parse(snap.data().value||'{}');
+          const ts=data[currentUser];
+          if(ts&&ts>forceRefreshSessionStart.current){
+            window.location.reload();
+          }
+        }catch(_e){}
+      },()=>{});
       return()=>unsub();
     },[currentUser]);
 
@@ -4559,7 +4820,9 @@
     );
 
     if(!currentUser) return(
-      <LoginScreen onLogin={handleLogin} onGuest={()=>{setCurrentUser('__guest__');setView('leaderboard');}} participants={participants} locked={config.phase==='complete'||(config.phase==null&&!!config.locked)} loginSuspended={!!config.loginSuspended}/>
+      pendingStatus
+        ? <PendingScreen name={pendingName} status={pendingStatus} onCancel={()=>{setPendingStatus(null);setPendingName(null);setPendingPin(null);}}/>
+        : <LoginScreen onLogin={handleLogin} onGuest={()=>{setCurrentUser('__guest__');setView('leaderboard');}} participants={participants} locked={config.phase==='complete'||(config.phase==null&&!!config.locked)} loginSuspended={!!config.loginSuspended}/>
     );
 
     // ── PHASE-BASED LOCKS ────────────────────────────────────────────
@@ -4608,7 +4871,7 @@
           {view==='browse'&&<ViewErrorBoundary label="Browse Picks"><BrowseView participants={participants} allPredictions={allPredictions} results={results}/></ViewErrorBoundary>}
           {view==='live'&&<ViewErrorBoundary label="Live Data"><LiveDataView adminRole={adminRole}/></ViewErrorBoundary>}
           {view==='rules'&&<ViewErrorBoundary label="Rules"><RulesView/></ViewErrorBoundary>}
-          {view==='admin'&&adminAuthed&&<ViewErrorBoundary label="Admin"><AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws}/></ViewErrorBoundary>}
+          {view==='admin'&&adminAuthed&&<ViewErrorBoundary label="Admin"><AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws} pendingUsers={pendingUsers} onApprovePending={onApprovePending} onRejectPending={onRejectPending} onForceRefreshUser={onForceRefreshUser}/></ViewErrorBoundary>}
         </main>
         <footer style={{borderTop:'1px solid var(--line)',padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>
           {COMP_NAME} · FIFA World Cup 2026 · Built with Passion!
