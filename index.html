@@ -10810,6 +10810,77 @@ const LoginScreen = ({
 };
 
 // ── LIVE MATCH BANNER ─────────────────────────────────────────
+// ── BANNER COUNTDOWN — inline timer for upcoming matches ──────────
+// Shows "Xm Ys" when within 45 min of kickoff, ticks every 1s in last 60s
+function BannerCountdown({
+  kickoffRaw,
+  displayTime,
+  isLocal
+}) {
+  const parseKo = raw => {
+    if (!raw) return NaN;
+    let s = String(raw).trim();
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) s = s.replace(' ', 'T') + '+05:00';
+    return new Date(s).getTime();
+  };
+  const koMs = React.useMemo(() => parseKo(kickoffRaw), [kickoffRaw]);
+  const [now, setNow] = React.useState(() => Date.now());
+  const secsLeft = isNaN(koMs) ? null : (koMs - now) / 1000;
+  const inWindow = secsLeft !== null && secsLeft > 0 && secsLeft <= 45 * 60;
+  const inLastMin = secsLeft !== null && secsLeft <= 60 && secsLeft > 0;
+  React.useEffect(() => {
+    if (!inWindow) return;
+    const t = setInterval(() => setNow(Date.now()), inLastMin ? 1000 : 15000);
+    return () => clearInterval(t);
+  }, [inWindow, inLastMin]);
+  if (!inWindow) {
+    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: '#f0932b',
+        marginLeft: 3,
+        fontFamily: 'monospace',
+        fontWeight: 700
+      }
+    }, displayTime), isLocal && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 8,
+        color: 'rgba(255,255,255,.4)',
+        marginLeft: 1
+      }
+    }, "local"));
+  }
+  const totalSec = Math.max(0, secsLeft);
+  const m = Math.floor(totalSec / 60),
+    s = Math.floor(totalSec % 60);
+  const cdStr = m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
+  const urgent = secsLeft <= 60;
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      marginLeft: 3
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: 'rgba(255,255,255,.45)',
+      fontFamily: 'monospace'
+    }
+  }, displayTime), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      fontFamily: 'monospace',
+      fontWeight: 800,
+      color: urgent ? '#e74c3c' : '#2ecc71',
+      background: urgent ? 'rgba(231,76,60,.2)' : 'rgba(46,204,113,.15)',
+      padding: '1px 5px',
+      borderRadius: 3,
+      animation: urgent ? 'liveBlink .8s ease-in-out infinite' : 'none'
+    }
+  }, "⏱ ", cdStr));
+}
 const LiveMatchBanner = ({
   matches,
   loading,
@@ -11059,22 +11130,11 @@ const LiveMatchBanner = ({
           color: 'rgba(255,255,255,.5)',
           margin: '0 2px'
         }
-      }, "vs"), teamBtn(a), /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[a] || '⚽'), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          color: '#f0932b',
-          marginLeft: 3,
-          fontFamily: 'monospace',
-          fontWeight: 700
-        }
-      }, displayTime), isLocal && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 8,
-          color: 'rgba(255,255,255,.4)',
-          marginLeft: 1
-        },
-        title: "Local time"
-      }, "local"));
+      }, "vs"), teamBtn(a), /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[a] || '⚽'), /*#__PURE__*/React.createElement(BannerCountdown, {
+        kickoffRaw: kickoffOf(m),
+        displayTime: displayTime,
+        isLocal: isLocal
+      }));
     };
     const Divider = () => /*#__PURE__*/React.createElement("span", {
       style: {
