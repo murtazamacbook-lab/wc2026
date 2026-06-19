@@ -811,6 +811,9 @@
       const m=Math.floor(totalSec/60),s=Math.floor(totalSec%60);
       return m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m ${String(s).padStart(2,'0')}s`;
     })():null;
+    // Label as LIVE only within a realistic live window; otherwise keep a generic locked state.
+    const liveWindowMs=170*60*1000;
+    const isLikelyLive=!!kickoffMs&&nowMs>=kickoffMs&&nowMs<=kickoffMs+liveWindowMs;
     const ph=pred?.h??'',pa=pred?.a??'';
     const correct=resultLocked&&String(ph)===String(actual.h)&&String(pa)===String(actual.a);
     const underdog=getUnderdog(match.home,match.away);
@@ -840,7 +843,11 @@
           <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'2px 0 6px',borderBottom:'1px solid var(--line-soft)',background:jBg,marginTop:-1}}>
             {jokerMultiplier>1&&<span style={{fontSize:9,fontWeight:800,color:jColor,background:jokerMultiplier===3?'rgba(159,27,27,.1)':'rgba(214,137,42,.15)',padding:'1px 5px',borderRadius:3}}>{jokerMultiplier}× JOKER</span>}
             {showCountdown&&<span style={{fontSize:9,fontWeight:800,color:'#d4890a',background:'rgba(212,136,10,.12)',padding:'1px 6px',borderRadius:3}}>⏱ Locks in {countdownStr}</span>}
-            {matchLocked&&!resultLocked&&<span style={{fontSize:9,fontWeight:800,color:'#e74c3c',background:'rgba(231,76,60,.1)',padding:'1px 5px',borderRadius:3}}>🔴 LIVE / LOCKED</span>}
+            {matchLocked&&!resultLocked&&(
+              <span style={{fontSize:9,fontWeight:800,color:isLikelyLive?'#e74c3c':'var(--ink-soft)',background:isLikelyLive?'rgba(231,76,60,.1)':'rgba(0,0,0,.06)',padding:'1px 5px',borderRadius:3}}>
+                {isLikelyLive?'🔴 LIVE / LOCKED':'🔒 LOCKED'}
+              </span>
+            )}
             {resultLocked&&(
               <>
                 <span style={{fontSize:10,color:'var(--ink-soft)'}}>Result:</span>
@@ -1993,7 +2000,7 @@
 
     return(
       <div style={{maxWidth:900,margin:'0 auto',padding:'24px 16px'}}>
-        <SectionHeader kicker="Tournament" title="FIFA 2026 Record" subtitle="Read-only — fetches live tournament data."/>
+        <SectionHeader kicker="Tournament" title="FIFA 2026 Record" subtitle="Read-only — Read-only — fetches live tournament data."/>
         {/* Raw JSON debug modal */}
         {rawDebug&&(
           <div style={{position:'fixed',inset:0,zIndex:12000,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={()=>setRawDebug(null)}>
@@ -2081,7 +2088,7 @@
         ):(
           <div style={{marginBottom:20}}>
             <div style={{fontSize:11,color:'var(--ink-soft)',marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-              <span>📦 Data cached by admin — click to load from Database</span>
+              <span>📦 Data cached by admin — click to load from Firestore</span>
             </div>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
               {[
