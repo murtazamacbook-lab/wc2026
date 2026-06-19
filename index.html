@@ -158,6 +158,7 @@
     });
     return m;
   })();
+  const ALL_TEAMS = GROUP_KEYS.flatMap(g=>GROUPS[g]);
   // Pre-built index: group letter → match list (avoids 72-item filter on every render)
   const GROUP_MATCHES_BY_GROUP = GROUP_KEYS.reduce((acc,g)=>{ acc[g]=GROUP_MATCHES.filter(m=>m.group===g); return acc; },{});
 
@@ -648,8 +649,17 @@
   @keyframes excitePulse{0%,100%{box-shadow:0 4px 20px rgba(231,76,60,.45)}50%{box-shadow:0 4px 28px rgba(231,76,60,.85),0 0 0 6px rgba(231,76,60,.18)}}
   @keyframes meterShimmer{0%{background-position:200% center}100%{background-position:-200% center}}
   .fadein{animation:fadein .25s ease}
+  .main-shell{display:flex;align-items:flex-start;gap:16px}
+  .main-primary{flex:1;min-width:0}
+  .support-wall{width:320px;max-height:calc(100vh - 140px);position:sticky;top:84px;display:flex;flex-direction:column;overflow:hidden}
+  .support-list{padding:10px;overflow:auto}
+  .support-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--line-soft)}
+  .support-row:last-child{border-bottom:none}
+  .support-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+  .support-btn.active{background:rgba(27,94,63,.11);border-color:rgba(27,94,63,.35);color:var(--forest)}
   a{color:var(--burgundy);text-decoration:none}
   a:hover{text-decoration:underline}
+  @media(max-width:1100px){.main-shell{flex-direction:column}.support-wall{width:100%;max-height:none;position:static;top:auto}}
   @media(max-width:640px){.input-score{width:36px;height:36px;font-size:14px}.group-letter{font-size:36px}}
   `;
 
@@ -1554,6 +1564,65 @@
       </div>
     </div>
   );
+
+  // ── TEAM SUPPORT WALL ───────────────────────────────────────────
+  const SupportWall = React.memo(({supportByUser,currentSupportTeam,onToggle}) => {
+    const counts = useMemo(()=>{
+      const c={};
+      ALL_TEAMS.forEach(t=>{ c[t]=0; });
+      Object.values(supportByUser||{}).forEach(t=>{ if(c[t]!=null) c[t]++; });
+      return c;
+    },[supportByUser]);
+    const totalVotes = Object.keys(supportByUser||{}).length;
+    const top5 = useMemo(()=>
+      ALL_TEAMS.map(t=>({team:t,count:counts[t]||0}))
+        .filter(x=>x.count>0).sort((a,b)=>b.count-a.count).slice(0,5)
+    ,[counts]);
+    const maxCount = top5.length>0 ? top5[0].count : 1;
+
+    return(
+      <aside className="card support-wall">
+        <div style={{padding:'12px 14px',borderBottom:'1px solid var(--line)',background:'linear-gradient(180deg,var(--cream2),var(--paper))'}}>
+          <div className="micro-caps">Fan Zone</div>
+          <div className="display" style={{fontSize:19,fontWeight:700,marginTop:2}}>Support Your Country</div>
+          <div style={{fontSize:12,color:'var(--ink-soft)',marginTop:4}}>{totalVotes} total supporters · one active pick per user</div>
+        </div>
+        {top5.length>0&&(
+        <div style={{padding:'10px 14px',borderBottom:'1px solid var(--line)',background:'var(--cream2)'}}>
+          <div className="micro-caps" style={{marginBottom:8}}>🏆 Top Supported</div>
+          {top5.map((x,i)=>(
+            <div key={x.team} style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}>
+              <span style={{fontSize:11,fontWeight:700,color:'var(--ink-soft)',minWidth:14,textAlign:'right'}}>{i+1}</span>
+              <Flag team={x.team} size={15}/>
+              <span style={{fontSize:12,fontWeight:600,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.team}</span>
+              <div style={{flex:'0 0 72px',height:6,background:'var(--line)',borderRadius:3,overflow:'hidden'}}>
+                <div style={{height:'100%',borderRadius:3,width:`${Math.round((x.count/maxCount)*100)}%`,transition:'width .4s',background:i===0?'var(--amber)':i===1?'#9b9087':i===2?'#8b6e4e':'var(--burgundy)'}}/>
+              </div>
+              <span className="mono" style={{fontSize:11,fontWeight:700,minWidth:16,textAlign:'right',color:'var(--ink-soft)'}}>{x.count}</span>
+            </div>
+          ))}
+        </div>
+        )}
+        <div className="support-list scrollbar">
+          {ALL_TEAMS.map(team=>{
+            const active=currentSupportTeam===team;
+            return(
+              <div key={team} className="support-row">
+                <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+                  <Flag team={team} size={18}/>
+                  <span style={{fontSize:13,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{team}</span>
+                </div>
+                <button className={`support-btn ${active?'active':''}`} onClick={()=>onToggle(team)} title={active?'Remove support':'Show support'}>
+                  <span>{active?'💚':'👍'}</span>
+                  <span className="mono">{counts[team]||0}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
+    );
+  });
 
   // ── BROWSE VIEW ──────────────────────────────────────────────────
   const BrowseView = React.memo(({participants,allPredictions,results}) => {
@@ -3973,7 +4042,7 @@
   };
 
   // ── HEADER ───────────────────────────────────────────────────────
-  const Header = ({user,onLogout,view,setView,saveStatus,locked}) => (
+  const Header = ({user,onLogout,view,setView,saveStatus,locked,supportTeam}) => (
     <header style={{borderBottom:'1px solid var(--line)',background:'var(--paper)',position:'sticky',top:0,zIndex:10}}>
       <div style={{maxWidth:1100,margin:'0 auto',padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div>
@@ -3984,7 +4053,10 @@
           {saveStatus==='saving'&&<span className="pill"><RefreshCw size={11}/> Saving</span>}
           {saveStatus==='saved'&&<span className="pill pill-success"><Check size={11}/> Saved</span>}
           <Avatar name={user} size={28}/>
-          <div style={{fontWeight:600}}>{user==='__guest__'?'Guest':user}</div>
+          <div style={{fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
+            {user==='__guest__'?'Guest':user}
+            {supportTeam&&<span title={`Supporting ${supportTeam}`} style={{display:'inline-flex',alignItems:'center',gap:3,background:'rgba(27,94,63,.1)',border:'1px solid rgba(27,94,63,.25)',borderRadius:999,padding:'1px 7px 1px 4px',fontSize:11,fontWeight:700,color:'var(--forest)'}}><Flag team={supportTeam} size={14}/>{teamShort(supportTeam)}</span>}
+          </div>
           <button style={{background:'none',border:'none',padding:6,color:'var(--ink-soft)',cursor:'pointer'}} onClick={onLogout} title="Sign out"><LogOut size={16}/></button>
         </div>
       </div>
@@ -4206,6 +4278,7 @@
     const[winnerNotif,setWinnerNotif]=useState(null);
     const[balloonNotif,setBalloonNotif]=useState(null);
     const[goalNotif,setGoalNotif]=useState(null);
+    const[supportByUser,setSupportByUser]=useState({});
     const prevLiveScoresRef=useRef(new Map());
     const[liveMatches,setLiveMatches]=useState([]); // live + today's upcoming matches
     const[manualLiveRows,setManualLiveRows]=useState([]); // admin manual override rows
@@ -4274,6 +4347,20 @@
       setToasts(prev=>[...prev.slice(-2),{id,type,...data}]); // max 3
       setTimeout(()=>setToasts(prev=>prev.filter(t=>t.id!==id)),5000);
     },[]);
+
+    const getSupporterId=useCallback(()=>{
+      if(currentUser&&currentUser!=='__guest__') return currentUser;
+      let id=lsGet('support-guest-id');
+      if(!id){
+        id=`guest-${Math.random().toString(36).slice(2,10)}`;
+        lsSet('support-guest-id',id);
+      }
+      return id;
+    },[currentUser]);
+    const currentSupportTeam=useMemo(()=>{
+      const id=getSupporterId();
+      return (supportByUser&&id&&supportByUser[id])||null;
+    },[supportByUser,getSupporterId]);
     const presenceSessionStart=useRef(Date.now()); // ignore events before this session
     const autoSyncRef=useRef(null); // interval id
     const POLL_INTERVAL_MS=3600000; // poll every 1 hour
@@ -4434,6 +4521,38 @@
         setLiveLoading(false);
       })();
     },[]);
+
+    // ── SUPPORT WALL LISTENER ──────────────────────────────────────
+    useEffect(()=>{
+      const cached=lsGet('support-wall');
+      if(cached&&cached.byUser&&typeof cached.byUser==='object') setSupportByUser(cached.byUser);
+      if(!FB_ON) return;
+      const unsub=db.collection('wc26').doc('support-wall').onSnapshot(snap=>{
+        try{
+          const d=snap.exists?JSON.parse(snap.data().value||'{}'):{};
+          const byUser=d.byUser&&typeof d.byUser==='object'?d.byUser:{};
+          setSupportByUser(byUser);
+          lsSet('support-wall',{byUser});
+        }catch(_e){}
+      },()=>{});
+      return()=>unsub();
+    },[]);
+
+    const supportCooldownRef=useRef(0);
+    const onToggleSupport=useCallback(async(team)=>{
+      const now=Date.now();
+      if(now-supportCooldownRef.current<2000) return; // 2s anti-spam cooldown
+      supportCooldownRef.current=now;
+      const supporterId=getSupporterId();
+      const next={...(supportByUser||{})};
+      if(next[supporterId]===team) delete next[supporterId];
+      else next[supporterId]=team;
+      setSupportByUser(next);
+      lsSet('support-wall',{byUser:next});
+      if(FB_ON){
+        await db.collection('wc26').doc('support-wall').set({value:JSON.stringify({byUser:next,updatedAt:Date.now()})}).catch(()=>{});
+      }
+    },[supportByUser,getSupporterId]);
 
     // ── BANNER AUTO-REFRESH every 60 seconds (ESPN primary, cache fallback) ──
     useEffect(()=>{
@@ -4858,7 +4977,7 @@
     return(
       <div className="app">
         <style>{CSS}</style>
-        <Header user={currentUser} onLogout={handleLogout} view={view} setView={v=>{if(v==='admin'&&!adminAuthed&&v!==view){handleAdminLogin(prompt('Admin password:'));return;}setView(v);}} saveStatus={saveStatus} locked={locked}/>
+        <Header user={currentUser} onLogout={handleLogout} view={view} setView={v=>{if(v==='admin'&&!adminAuthed&&v!==view){handleAdminLogin(prompt('Admin password:'));return;}setView(v);}} saveStatus={saveStatus} locked={locked} supportTeam={currentSupportTeam}/>
         <LiveMatchBanner matches={mergedLiveMatches} loading={liveLoading} onTeamClick={handleBannerTeamClick}/>
         {phase==='ko'&&view!=='admin'&&(
           <div style={{background:'linear-gradient(90deg,#1a6b3c,#1e8449)',color:'white',textAlign:'center',padding:'9px 16px',fontSize:13,fontWeight:700,letterSpacing:'0.02em'}}>
@@ -4870,15 +4989,20 @@
             🔒 COMPETITION LOCKED — predictions are now closed. Good luck!
           </div>
         )}
-        <main style={{maxWidth:1100,margin:'0 auto',padding:'24px 16px 80px'}}>
-          {view==='predictions'&&!isGuest&&<ViewErrorBoundary label="Group Stage"><PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={groupLocked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup}/></ViewErrorBoundary>}
-          {view==='bracket'&&!isGuest&&<ViewErrorBoundary label="Bracket"><BracketView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/></ViewErrorBoundary>}
-          {view==='bonus'&&!isGuest&&<ViewErrorBoundary label="Bonus Picks"><BonusView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/></ViewErrorBoundary>}
-          {view==='leaderboard'&&<ViewErrorBoundary label="Leaderboard"><LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/></ViewErrorBoundary>}
-          {view==='browse'&&<ViewErrorBoundary label="Browse Picks"><BrowseView participants={participants} allPredictions={allPredictions} results={results}/></ViewErrorBoundary>}
-          {view==='live'&&<ViewErrorBoundary label="Live Data"><LiveDataView adminRole={adminRole}/></ViewErrorBoundary>}
-          {view==='rules'&&<ViewErrorBoundary label="Rules"><RulesView/></ViewErrorBoundary>}
-          {view==='admin'&&adminAuthed&&<ViewErrorBoundary label="Admin"><AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws} pendingUsers={pendingUsers} onApprovePending={onApprovePending} onRejectPending={onRejectPending} onForceRefreshUser={onForceRefreshUser}/></ViewErrorBoundary>}
+        <main style={{maxWidth:1420,margin:'0 auto',padding:'24px 16px 80px'}}>
+          <div className="main-shell">
+            <div className="main-primary">
+              {view==='predictions'&&!isGuest&&<ViewErrorBoundary label="Group Stage"><PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={groupLocked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup}/></ViewErrorBoundary>}
+              {view==='bracket'&&!isGuest&&<ViewErrorBoundary label="Bracket"><BracketView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/></ViewErrorBoundary>}
+              {view==='bonus'&&!isGuest&&<ViewErrorBoundary label="Bonus Picks"><BonusView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/></ViewErrorBoundary>}
+              {view==='leaderboard'&&<ViewErrorBoundary label="Leaderboard"><LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/></ViewErrorBoundary>}
+              {view==='browse'&&<ViewErrorBoundary label="Browse Picks"><BrowseView participants={participants} allPredictions={allPredictions} results={results}/></ViewErrorBoundary>}
+              {view==='live'&&<ViewErrorBoundary label="Live Data"><LiveDataView adminRole={adminRole}/></ViewErrorBoundary>}
+              {view==='rules'&&<ViewErrorBoundary label="Rules"><RulesView/></ViewErrorBoundary>}
+              {view==='admin'&&adminAuthed&&<ViewErrorBoundary label="Admin"><AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws} pendingUsers={pendingUsers} onApprovePending={onApprovePending} onRejectPending={onRejectPending} onForceRefreshUser={onForceRefreshUser}/></ViewErrorBoundary>}
+            </div>
+            {view!=='admin'&&<SupportWall supportByUser={supportByUser} currentSupportTeam={currentSupportTeam} onToggle={onToggleSupport}/>}
+          </div>
         </main>
         <footer style={{borderTop:'1px solid var(--line)',padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>
           {COMP_NAME} · FIFA World Cup 2026 · Built with Passion!
