@@ -12,9 +12,9 @@
   <!-- Firebase 8 -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-  <!-- React 18 (jsdelivr CDN) -->
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- React 18 (production) -->
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js?v=1"></script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js?v=1"></script>
   <!-- Babel (react preset only — faster parse than full standalone) -->
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
 </head>
@@ -77,6 +77,18 @@
   const DEFAULT_SUPER_PW  = window.__ADMIN_PW     || 'admin2026';
   const DEFAULT_SUB_PW    = window.__SUBADMIN_PW  || 'subadmin2026';
   const FUNC_BASE = window.__FUNC_BASE || ''; // e.g. https://<project>.cloudfunctions.net
+
+  // ── GLOBAL SAFETY NET: catch async errors that bypass ErrorBoundary ─────
+  window.addEventListener('unhandledrejection',e=>{
+    const msg=String(e?.reason?.message||e?.reason||'');
+    if(msg.includes('Firebase')||msg.includes('fetch')||msg.includes('network')||msg.includes('Failed to fetch')||msg.includes('timeout')) return;
+    console.warn('[wc26] Unhandled async error:',e.reason);
+    e.preventDefault();
+  });
+  window.addEventListener('error',e=>{
+    if(!e.filename||e.filename===''||e.filename==='null') e.preventDefault();
+  });
+  window.__wc26Errors=[];
 
   // ── STORAGE (Firebase + localStorage fallback) ──────────────────
   const fbTimeout = (promise, ms=3000) => Promise.race([
@@ -1828,8 +1840,9 @@
     const fetchESPN=async(panelKey)=>{
       setLoadingPanel('espn-'+panelKey);
       try{
-        const todayStr=new Date().toISOString().slice(0,10).replace(/-/g,'');
-        const tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10).replace(/-/g,'');
+      const localDateStr=d=>d.getFullYear().toString()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+        const todayStr=localDateStr(new Date());
+        const tomorrowStr=localDateStr(new Date(Date.now()+86400000));
         if(panelKey==='live'||panelKey==='upcoming'){
           const [r1,r2]=await Promise.all([
             fetch(`${ESPN_BASE}/scoreboard?dates=${todayStr}`).then(r=>r.json()),
@@ -3562,13 +3575,12 @@
             </>
           )}
           {upcoming.length>0&&(()=>{
-              const todayLocal=new Date().toLocaleDateString('sv');
-              const tomorrowLocal=new Date(Date.now()+86400000).toLocaleDateString('sv');
               const kickoffOf=m=>m.kickoff??m.datetime??m.matchDate??m.date??m.time;
-              const toLocalDate=v=>v?new Date(v).toLocaleDateString('sv'):'';
-              const todayGames=upcoming.filter(m=>toLocalDate(kickoffOf(m))===todayLocal);
-              const tomorrowGames=upcoming.filter(m=>toLocalDate(kickoffOf(m))===tomorrowLocal);
-              const laterGames=upcoming.filter(m=>{const d=toLocalDate(kickoffOf(m));return d!==todayLocal&&d!==tomorrowLocal;});
+              // Use formatMatchTime for Today/Tomorrow classification — same logic as the time display
+              const getDateLabel=v=>{ const {date}=formatMatchTime(v); return date; };
+              const todayGames=upcoming.filter(m=>getDateLabel(kickoffOf(m))==='Today');
+              const tomorrowGames=upcoming.filter(m=>getDateLabel(kickoffOf(m))==='Tomorrow');
+              const laterGames=upcoming.filter(m=>{const d=getDateLabel(kickoffOf(m));return d!=='Today'&&d!=='Tomorrow';});
               const matchCard=(m,i)=>{
                 const h=tn(m.home||m.homeTeam||m.home_team), a=tn(m.away||m.awayTeam||m.away_team);
                 const dt=String(kickoffOf(m)??'').slice(11,16)||'TBD';
@@ -3857,14 +3869,20 @@
     const[jumpToGroup,setJumpToGroup]=useState(null); // group letter to jump to in PredictionsView
     // Tick every 30 s so lockedMatchIds recomputes near kickoff even if liveMatches hasn't changed
     const[nowMs,setNowMs]=useState(()=>Date.now());
-    useEffect(()=>{ const t=setInterval(()=>setNowMs(Date.now()),30000); return()=>clearInterval(t); },[]);
+    useEffect(()=>{ const t=setInterval(()=>{ if(document.visibilityState!=='hidden') setNowMs(Date.now()); },30000); return()=>clearInterval(t); },[]);
 
-    // ── MANUAL LIVE OVERRIDE: read from Firestore every 30 s ─────────
+    // ── MANUAL LIVE OVERRIDE: listen once via onSnapshot instead of polling ──
     useEffect(()=>{
-      const load=()=>storage.getShared('manual-live').then(d=>{ if(d&&Array.isArray(d.rows)) setManualLiveRows(d.rows); }).catch(()=>{});
-      load();
-      const t=setInterval(load,30000);
-      return()=>clearInterval(t);
+      if(!FB_ON) return;
+      // onSnapshot counts as 1 read on connect + 1 per change — far cheaper than 30s polling
+      const unsub=db.collection('wc26').doc('manual-live').onSnapshot(snap=>{
+        try{
+          if(!snap.exists) return;
+          const d=snap.data()?.value?JSON.parse(snap.data().value):snap.data();
+          if(d&&Array.isArray(d.rows)) setManualLiveRows(d.rows);
+        }catch(e){ console.warn('manual-live snapshot error:',e); }
+      },err=>console.warn('manual-live onSnapshot error:',err));
+      return()=>unsub();
     },[]);
 
     // Merge manual overrides into liveMatches with priority over API data
@@ -3988,13 +4006,7 @@
           if(Object.keys(newGR).length===0){return;} // nothing to save
           await storage.setJSON('results',newResults,true);
           setResults(newResults);
-          // Refresh allPredictions so leaderboard recalculates
-          try{
-            const predResults=await Promise.all(participants.map(async p=>({p,data:await storage.getJSON(`pred-${p}`,true)})));
-            const all={};
-            predResults.forEach(({p,data})=>{ if(data) all[p]=data; });
-            setAllPredictions(all);
-          }catch(e){}
+          // No prediction re-read — leaderboard useMemo recomputes from existing allPredictions state
           // 4. Refresh live match banner
           try{
             const liveUrl=FUNC_BASE?`${FUNC_BASE}/proxy?ep=live`:`https://${API_HOST}/live`;
@@ -4017,8 +4029,9 @@
       const initialTimer=setTimeout(fetchAndImport,5000);
       // Recurring poll
       autoSyncRef.current=setInterval(fetchAndImport,POLL_INTERVAL_MS);
-      // Re-fetch immediately when tab becomes visible again
-      const onVisible=()=>{ if(document.visibilityState==='visible') fetchAndImport(); };
+      // Re-fetch when tab becomes visible again — throttled: minimum 60s between fetches
+      let lastFetchTs=0;
+      const onVisible=()=>{ if(document.visibilityState==='visible'&&Date.now()-lastFetchTs>60000){ lastFetchTs=Date.now(); fetchAndImport(); } };
       document.addEventListener('visibilitychange',onVisible);
       return()=>{
         clearTimeout(initialTimer);
@@ -4059,10 +4072,18 @@
       setLiveLoading(true);
       (async()=>{
         try{
-          const todayStr=new Date().toISOString().slice(0,10).replace(/-/g,'');
-          const tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10).replace(/-/g,'');
-          const [r1,r2]=await Promise.all([fetch(`${ESPN_SB}?dates=${todayStr}`).then(r=>r.json()),fetch(`${ESPN_SB}?dates=${tomorrowStr}`).then(r=>r.json())]);
-          const all=[...(r1.events||[]),...(r2.events||[])].map(ev=>espnToMatch(ev.competitions?.[0])).filter(Boolean);
+          // Use LOCAL date strings — ESPN API uses local event dates, not UTC
+          const localDateStr=d=>d.getFullYear().toString()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+          const now=new Date();
+          const yStr=localDateStr(new Date(now.getTime()-86400000));
+          const tStr=localDateStr(now);
+          const tmStr=localDateStr(new Date(now.getTime()+86400000));
+          const [r0,r1,r2]=await Promise.all([
+            fetch(`${ESPN_SB}?dates=${yStr}`).then(r=>r.json()).catch(()=>({})),
+            fetch(`${ESPN_SB}?dates=${tStr}`).then(r=>r.json()),
+            fetch(`${ESPN_SB}?dates=${tmStr}`).then(r=>r.json())
+          ]);
+          const all=[...(r0.events||[]),...(r1.events||[]),...(r2.events||[])].map(ev=>espnToMatch(ev.competitions?.[0])).filter(Boolean);
           if(all.length>0){setLiveMatches(all);setLiveLoading(false);return;}
         }catch{}
         await loadFromCache();
@@ -4090,11 +4111,19 @@
         return{home:normTeam(hC.team?.displayName||''),away:normTeam(aC.team?.displayName||''),homeScore:hC.score??'',awayScore:aC.score??'',minute:min||'',status,kickoff:comp.date||null};
       };
       const refreshBanner=async()=>{
+        if(document.visibilityState==='hidden') return; // skip while tab not visible
         try{
-          const todayStr=new Date().toISOString().slice(0,10).replace(/-/g,'');
-          const tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10).replace(/-/g,'');
-          const [r1,r2]=await Promise.all([fetch(`${ESPN_SB}?dates=${todayStr}`).then(r=>r.json()).catch(()=>({})),fetch(`${ESPN_SB}?dates=${tomorrowStr}`).then(r=>r.json()).catch(()=>({}))]);
-          const all=[...(r1.events||[]),...(r2.events||[])].map(ev=>espnToMatch(ev.competitions?.[0])).filter(Boolean);
+          const localDateStr=d=>d.getFullYear().toString()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+          const now=new Date();
+          const yStr=localDateStr(new Date(now.getTime()-86400000));
+          const tStr=localDateStr(now);
+          const tmStr=localDateStr(new Date(now.getTime()+86400000));
+          const [r0,r1,r2]=await Promise.all([
+            fetch(`${ESPN_SB}?dates=${yStr}`).then(r=>r.json()).catch(()=>({})),
+            fetch(`${ESPN_SB}?dates=${tStr}`).then(r=>r.json()).catch(()=>({})),
+            fetch(`${ESPN_SB}?dates=${tmStr}`).then(r=>r.json()).catch(()=>({}))
+          ]);
+          const all=[...(r0.events||[]),...(r1.events||[]),...(r2.events||[])].map(ev=>espnToMatch(ev.competitions?.[0])).filter(Boolean);
           if(all.length>0){setLiveMatches(all);return;}
         }catch{}
         // ESPN failed — fall back to Firestore cache
@@ -4191,8 +4220,8 @@
         const all={};
         partList.forEach(p=>{ const d=lsGet(`pred-${p}`); if(d) all[p]=d; });
         setAllPredictions(all);
-      }catch(e){ console.error('Init (local) error:',e); }
-      setLoading(false); // ← unblocks page immediately
+      }catch(e){ console.warn('Init (local) error:',e); }
+      setLoading(false); // always called — catch above is safe (no circular refs)
 
       // Phase 2: refresh from Firebase in background (non-blocking)
       if(!FB_ON) return;
@@ -4202,24 +4231,18 @@
           const snaps = await Promise.all(keys.map(k=>fbTimeout(db.collection('wc26').doc(k).get()).catch(()=>null)));
           const vals={};
           snaps.forEach((snap,i)=>{
-            if(snap?.exists){ try{ vals[keys[i]]=JSON.parse(snap.data().value); lsSet(keys[i],vals[keys[i]]); }catch{} }
+            if(snap?.exists){ try{ vals[keys[i]]=JSON.parse(snap.data().value); lsSet(keys[i],vals[keys[i]]); }catch(_e){} }
           });
           if(vals['participants']) setParticipants(vals['participants']);
           if(vals['pins']) setUserPins(vals['pins']);
           if(vals['results']) setResults(vals['results']);
           if(vals['config']) setConfig(vals['config']);
           if(vals['admin-pws']){ const pws=vals['admin-pws']; if(pws.super||pws.sub) setAdminPws(p=>({...p,...pws})); }
-          // Reload per-user predictions
+          // Load per-user predictions from localStorage only (avoid N Firestore reads on every login)
+          // Predictions are written to localStorage on every save, so this is always fresh
           const parts = vals['participants']||lsGet('participants')||[];
-          const predResults = await Promise.all(parts.map(async p=>{
-            try{
-              const snap = await fbTimeout(db.collection('wc26').doc(`pred-${p}`).get()).catch(()=>null);
-              if(snap?.exists){ const d=JSON.parse(snap.data().value); lsSet(`pred-${p}`,d); return {p,data:d}; }
-            }catch{}
-            return {p,data:lsGet(`pred-${p}`)};
-          }));
           const all={};
-          predResults.forEach(({p,data})=>{ if(data) all[p]=data; });
+          parts.forEach(p=>{ const d=lsGet(`pred-${p}`); if(d) all[p]=d; });
           setAllPredictions(all);
         }catch(e){ console.warn('Firebase bg sync error:',e); }
       })();
@@ -4238,14 +4261,9 @@
     const saveResults=useCallback(async newRes=>{
       setResults(newRes);
       await storage.setJSON('results',newRes,true);
-      // Refresh allPredictions so leaderboard scores are always current
-      try{
-        const predResults=await Promise.all(participants.map(async p=>({p,data:await storage.getJSON(`pred-${p}`,true)})));
-        const all={};
-        predResults.forEach(({p,data})=>{if(data) all[p]=data;});
-        setAllPredictions(all);
-      }catch(e){}
-    },[participants]);
+      // allPredictions already in state — no need to re-read from Firebase
+      // (leaderboard recomputes via useMemo when results state changes)
+    },[]);
 
     const saveConfig=useCallback(async newCfg=>{
       setConfig(newCfg);
@@ -4368,14 +4386,14 @@
           </div>
         )}
         <main style={{maxWidth:1100,margin:'0 auto',padding:'24px 16px 80px'}}>
-          {view==='predictions'&&!isGuest&&<PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={groupLocked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup}/>}
-          {view==='bracket'&&!isGuest&&<BracketView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/>}
-          {view==='bonus'&&!isGuest&&<BonusView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/>}
-          {view==='leaderboard'&&<LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/>}
-          {view==='browse'&&<BrowseView participants={participants} allPredictions={allPredictions} results={results}/>}
-          {view==='live'&&<LiveDataView adminRole={adminRole}/>}
-          {view==='rules'&&<RulesView/>}
-          {view==='admin'&&adminAuthed&&<AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws}/>}
+          {view==='predictions'&&!isGuest&&<ViewErrorBoundary label="Group Stage"><PredictionsView predictions={predictions} onSave={savePredictions} results={results} locked={groupLocked} lockedMatchIds={lockedMatchIds} kickoffTimes={kickoffTimes} jumpToGroup={jumpToGroup}/></ViewErrorBoundary>}
+          {view==='bracket'&&!isGuest&&<ViewErrorBoundary label="Bracket"><BracketView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/></ViewErrorBoundary>}
+          {view==='bonus'&&!isGuest&&<ViewErrorBoundary label="Bonus Picks"><BonusView predictions={predictions} onSave={savePredictions} results={results} locked={koLocked}/></ViewErrorBoundary>}
+          {view==='leaderboard'&&<ViewErrorBoundary label="Leaderboard"><LeaderboardView participants={isGuest?participants:participants.includes(currentUser)?participants:[...participants,currentUser]} allPredictions={isGuest?allPredictions:{...allPredictions,[currentUser]:predictions}} results={results}/></ViewErrorBoundary>}
+          {view==='browse'&&<ViewErrorBoundary label="Browse Picks"><BrowseView participants={participants} allPredictions={allPredictions} results={results}/></ViewErrorBoundary>}
+          {view==='live'&&<ViewErrorBoundary label="Live Data"><LiveDataView adminRole={adminRole}/></ViewErrorBoundary>}
+          {view==='rules'&&<ViewErrorBoundary label="Rules"><RulesView/></ViewErrorBoundary>}
+          {view==='admin'&&adminAuthed&&<ViewErrorBoundary label="Admin"><AdminView results={results} onSave={saveResults} config={config} setConfig={saveConfig} participants={participants} setParticipants={setParticipants} userPins={userPins} setUserPins={setUserPins} allPredictions={allPredictions} setAllPredictions={setAllPredictions} adminRole={adminRole} adminPws={adminPws} saveAdminPws={saveAdminPws}/></ViewErrorBoundary>}
         </main>
         <footer style={{borderTop:'1px solid var(--line)',padding:16,textAlign:'center',fontSize:12,color:'var(--ink-soft)'}}>
           {COMP_NAME} · FIFA World Cup 2026 · Built with Passion!
@@ -4430,24 +4448,58 @@
     );
   }
 
-  // ── MOUNT ────────────────────────────────────────────────────────
-  class ErrorBoundary extends React.Component {
-    constructor(props){ super(props); this.state={crashed:false,error:null,ts:null}; }
-    static getDerivedStateFromError(e){ return{crashed:true,error:e,ts:new Date().toLocaleTimeString()}; }
-    componentDidCatch(e,info){ console.error('App crashed:',e,info); }
+  // ── MOUNT ────────────────────────────────────────────────
+  // Per-view error boundary: isolates crashes so one broken view doesn't blank the whole app
+  class ViewErrorBoundary extends React.Component {
+    constructor(props){ super(props); this.state={crashed:false,error:null}; }
+    static getDerivedStateFromError(e){ return{crashed:true,error:e}; }
+    componentDidCatch(e,info){
+      console.error('[wc26] View crash in <'+this.props.label+'>:',e);
+      console.error(info?.componentStack||'');
+    }
     render(){
       if(!this.state.crashed) return this.props.children;
       return(
+        <div style={{padding:'40px 20px',textAlign:'center',background:'var(--cream2)',borderRadius:8,margin:16,border:'1px solid var(--line)'}}>
+          <div style={{fontSize:28,marginBottom:8}}>⚠️</div>
+          <div style={{fontWeight:700,marginBottom:4}}>{this.props.label} hit an error</div>
+          <div style={{fontSize:12,color:'var(--ink-soft)',marginBottom:12}}>Check the browser console (F12) for details. Your data is safe.</div>
+          <button onClick={()=>this.setState({crashed:false,error:null})} style={{padding:'7px 18px',background:'var(--burgundy)',color:'white',border:'none',borderRadius:6,fontSize:13,fontWeight:700,cursor:'pointer'}}>↩ Try Again</button>
+          {this.state.error&&<div style={{marginTop:10,fontSize:10,color:'#aaa',fontFamily:'monospace',wordBreak:'break-all',maxWidth:400,margin:'10px auto 0'}}>{String(this.state.error)}</div>}
+        </div>
+      );
+    }
+  }
+
+  class ErrorBoundary extends React.Component {
+    constructor(props){ super(props); this.state={crashed:false,error:null,ts:null,stack:null}; }
+    static getDerivedStateFromError(e){ return{crashed:true,error:e,ts:new Date().toLocaleTimeString()}; }
+    componentDidCatch(e,info){
+      const stack=info?.componentStack||'';
+      this.setState({stack});
+      console.error('App crashed:',e);
+      console.error('Component stack:',stack);
+      // Store for admin to retrieve from console: window.__wc26Errors
+      window.__wc26Errors=(window.__wc26Errors||[]);
+      window.__wc26Errors.push({ts:new Date().toISOString(),error:String(e),stack});
+    }
+    render(){
+      if(!this.state.crashed) return this.props.children;
+      const recentErr=(window.__wc26Errors||[]).slice(-3).map(e=>`[${e.ts.slice(11,19)}] ${e.error}`).join('\n');
+      return(
         <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#FBF8F0',fontFamily:'sans-serif',padding:20}}>
-          <div style={{maxWidth:420,textAlign:'center'}}>
+          <div style={{maxWidth:480,width:'100%',textAlign:'center'}}>
             <div style={{fontSize:48,marginBottom:16}}>⚽</div>
             <div style={{fontSize:22,fontWeight:700,marginBottom:8}}>Something went wrong</div>
-            <div style={{fontSize:14,color:'#6B635B',marginBottom:24,lineHeight:1.6}}>The app hit an unexpected error. Your predictions are safe — they're saved automatically.</div>
+            <div style={{fontSize:14,color:'#6B635B',marginBottom:24,lineHeight:1.6}}>Your predictions are safe — saved automatically.</div>
             <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
-              <button onClick={()=>this.setState({crashed:false,error:null,ts:null})} style={{padding:'10px 22px',background:'#1a6b3c',color:'white',border:'none',borderRadius:6,fontSize:14,fontWeight:700,cursor:'pointer'}}>↩ Try Again</button>
+              <button onClick={()=>this.setState({crashed:false,error:null,ts:null,stack:null})} style={{padding:'10px 22px',background:'#1a6b3c',color:'white',border:'none',borderRadius:6,fontSize:14,fontWeight:700,cursor:'pointer'}}>↩ Try Again</button>
               <button onClick={()=>window.location.reload()} style={{padding:'10px 22px',background:'#9F1B1B',color:'white',border:'none',borderRadius:6,fontSize:14,fontWeight:700,cursor:'pointer'}}>🔄 Refresh Page</button>
             </div>
-            {this.state.error&&<div style={{marginTop:20,fontSize:10,color:'#aaa',fontFamily:'monospace',wordBreak:'break-all',textAlign:'left',background:'#f5f5f5',padding:'8px 10px',borderRadius:4}}>{this.state.ts&&<span style={{color:'#999'}}>[{this.state.ts}] </span>}{String(this.state.error)}</div>}
+            <details style={{marginTop:20,textAlign:'left'}}>
+              <summary style={{fontSize:12,color:'#aaa',cursor:'pointer',marginBottom:6}}>Error details (share with admin)</summary>
+              <pre style={{fontSize:10,color:'#999',background:'#f5f5f5',padding:'8px 10px',borderRadius:4,overflowX:'auto',whiteSpace:'pre-wrap',wordBreak:'break-all'}}>{recentErr||String(this.state.error)}{this.state.stack?'\n\nComponent:\n'+this.state.stack.split('\n').slice(0,6).join('\n'):''}</pre>
+            </details>
           </div>
         </div>
       );
