@@ -641,6 +641,10 @@
   @keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
   @keyframes fwParticle{0%{transform:rotate(var(--a)) translateX(0);opacity:1}100%{transform:rotate(var(--a)) translateX(var(--d));opacity:0}}
   @keyframes fwCard{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1);opacity:1}}
+  @keyframes emojiFloat{0%{transform:translateY(0) scale(1) rotate(0deg);opacity:1}70%{opacity:1}100%{transform:translateY(-260px) scale(1.8) rotate(var(--spin,12deg));opacity:0}}
+  @keyframes chatSlideUp{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes msgIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+  @keyframes reactionPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
   .fadein{animation:fadein .25s ease}
   a{color:var(--burgundy);text-decoration:none}
   a:hover{text-decoration:underline}
@@ -4484,6 +4488,7 @@
           {COMP_NAME} · FIFA World Cup 2026 · Built with Passion!
         </footer>
         <FireworksOverlay notif={goalNotif} onClose={()=>setGoalNotif(null)}/>
+        <ChatWidget currentUser={currentUser} db={db} NS={NS} adminRole={adminRole}/>
         <BalloonPopup notif={balloonNotif} onClose={()=>setBalloonNotif(null)}/>
         <WinnerPopup notif={balloonNotif?null:winnerNotif} onClose={()=>setWinnerNotif(null)}/>
         {/* Unified notification stack — bottom-right */}
@@ -4532,6 +4537,235 @@
       </div>
     );
   }
+
+  // ── CHAT WIDGET ──────────────────────────────────────────────────────────────
+  const CHAT_REACTIONS=['⚽','🔥','🎉','😂','💀','👑','🐐','❤️','😱','🤩'];
+  const ChatWidget=({currentUser,db,NS,adminRole})=>{
+    const[open,setOpen]=useState(false);
+    const[msgs,setMsgs]=useState([]);
+    const[input,setInput]=useState('');
+    const[flying,setFlying]=useState([]);
+    const[unread,setUnread]=useState(0);
+    const[sending,setSending]=useState(false);
+    const lastSentRef=useRef(0);
+    const sessionStart=useRef(Date.now());
+    const seenIds=useRef(new Set());
+    const bottomRef=useRef(null);
+    const inputRef=useRef(null);
+
+    // Real-time chat listener
+    useEffect(()=>{
+      if(!db) return;
+      const unsub=db.collection(NS+'-chat').orderBy('ts','desc').limit(60)
+        .onSnapshot(snap=>{
+          const all=snap.docs.map(d=>({id:d.id,...d.data()})).reverse();
+          setMsgs(all);
+          // Spawn flying emojis for NEW reaction msgs from OTHER users
+          all.forEach(m=>{
+            if(seenIds.current.has(m.id)) return;
+            seenIds.current.add(m.id);
+            if(!m.reaction) return;
+            if(m.name===currentUser) return;
+            if(!m.ts||m.ts<sessionStart.current) return;
+            spawnFlying(m.msg);
+          });
+          // Unread badge
+          setUnread(prev=>{
+            const newCount=all.filter(m=>m.name!==currentUser&&m.ts>sessionStart.current&&!seenIds.current._opened).length;
+            return open?0:prev+all.filter(m=>!seenIds.current.has('read-'+m.id)&&m.name!==currentUser&&m.ts>(sessionStart.current)).length;
+          });
+        },()=>{});
+      return()=>unsub();
+    },[db,NS]);// eslint-disable-line
+
+    // Clear unread + scroll on open
+    useEffect(()=>{
+      if(open){
+        setUnread(0);
+        sessionStart.current=Date.now()-1000; // mark all as read going forward
+        setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:'smooth'}),80);
+        setTimeout(()=>inputRef.current?.focus(),120);
+      }
+    },[open]);
+
+    // Auto-scroll on new message when open
+    useEffect(()=>{
+      if(open) bottomRef.current?.scrollIntoView({behavior:'smooth'});
+    },[msgs,open]);
+
+    const spawnFlying=(emoji)=>{
+      const id=Date.now()+Math.random();
+      const x=5+Math.random()*85;
+      const spin=(Math.random()>0.5?1:-1)*(8+Math.random()*20);
+      setFlying(prev=>[...prev,{id,emoji,x,spin}]);
+      setTimeout(()=>setFlying(prev=>prev.filter(e=>e.id!==id)),2600);
+    };
+
+    const send=async(msg,isReaction=false)=>{
+      if(!db||!currentUser||!msg.trim()) return;
+      const now=Date.now();
+      if(now-lastSentRef.current<3000){ return; } // 3s rate limit
+      lastSentRef.current=now;
+      setSending(true);
+      if(isReaction) spawnFlying(msg); // spawn for self immediately
+      try{
+        await db.collection(NS+'-chat').add({name:currentUser,msg,ts:now,reaction:isReaction});
+      }catch(_e){ console.warn('Chat send error',_e); }
+      setSending(false);
+    };
+
+    const deleteMsg=async(id)=>{
+      if(!db) return;
+      try{ await db.collection(NS+'-chat').doc(id).delete(); }catch(_e){}
+    };
+
+    const handleSend=()=>{
+      const v=input.trim();
+      if(!v) return;
+      send(v,false);
+      setInput('');
+    };
+
+    const canAdmin=adminRole==='superadmin'||adminRole==='subadmin';
+    const timeStr=ts=>{ if(!ts) return ''; const d=new Date(ts); return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0'); };
+
+    return(
+      <>
+        {/* Flying emoji layer — fullscreen fixed overlay, pointer-events:none */}
+        {flying.map(f=>(
+          <div key={f.id} style={{
+            position:'fixed',bottom:90,left:f.x+'%',
+            fontSize:36,lineHeight:1,pointerEvents:'none',zIndex:10000,
+            '--spin':f.spin+'deg',
+            animation:'emojiFloat 2.4s cubic-bezier(.2,.8,.4,1) forwards',
+          }}>{f.emoji}</div>
+        ))}
+
+        {/* Chat toggle button — bottom-left */}
+        <button onClick={()=>setOpen(o=>!o)} style={{
+          position:'fixed',bottom:24,left:24,zIndex:9998,
+          width:52,height:52,borderRadius:'50%',border:'none',cursor:'pointer',
+          background:'var(--burgundy)',color:'white',fontSize:22,
+          boxShadow:'0 4px 20px rgba(0,0,0,.28)',
+          display:'flex',alignItems:'center',justifyContent:'center',
+          transition:'transform .15s, box-shadow .15s',
+        }}
+          onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.08)';e.currentTarget.style.boxShadow='0 6px 28px rgba(0,0,0,.35)';}}
+          onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 4px 20px rgba(0,0,0,.28)';}}
+        >
+          {open?'✕':'💬'}
+          {!open&&unread>0&&(
+            <div style={{position:'absolute',top:-4,right:-4,background:'#e74c3c',color:'white',borderRadius:'50%',width:20,height:20,fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid white'}}>
+              {unread>9?'9+':unread}
+            </div>
+          )}
+        </button>
+
+        {/* Chat panel */}
+        {open&&(
+          <div style={{
+            position:'fixed',bottom:88,left:24,zIndex:9998,
+            width:340,maxHeight:500,
+            background:'var(--paper)',border:'1px solid var(--line)',
+            borderRadius:12,boxShadow:'0 12px 48px rgba(0,0,0,.22)',
+            display:'flex',flexDirection:'column',overflow:'hidden',
+            animation:'chatSlideUp .25s cubic-bezier(.34,1.3,.64,1)',
+          }}>
+            {/* Header */}
+            <div style={{background:'var(--burgundy)',color:'white',padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontSize:18}}>💬</span>
+                <div>
+                  <div style={{fontWeight:700,fontSize:13}}>Match Chat</div>
+                  <div style={{fontSize:10,opacity:.75}}>{msgs.length} message{msgs.length!==1?'s':''} · last 60</div>
+                </div>
+              </div>
+              <div style={{fontSize:10,opacity:.6}}>React with emojis → they fly! 🚀</div>
+            </div>
+
+            {/* Messages */}
+            <div className="scrollbar" style={{flex:1,overflowY:'auto',padding:'10px 12px',minHeight:0}}>
+              {msgs.length===0&&(
+                <div style={{textAlign:'center',padding:'40px 16px',color:'var(--ink-soft)',fontSize:12}}>
+                  <div style={{fontSize:32,marginBottom:8}}>⚽</div>
+                  Be the first to send a message!
+                </div>
+              )}
+              {msgs.map((m,i)=>{
+                const isMe=m.name===currentUser;
+                const showName=i===0||msgs[i-1].name!==m.name;
+                if(m.reaction){
+                  return(
+                    <div key={m.id} style={{textAlign:'center',margin:'6px 0',animation:'reactionPop .3s cubic-bezier(.34,1.56,.64,1)'}}>
+                      <span style={{fontSize:28}}>{m.msg}</span>
+                      <span style={{fontSize:10,color:'var(--ink-soft)',marginLeft:5,display:'inline-block',verticalAlign:'middle'}}>{m.name} · {timeStr(m.ts)}</span>
+                      {canAdmin&&<button onClick={()=>deleteMsg(m.id)} style={{background:'none',border:'none',cursor:'pointer',fontSize:10,color:'#aaa',marginLeft:4,padding:0}}>✕</button>}
+                    </div>
+                  );
+                }
+                return(
+                  <div key={m.id} style={{display:'flex',flexDirection:isMe?'row-reverse':'row',gap:6,marginBottom:4,animation:'msgIn .2s ease'}}>
+                    {!isMe&&<Avatar name={m.name} size={26}/>}
+                    <div style={{maxWidth:'78%'}}>
+                      {showName&&!isMe&&<div style={{fontSize:10,fontWeight:600,color:'var(--ink-soft)',marginBottom:2,paddingLeft:2}}>{m.name}</div>}
+                      <div style={{
+                        background:isMe?'var(--burgundy)':'var(--cream2)',
+                        color:isMe?'white':'var(--ink)',
+                        borderRadius:isMe?'12px 12px 2px 12px':'12px 12px 12px 2px',
+                        padding:'7px 10px',fontSize:13,lineHeight:1.4,
+                        wordBreak:'break-word',
+                        position:'relative',
+                      }}>
+                        {m.msg}
+                        {canAdmin&&!isMe&&<button onClick={()=>deleteMsg(m.id)} style={{position:'absolute',top:2,right:2,background:'none',border:'none',cursor:'pointer',fontSize:9,color:isMe?'rgba(255,255,255,.5)':'#ccc',padding:0,lineHeight:1}}>✕</button>}
+                      </div>
+                      <div style={{fontSize:9,color:'var(--ink-soft)',marginTop:2,textAlign:isMe?'right':'left',paddingInline:4}}>{timeStr(m.ts)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={bottomRef}/>
+            </div>
+
+            {/* Reaction bar */}
+            <div style={{padding:'6px 10px',borderTop:'1px solid var(--line-soft)',display:'flex',gap:4,flexWrap:'wrap',flexShrink:0,background:'var(--cream)'}}>
+              {CHAT_REACTIONS.map(e=>(
+                <button key={e} onClick={()=>{ send(e,true); }} style={{
+                  fontSize:20,background:'none',border:'1px solid var(--line)',
+                  borderRadius:8,cursor:'pointer',padding:'2px 5px',lineHeight:1,
+                  transition:'transform .1s,background .1s',
+                }}
+                  onMouseEnter={ev=>{ev.currentTarget.style.transform='scale(1.25)';ev.currentTarget.style.background='var(--cream2)';}}
+                  onMouseLeave={ev=>{ev.currentTarget.style.transform='';ev.currentTarget.style.background='none';}}
+                  title={`React with ${e}`}
+                >{e}</button>
+              ))}
+            </div>
+
+            {/* Text input */}
+            <div style={{padding:'8px 10px',borderTop:'1px solid var(--line)',display:'flex',gap:6,flexShrink:0}}>
+              {currentUser?(
+                <>
+                  <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value.slice(0,200))}
+                    onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),handleSend())}
+                    placeholder="Say something…" maxLength={200}
+                    style={{flex:1,padding:'7px 10px',borderRadius:8,border:'1px solid var(--line)',fontSize:13,background:'var(--cream)',fontFamily:'inherit',outline:'none'}}
+                  />
+                  <button onClick={handleSend} disabled={!input.trim()||sending} style={{
+                    padding:'7px 12px',background:'var(--burgundy)',color:'white',border:'none',
+                    borderRadius:8,cursor:'pointer',fontSize:14,fontWeight:700,
+                    opacity:!input.trim()||sending?.5:1,transition:'opacity .15s',
+                  }}>➤</button>
+                </>
+              ):(
+                <div style={{flex:1,textAlign:'center',fontSize:12,color:'var(--ink-soft)',padding:'6px'}}>Log in to chat</div>
+              )}
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
 
   // ── MOUNT ────────────────────────────────────────────────
   // Per-view error boundary: isolates crashes so one broken view doesn't blank the whole app
