@@ -645,6 +645,8 @@
   @keyframes chatSlideUp{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
   @keyframes msgIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
   @keyframes reactionPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
+  @keyframes excitePulse{0%,100%{box-shadow:0 4px 20px rgba(231,76,60,.45)}50%{box-shadow:0 4px 28px rgba(231,76,60,.85),0 0 0 6px rgba(231,76,60,.18)}}
+  @keyframes meterShimmer{0%{background-position:200% center}100%{background-position:-200% center}}
   .fadein{animation:fadein .25s ease}
   a{color:var(--burgundy);text-decoration:none}
   a:hover{text-decoration:underline}
@@ -1825,11 +1827,11 @@
       let status='scheduled';
       if(stName==='STATUS_FIRST_HALF') status='1H';
       else if(stName==='STATUS_SECOND_HALF') status='2H';
-      else if(stName==='STATUS_HALFTIME') status='HT';
+      else if(stName==='STATUS_HALFTIME'||stName==='STATUS_HALFTIME_BREAK') status='HT';
       else if(stName==='STATUS_EXTRA_TIME') status='ET';
       else if(stName==='STATUS_PENALTY') status='PEN';
-      else if(stName==='STATUS_IN_PROGRESS') status=minuteNum>45?'2H':'1H'; // fallback
-      else if(stName==='STATUS_FULL_TIME'||st.completed) status='FT';
+      else if(stName==='STATUS_IN_PROGRESS'||stName==='STATUS_ACTIVE') status=minuteNum>45?'2H':'1H'; // fallback
+      else if(stName==='STATUS_FULL_TIME'||stName==='STATUS_FINAL'||st.completed) status='FT';
       else if(stName==='STATUS_SCHEDULED') status='scheduled';
       return{
         home:normTeam(hC.team?.displayName||''),
@@ -3295,16 +3297,24 @@
             </div>
             {/* User list */}
             <div className="card" style={{overflow:'hidden'}}>
-              <div style={{padding:'10px 16px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 170px',gap:8,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em'}}>
-                <span>Name</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Group</span><span style={{textAlign:'right'}}>KO</span><span>Reset PIN</span><span>Rename</span><span>Actions</span>
+              <div style={{padding:'10px 16px',background:'var(--cream2)',borderBottom:'1px solid var(--line)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 170px 100px',gap:8,fontSize:10,fontWeight:700,color:'var(--ink-soft)',textTransform:'uppercase',letterSpacing:'.05em'}}>
+                <span>Name</span><span style={{textAlign:'right'}}>Total</span><span style={{textAlign:'right'}}>Group</span><span style={{textAlign:'right'}}>KO</span><span>Reset PIN</span><span>Rename</span><span>Actions</span><span>Access</span>
               </div>
               {scores.length===0&&<div style={{padding:20,textAlign:'center',color:'var(--ink-soft)',fontSize:13,fontStyle:'italic'}}>No participants yet.</div>}
-              {scores.map((s,i)=>(
-                <div key={s.name} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 170px',gap:8,alignItems:'center',background:i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
+              {scores.map((s,i)=>{
+                const isSuspended=(config.suspendedUsers||[]).includes(s.name);
+                const toggleSuspend=()=>{
+                  const cur=config.suspendedUsers||[];
+                  const next=isSuspended?cur.filter(n=>n!==s.name):[...cur,s.name];
+                  setConfig({...config,suspendedUsers:next});
+                };
+                return(
+                <div key={s.name} style={{padding:'10px 16px',borderBottom:'1px solid var(--line-soft)',display:'grid',gridTemplateColumns:'1fr 80px 80px 80px 140px 160px 170px 100px',gap:8,alignItems:'center',background:isSuspended?'rgba(159,27,27,.06)':i%2===0?'var(--paper)':'rgba(0,0,0,.015)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <span style={{fontSize:14}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':'👤'}</span>
-                    <span style={{fontWeight:600,fontSize:13}}>{s.name}</span>
-                    {allPredictions[s.name]?<span className="pill pill-success" style={{fontSize:9}}>has picks</span>:<span className="pill" style={{fontSize:9,color:'var(--ink-soft)'}}>no picks</span>}
+                    <span style={{fontWeight:600,fontSize:13,textDecoration:isSuspended?'line-through':'none',color:isSuspended?'var(--ink-soft)':'inherit'}}>{s.name}</span>
+                    {isSuspended&&<span className="pill" style={{fontSize:9,background:'rgba(159,27,27,.12)',color:'var(--burgundy)'}}>🚫 suspended</span>}
+                    {!isSuspended&&(allPredictions[s.name]?<span className="pill pill-success" style={{fontSize:9}}>has picks</span>:<span className="pill" style={{fontSize:9,color:'var(--ink-soft)'}}>no picks</span>)}
                   </div>
                   <span className="mono" style={{textAlign:'right',fontWeight:700,fontSize:13}}>{s.total}</span>
                   <span className="mono" style={{textAlign:'right',fontSize:12,color:'var(--ink-soft)'}}>{s.groupPts}</span>
@@ -3328,8 +3338,14 @@
                     <button onClick={()=>handleResetPredictions(s.name)} title="Clear all predictions — score resets to 0" style={{background:'#e67e22',color:'white',border:'none',borderRadius:3,padding:'5px 8px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>🔄 Reset Picks</button>
                     <button onClick={()=>handleDeleteUser(s.name)} style={{background:'var(--burgundy)',color:'white',border:'none',borderRadius:3,padding:'5px 10px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>🗑 Delete</button>
                   </div>
+                  <div>
+                    <button onClick={toggleSuspend} title={isSuspended?'Unsuspend — allow login':'Suspend — block login'} style={{background:isSuspended?'var(--forest)':'var(--burgundy)',color:'white',border:'none',borderRadius:3,padding:'5px 8px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',width:'100%',whiteSpace:'nowrap'}}>
+                      {isSuspended?'✅ Restore':'🚫 Suspend'}
+                    </button>
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -3385,6 +3401,31 @@
               <div style={{marginTop:8,fontSize:11,color:config.chatEnabled!==false?'var(--forest)':'var(--ink-soft)',fontWeight:600}}>
                 {config.chatEnabled!==false?'✓ Chat is enabled — players can send messages':'✗ Chat is disabled — chat panel is hidden for all players'}
               </div>
+            </div>
+            {/* Login Suspend */}
+            <div className="card" style={{padding:20,borderLeft:`3px solid ${config.loginSuspended?'var(--burgundy)':'var(--line)'}`}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16}}>
+                <div>
+                  <h3 className="display" style={{fontSize:17,fontWeight:700,margin:'0 0 4px'}}>🚫 Suspend All Logins</h3>
+                  <p style={{fontSize:12,color:'var(--ink-soft)',margin:0}}>Immediately blocks everyone from logging in. Useful during maintenance or after the tournament ends.</p>
+                </div>
+                <button onClick={()=>setConfig({...config,loginSuspended:!config.loginSuspended})} style={{
+                  position:'relative',width:52,height:28,borderRadius:14,border:'none',cursor:'pointer',
+                  background:config.loginSuspended?'var(--burgundy)':'var(--line)',
+                  transition:'background .2s',flexShrink:0,
+                }}>
+                  <div style={{
+                    position:'absolute',top:3,left:config.loginSuspended?26:3,
+                    width:22,height:22,borderRadius:'50%',background:'white',
+                    boxShadow:'0 1px 4px rgba(0,0,0,.25)',transition:'left .2s',
+                  }}/>
+                </button>
+              </div>
+              {config.loginSuspended&&(
+                <div style={{marginTop:10,padding:'8px 12px',background:'rgba(159,27,27,.08)',borderRadius:6,fontSize:12,color:'var(--burgundy)',fontWeight:600}}>
+                  ⚠️ Login is currently suspended — no one can log in until you re-enable it.
+                </div>
+              )}
             </div>
             {/* Change Super Admin password */}
             <div className="card" style={{padding:20,borderLeft:'3px solid var(--burgundy)'}}>
@@ -3488,7 +3529,7 @@
               ]},
               {cat:'Auto-Sync & Live Data',qs:[
                 {q:'Auto-sync is not importing results — what do I check?',a:'1) Confirm your RapidAPI key is in the Live Data tab. 2) Check your API quota — you may have hit the daily limit. 3) Try a manual fetch via "Fetch & Import Results". 4) Check the browser console for errors.'},
-                {q:'The live match banner is missing a match that is in progress.',a:'The banner refreshes every 5 minutes from ESPN. Wait up to 5 minutes or reload the page. The app handles STATUS_FIRST_HALF, STATUS_SECOND_HALF, STATUS_HALFTIME, STATUS_EXTRA_TIME, and STATUS_PENALTY.'},
+                {q:'The live match banner is missing a match that is in progress.',a:'The banner now auto-refreshes every 60 seconds. You can also tap the ↻ icon on the banner to force-refresh immediately. If it still does not appear, the ESPN API may not have updated their data yet — wait 1–2 minutes and try again.'},
                 {q:'How often does auto-sync run?',a:'Once per hour, triggered in the background when an admin is logged in. A toast notification appears for all players when results are imported.'},
               ]},
             ].map(({cat,qs})=>(
@@ -3509,11 +3550,24 @@
       </div>
     );
   };
-  const LoginScreen = ({onLogin,onGuest,participants,locked}) => {
+  const LoginScreen = ({onLogin,onGuest,participants,locked,loginSuspended:loginSuspendedProp}) => {
     const[name,setName]=useState('');
     const[pin,setPin]=useState('');
     const[step,setStep]=useState('name');
     const[error,setError]=useState('');
+    const[loginSuspended,setLoginSuspended]=useState(loginSuspendedProp);
+    // Live-sync suspension flag so admin toggle takes effect instantly
+    useEffect(()=>{
+      setLoginSuspended(loginSuspendedProp);
+    },[loginSuspendedProp]);
+    useEffect(()=>{
+      const db=window.__db; if(!db) return;
+      const unsub=db.collection('wc26').doc('config').onSnapshot(snap=>{
+        if(!snap.exists) return;
+        try{ const cfg=JSON.parse(snap.data().value||'{}'); setLoginSuspended(!!cfg.loginSuspended); }catch(_e){}
+      },()=>{});
+      return()=>unsub();
+    },[]);
     const trimmed=name.trim();
     const isExisting=participants.includes(trimmed);
     const inputStyle={width:'100%',padding:'11px 14px',fontSize:15,border:'1px solid var(--line)',borderRadius:4,background:'white',fontFamily:'inherit',color:'var(--ink)',boxSizing:'border-box'};
@@ -3550,14 +3604,29 @@
             )}
           </div>
           <div className="card" style={{padding:28}}>
-            {locked&&(
+            {loginSuspended&&(
+              <div style={{fontSize:13,fontWeight:600,color:'var(--burgundy)',marginBottom:16,padding:'12px 14px',background:'rgba(159,27,27,.07)',borderRadius:6,borderLeft:'3px solid var(--burgundy)',textAlign:'center'}}>
+                🚫 Logins are currently suspended.<br/><span style={{fontSize:11,fontWeight:400,color:'var(--ink-soft)'}}>Please contact the tournament admin.</span>
+              </div>
+            )}
+            {loginSuspended&&(
+              <div style={{marginBottom:12}}>
+                <div className="micro-caps" style={{marginBottom:6,color:'var(--ink-soft)'}}>Admin bypass</div>
+                <div style={{display:'flex',gap:8}}>
+                  <input value={name} onChange={e=>{setName(e.target.value);setError('');}} onKeyDown={e=>e.key==='Enter'&&trimmed&&handleNameNext()} placeholder="Your admin name" style={{...inputStyle,fontSize:13}} />
+                  <button className="btn btn-danger" onClick={handleNameNext} disabled={!trimmed} style={{whiteSpace:'nowrap',flexShrink:0}}>Login →</button>
+                </div>
+                {error&&<div style={{fontSize:12,color:'var(--burgundy)',marginTop:4}}>{error}</div>}
+              </div>
+            )}
+            {locked&&!loginSuspended&&(
               <div style={{fontSize:13,color:'var(--ink-soft)',marginBottom:16,padding:'10px 14px',background:'var(--cream2)',borderRadius:6,borderLeft:'3px solid var(--burgundy)'}}>
                 🔒 Competition is locked — predictions are closed. You can still view the leaderboard.
               </div>
             )}
             {step==='name'&&(
               <>
-                {!locked&&(
+                {!locked&&!loginSuspended&&(
                   <>
                     <label className="micro-caps" style={{display:'block',marginBottom:6}}>Your name</label>
                     <input value={name} onChange={e=>{setName(e.target.value);setError('');}} onKeyDown={e=>e.key==='Enter'&&trimmed&&handleNameNext()} placeholder="Enter your full name" autoFocus style={{...inputStyle,marginBottom:4}}/>
@@ -3568,7 +3637,7 @@
                     </div>
                   </>
                 )}
-                {participants.length>0&&(
+                {participants.length>0&&!loginSuspended&&(
                   <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
                     {participants.sort().map(p=>(
                       <button key={p} onClick={()=>{setName(p);setStep('pin');}} style={{padding:'5px 12px 5px 6px',borderRadius:20,border:'1px solid var(--line)',background:'var(--cream2)',cursor:'pointer',fontSize:13,fontFamily:'inherit',fontWeight:500,display:'flex',alignItems:'center',gap:7}}>
@@ -3739,6 +3808,8 @@
                 </>
               );
             })()}
+          {/* Manual refresh button */}
+          <button onClick={()=>window.__refreshBanner&&window.__refreshBanner()} title="Refresh live scores now" style={{flexShrink:0,marginLeft:'auto',background:'none',border:'1px solid rgba(255,255,255,.2)',color:'rgba(255,255,255,.6)',borderRadius:4,fontSize:11,padding:'2px 7px',cursor:'pointer',lineHeight:1.4}} onMouseEnter={e=>e.currentTarget.style.color='white'} onMouseLeave={e=>e.currentTarget.style.color='rgba(255,255,255,.6)'}>↻</button>
         </div>
       </div>
     );
@@ -4203,7 +4274,7 @@
       })();
     },[]);
 
-    // ── BANNER AUTO-REFRESH every 5 minutes (ESPN primary, cache fallback) ──
+    // ── BANNER AUTO-REFRESH every 60 seconds (ESPN primary, cache fallback) ──
     useEffect(()=>{
       const ESPN_SB=`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard`;
       const espnToMatch=comp=>{
@@ -4215,11 +4286,11 @@
         let status='scheduled';
         if(st.name==='STATUS_FIRST_HALF') status='1H';
         else if(st.name==='STATUS_SECOND_HALF') status='2H';
-        else if(st.name==='STATUS_HALFTIME') status='HT';
+        else if(st.name==='STATUS_HALFTIME'||st.name==='STATUS_HALFTIME_BREAK') status='HT';
         else if(st.name==='STATUS_EXTRA_TIME') status='ET';
         else if(st.name==='STATUS_PENALTY') status='PEN';
-        else if(st.name==='STATUS_IN_PROGRESS') status=min>45?'2H':'1H'; // fallback
-        else if(st.name==='STATUS_FULL_TIME'||st.completed) status='FT';
+        else if(st.name==='STATUS_IN_PROGRESS'||st.name==='STATUS_ACTIVE') status=min>45?'2H':'1H';
+        else if(st.name==='STATUS_FULL_TIME'||st.name==='STATUS_FINAL'||st.completed) status='FT';
         return{home:normTeam(hC.team?.displayName||''),away:normTeam(aC.team?.displayName||''),homeScore:hC.score??'',awayScore:aC.score??'',minute:min||'',status,kickoff:comp.date||null};
       };
       const refreshBanner=async()=>{
@@ -4246,8 +4317,9 @@
           if(combined.length>0) setLiveMatches(combined);
         }catch{}
       };
-      const t=setInterval(refreshBanner,300000); // every 5 minutes
-      return()=>clearInterval(t);
+      window.__refreshBanner=refreshBanner; // expose for manual refresh from banner
+      const t=setInterval(refreshBanner,60000); // every 60 seconds
+      return()=>{ clearInterval(t); delete window.__refreshBanner; };
     },[]);
 
     // Set of GROUP_MATCHES IDs that are live or within 5 min of kickoff
@@ -4383,6 +4455,33 @@
     },[]);
 
     const handleLogin=useCallback(async(name,pin)=>{
+      // Check live config for suspension (read fresh from Firestore)
+      try{
+        if(FB_ON){
+          const snap=await fbTimeout(db.collection('wc26').doc('config').get()).catch(()=>null);
+          if(snap&&snap.exists){
+            const liveCfg=JSON.parse(snap.data().value||'{}');
+            if(liveCfg.loginSuspended){
+              const bypass=prompt('⚠️ Logins are suspended.\n\nPlayers cannot log in. Admins: enter admin password to bypass.');
+              if(!bypass||(bypass!==adminPws?.super&&bypass!==adminPws?.sub)){
+                alert('🚫 Logins are currently suspended. Please contact the admin.');return;
+              }
+              // Admin bypass granted — skip remaining suspension checks
+            } else if((liveCfg.suspendedUsers||[]).includes(name)){
+              alert('🚫 Your account has been suspended. Please contact the admin.');return;
+            }
+          }
+        }
+      }catch(_e){}
+      // Fallback: also check local config state
+      if(config.loginSuspended){
+        const bypass=prompt('⚠️ Logins are suspended.\n\nPlayers cannot log in. Admins: enter admin password to bypass.');
+        if(!bypass||(bypass!==adminPws?.super&&bypass!==adminPws?.sub)){
+          alert('🚫 Logins are currently suspended. Please contact the admin.');return;
+        }
+        // Admin bypass granted — continue to login
+      }
+      if((config.suspendedUsers||[]).includes(name)){alert('🚫 Your account has been suspended. Please contact the admin.');return;}
       const existing=participants.includes(name);
       let finalParts=participants;
       if(existing){
@@ -4456,7 +4555,7 @@
     );
 
     if(!currentUser) return(
-      <LoginScreen onLogin={handleLogin} onGuest={()=>{setCurrentUser('__guest__');setView('leaderboard');}} participants={participants} locked={config.phase==='complete'||(config.phase==null&&!!config.locked)}/>
+      <LoginScreen onLogin={handleLogin} onGuest={()=>{setCurrentUser('__guest__');setView('leaderboard');}} participants={participants} locked={config.phase==='complete'||(config.phase==null&&!!config.locked)} loginSuspended={!!config.loginSuspended}/>
     );
 
     // ── PHASE-BASED LOCKS ────────────────────────────────────────────
@@ -4563,10 +4662,22 @@
 
   // ── CHAT WIDGET ──────────────────────────────────────────────────────────────
   const CHAT_REACTIONS=['⚽','🔥','🎉','😂','💀','👑','🐐','❤️','😱','🤩'];
-  const ChatWidget=({currentUser,db,NS,adminRole,chatEnabled})=>{
+  const ChatWidget=({currentUser,db,NS,adminRole,chatEnabled:chatEnabledProp})=>{
     const canAdmin=adminRole==='superadmin'||adminRole==='subadmin';
-    // Non-admins see nothing when chat is disabled
-    if(!chatEnabled&&!canAdmin) return null;
+    // Live-sync chatEnabled from Firestore so admin toggle takes effect instantly for all users
+    const[chatEnabled,setChatEnabled]=useState(chatEnabledProp);
+    useEffect(()=>{ setChatEnabled(chatEnabledProp); },[chatEnabledProp]);
+    useEffect(()=>{
+      if(!db) return;
+      const unsub=db.collection('wc26').doc('config').onSnapshot(snap=>{
+        if(!snap.exists) return;
+        try{
+          const cfg=JSON.parse(snap.data().value||'{}');
+          setChatEnabled(cfg.chatEnabled!==false);
+        }catch(_e){}
+      },()=>{});
+      return()=>unsub();
+    },[db]);
     const[open,setOpen]=useState(false);
     const[msgs,setMsgs]=useState([]);
     const[input,setInput]=useState('');
@@ -4653,6 +4764,12 @@
     };
 
     const timeStr=ts=>{ if(!ts) return ''; const d=new Date(ts); return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0'); };
+    // Excitement meter — count msgs in last 2 minutes, scale to 0-100%
+    const excitementPct=Math.min(100,Math.round((msgs.filter(m=>m.ts&&m.ts>Date.now()-120000).length/15)*100));
+    const exciteColor=excitementPct<20?'#27ae60':excitementPct<50?'#f39c12':excitementPct<80?'#e67e22':'#e74c3c';
+    const exciteLabel=excitementPct===0?'😴 Quiet':excitementPct<20?'😊 Chill':excitementPct<50?'🙌 Warming up':excitementPct<80?'🔥 Buzzing!':'🚨 ON FIRE!';
+    // All hooks above — safe to early-return now
+    if(!chatEnabled&&!canAdmin) return null;
 
     return(
       <>
@@ -4674,6 +4791,7 @@
           boxShadow:'0 4px 20px rgba(0,0,0,.28)',
           display:'flex',alignItems:'center',justifyContent:'center',
           transition:'transform .15s, box-shadow .15s',
+          animation:chatEnabled&&excitementPct>=80?'excitePulse 1.2s ease-in-out infinite':undefined,
         }}
           onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.08)';e.currentTarget.style.boxShadow='0 6px 28px rgba(0,0,0,.35)';}}
           onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 4px 20px rgba(0,0,0,.28)';}}
@@ -4707,6 +4825,29 @@
               </div>
               <div style={{fontSize:10,opacity:.6}}>{chatEnabled?'React with emojis → they fly! 🚀':'⛔ Chat disabled'}</div>
             </div>
+            {/* Excitement meter bar */}
+            {chatEnabled&&(
+              <div style={{background:'rgba(0,0,0,.18)',padding:'7px 14px 8px',flexShrink:0}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                  <span style={{fontSize:10,fontWeight:700,color:'white',opacity:.9,letterSpacing:.5}}>⚡ EXCITEMENT</span>
+                  <span style={{fontSize:10,fontWeight:700,color:exciteColor,textShadow:'0 1px 4px rgba(0,0,0,.4)'}}>{exciteLabel}</span>
+                </div>
+                <div style={{height:7,borderRadius:4,background:'rgba(255,255,255,.15)',overflow:'hidden'}}>
+                  <div style={{
+                    height:'100%',borderRadius:4,
+                    width:excitementPct+'%',
+                    background:excitementPct===0?'rgba(255,255,255,.2)':`linear-gradient(90deg,#27ae60,${exciteColor})`,
+                    backgroundSize:'200% auto',
+                    transition:'width .8s cubic-bezier(.4,0,.2,1), background .8s',
+                    animation:excitementPct>=80?'meterShimmer 2s linear infinite':undefined,
+                    boxShadow:excitementPct>0?`0 0 8px ${exciteColor}88`:undefined,
+                  }}/>
+                </div>
+                <div style={{fontSize:9,color:'rgba(255,255,255,.5)',marginTop:3,textAlign:'right'}}>
+                  {msgs.filter(m=>m.ts&&m.ts>Date.now()-120000).length} msg{msgs.filter(m=>m.ts&&m.ts>Date.now()-120000).length!==1?'s':''} in last 2 min
+                </div>
+              </div>
+            )}
 
             {/* Messages */}
             <div className="scrollbar" style={{flex:1,overflowY:'auto',padding:'10px 12px',minHeight:0}}>
