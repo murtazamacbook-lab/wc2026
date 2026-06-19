@@ -4519,20 +4519,27 @@ const LiveDataView = React.memo(({
             }
           }));
         } else {
-          // Non-admin: silently pull latest from Firestore cache
-          const cached = await storage.getShared('live-cache-live');
-          if (cached && cached.data) {
-            setLiveData(prev => ({
-              ...prev,
-              live: cached.data
-            }));
-            setCacheInfo(prev => ({
-              ...prev,
-              live: {
-                updatedAt: cached.updatedAt
-              }
-            }));
-          }
+          // Non-admin: fetch ESPN directly — free, no key, always current
+          const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+          const now = new Date();
+          const yStr = localDateStr(new Date(now.getTime() - 86400000));
+          const tStr = localDateStr(now);
+          const tmStr = localDateStr(new Date(now.getTime() + 86400000));
+          const ESPN_SB = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+          const [r0, r1, r2] = await Promise.all([fetch(`${ESPN_SB}?dates=${yStr}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${tStr}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${tmStr}`).then(r => r.json()).catch(() => ({}))]);
+          const espnArr = [...(r0.events || []), ...(r1.events || []), ...(r2.events || [])].map(ev => {
+            const m = espnCompToMatch(ev.competitions?.[0]);
+            if (!m) return null;
+            const gm = GROUP_MATCHES.find(x => x.home === m.home && x.away === m.away || x.home === m.away && x.away === m.home);
+            return {
+              ...m,
+              group: gm?.group ?? '–'
+            };
+          }).filter(Boolean);
+          if (espnArr.length > 0) setLiveData(prev => ({
+            ...prev,
+            live: espnArr
+          }));
         }
         setLiveAutoTs(new Date().toLocaleTimeString([], {
           hour: '2-digit',
@@ -4541,7 +4548,8 @@ const LiveDataView = React.memo(({
         }));
       } catch (e) {}
     };
-    const t = setInterval(refreshLive, 60000); // every 60 seconds
+    refreshLive(); // fetch immediately on mount — don't wait 60s
+    const t = setInterval(refreshLive, 60000); // then every 60 seconds
     return () => clearInterval(t);
   }, []);
   const loadFromCache = async key => {
@@ -5473,7 +5481,7 @@ const LiveDataView = React.memo(({
       alignItems: 'center',
       gap: 6
     }
-  }, /*#__PURE__*/React.createElement("span", null, "📦 Data cached by admin — click to load from Firestore")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "� Live data loads automatically via ESPN — other panels load from admin cache")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
