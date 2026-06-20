@@ -12992,27 +12992,24 @@ function App() {
             ...pws
           }));
         }
-        // Load per-user predictions: localStorage first (fast), then Firestore for any missing
-        // (missing = fresh device / mobile with no localStorage — avoids 0-pts leaderboard)
+        // Always fetch ALL participants' predictions from Firestore in Phase 2.
+        // Using localStorage-only causes stale scores when predictions changed on another device.
+        // 16 parallel reads once per page load is negligible.
         const parts = vals['participants'] || lsGet('participants') || [];
         const all = {};
-        const missing = [];
-        parts.forEach(p => {
-          const d = lsGet(`pred-${p}`);
-          if (d) all[p] = d;else missing.push(p);
+        const predSnaps = await Promise.all(parts.map(p => fbTimeout(db.collection('wc26').doc(`pred-${p}`).get()).catch(() => null)));
+        predSnaps.forEach((snap, i) => {
+          if (snap?.exists) {
+            try {
+              const d = JSON.parse(snap.data().value || '{}');
+              all[parts[i]] = d;
+              lsSet(`pred-${parts[i]}`, d);
+            } catch (_e) {}
+          } else {
+            const cached = lsGet(`pred-${parts[i]}`);
+            if (cached) all[parts[i]] = cached;
+          } // fallback to local if no Firestore doc yet
         });
-        if (missing.length > 0) {
-          const predSnaps = await Promise.all(missing.map(p => fbTimeout(db.collection('wc26').doc(`pred-${p}`).get()).catch(() => null)));
-          predSnaps.forEach((snap, i) => {
-            if (snap?.exists) {
-              try {
-                const d = JSON.parse(snap.data().value || '{}');
-                all[missing[i]] = d;
-                lsSet(`pred-${missing[i]}`, d);
-              } catch (_e) {}
-            }
-          });
-        }
         setAllPredictions(all);
       } catch (e) {
         console.warn('Firebase bg sync error:', e);
