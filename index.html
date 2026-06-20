@@ -82,6 +82,7 @@ const COMP_NAME = window.__COMP_NAME || 'WC26 Predictions Pool';
 const NS = window.__COMP_ID || 'wc26';
 const DEFAULT_SUPER_PW = window.__ADMIN_PW || 'admin2026';
 const DEFAULT_SUB_PW = window.__SUBADMIN_PW || 'subadmin2026';
+const PERMANENT_SUPERADMIN = 'Murtaza'; // always gets superadmin — no password needed
 const FUNC_BASE = window.__FUNC_BASE || ''; // e.g. https://<project>.cloudfunctions.net
 
 // ── GLOBAL SAFETY NET: catch async errors that bypass ErrorBoundary ─────
@@ -13415,6 +13416,14 @@ function App() {
       setView('admin');
     } else alert('Incorrect admin password.');
   }, [adminPws]);
+
+  // Auto-grant superadmin for the permanent superadmin user
+  useEffect(() => {
+    if (currentUser === PERMANENT_SUPERADMIN) {
+      setAdminAuthed(true);
+      setAdminRole('superadmin');
+    }
+  }, [currentUser]);
   const saveAdminPws = useCallback(async newPws => {
     setAdminPws(newPws);
     await storage.setJSON('admin-pws', newPws, true);
