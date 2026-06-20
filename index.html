@@ -1093,6 +1093,7 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
   };
   const joker = userPreds.joker || {};
   const jokerHistory = userPreds.jokerHistory || null;
+  const matchPts = {}; // matchId → final pts (after joker) — used by ScoreHistoryView for guaranteed parity
   GROUP_MATCHES.forEach(m => {
     if (m.matchday < COMP_START_MATCHDAY) return; // competition starts from MD2 (June 19+)
     const actual = actualGroupResults[m.id];
@@ -1106,6 +1107,7 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
     const ej = getJokerForMatchday(jokerHistory, m.matchday, joker);
     const mult = getJokerMultiplier(m, ej.team, ej.group);
     const pts = total * mult;
+    matchPts[m.id] = pts;
     groupPoints += pts;
     mdPts[m.matchday] = (mdPts[m.matchday] || 0) + pts;
     detail.matches++;
@@ -1181,7 +1183,8 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
       ko: koPoints + bracketPoints,
       ...koRoundPts,
       bonus: bonusPoints
-    }
+    },
+    matchPts // per-match pts map for ScoreHistoryView day bucketing
   };
 };
 
@@ -4827,42 +4830,37 @@ const ScoreHistoryView = React.memo(({
   isAdmin,
   isGuest
 }) => {
-  // Build day→matchIds grouped by matchday (avoids all timezone issues with kickoffTimes)
-  // MD2 = Jun 19–25, MD3 = Jun 26+
+  // Build day→matchIds from results.group directly (same source as leaderboard = totals always match)
+  // kickoffTimes used only for per-day resolution. Any timezone-shifted date before Jun 19 is
+  // CLAMPED into Jun 19 (not excluded) so those matches still score but Jun 18 row never appears.
   const days = useMemo(() => {
-    const mdMap = {};
+    const today = new Date().toLocaleDateString('sv');
+    const dayMap = {};
     GROUP_MATCHES.forEach(m => {
       if (m.matchday < COMP_START_MATCHDAY) return; // MD1 never scored
       const r = results.group?.[m.id];
       if (!r || r.h === '' || r.h == null) return;
-      if (!mdMap[m.matchday]) mdMap[m.matchday] = [];
-      mdMap[m.matchday].push(m.id);
+      const ms = kickoffTimes.get(m.id);
+      let ds = ms ? new Date(ms).toLocaleDateString('sv') : '2026-06-19';
+      if (ds < '2026-06-19') ds = '2026-06-19'; // clamp timezone artifacts into Jun 19
+      if (!dayMap[ds]) dayMap[ds] = [];
+      dayMap[ds].push(m.id);
     });
-    const today = new Date().toLocaleDateString('sv');
-    const MD_INFO = {
-      2: {
-        dateStr: '2026-06-19',
-        label: 'MD2 · Jun 19–25'
-      },
-      3: {
-        dateStr: '2026-06-26',
-        label: 'MD3 · Jun 26+'
-      }
-    };
-    return Object.entries(mdMap).sort(([a], [b]) => Number(b) - Number(a)).map(([md, ids]) => {
-      const info = MD_INFO[Number(md)] || {
-        dateStr: `2026-07-0${md}`,
-        label: `Matchday ${md}`
-      };
+    return Object.entries(dayMap).map(([ds, ids]) => {
+      const d = new Date(ds + 'T12:00:00');
+      const label = d.toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
+      });
       return {
-        dateStr: info.dateStr,
-        isToday: today >= info.dateStr && (Number(md) === 2 ? today < '2026-06-26' : true),
+        dateStr: ds,
+        isToday: ds === today,
         matchIds: ids,
-        label: info.label,
-        md: Number(md)
+        label
       };
-    });
-  }, [results]);
+    }).sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+  }, [kickoffTimes, results]);
   const showUsers = useMemo(() => {
     if (isGuest || !currentUser) return [];
     if (isAdmin) return [...participants].sort((a, b) => a.localeCompare(b));
@@ -4872,6 +4870,8 @@ const ScoreHistoryView = React.memo(({
     const scores = {};
     showUsers.forEach(p => {
       const preds = allPredictions[p] || {};
+      // Use computeUserScore as single source of truth — guaranteed parity with leaderboard
+      const scored = computeUserScore(preds, results.group || {}, results.ko || {}, results.bonus || {});
       scores[p] = {};
       days.forEach(({
         dateStr,
@@ -4880,19 +4880,22 @@ const ScoreHistoryView = React.memo(({
         let pts = 0,
           jokerBonus = 0;
         matchIds.forEach(id => {
-          const m = GROUP_MATCHES.find(x => x.id === id);
-          if (!m || m.matchday < COMP_START_MATCHDAY) return;
-          const actual = results.group?.[id];
-          if (!actual || actual.h === '' || actual.h == null) return;
-          const pred = preds.group?.[id];
-          if (!pred || pred.h === '' || pred.h == null) return;
-          const {
-            total
-          } = scoreMatch(pred, actual, m.home, m.away, true);
-          const ej = getJokerForMatchday(preds.jokerHistory || null, m.matchday, preds.joker || {});
-          const mult = getJokerMultiplier(m, ej.team, ej.group);
-          pts += total * mult;
-          if (mult > 1) jokerBonus += total * (mult - 1);
+          const mPts = scored.matchPts[id] || 0;
+          pts += mPts;
+          // joker bonus = pts above base (base = total without multiplier)
+          if (mPts > 0) {
+            const m = GROUP_MATCHES.find(x => x.id === id);
+            if (m) {
+              const actual = results.group?.[id];
+              const pred = preds.group?.[id];
+              if (actual && pred) {
+                const {
+                  total
+                } = scoreMatch(pred, actual, m.home, m.away, true);
+                if (mPts > total) jokerBonus += mPts - total;
+              }
+            }
+          }
         });
         scores[p][dateStr] = {
           pts,
@@ -7567,7 +7570,8 @@ const AdminView = ({
   matchCommentary,
   saveCommentary,
   onlineUsers = {},
-  currentUser
+  currentUser,
+  kickoffTimes = new Map()
 }) => {
   const isSuperAdmin = adminRole === 'superadmin';
   const isSubAdmin = adminRole === 'subadmin';
@@ -8279,7 +8283,160 @@ const AdminView = ({
       color: 'var(--ink-soft)',
       margin: '0 0 14px'
     }
-  }, totalGroupDone, "/72 group match results entered."), /*#__PURE__*/React.createElement("div", {
+  }, totalGroupDone, "/72 group match results entered."), isSuperAdmin && (() => {
+    const [clearDate, setClearDate] = useState('');
+    const [clearPreview, setClearPreview] = useState(null);
+    const previewClear = () => {
+      if (!clearDate) {
+        alert('Please select a date first.');
+        return;
+      }
+      // Find matches with results on this date using kickoffTimes, fallback to matchday date mapping
+      const MD_FALLBACK = {
+        2: '2026-06-19',
+        3: '2026-06-26'
+      };
+      const matches = GROUP_MATCHES.filter(m => {
+        const r = results.group?.[m.id];
+        if (!r || r.h === '' || r.h == null) return false;
+        const ms = kickoffTimes.get(m.id);
+        const ds = ms ? new Date(ms).toLocaleDateString('sv') : MD_FALLBACK[m.matchday] || '';
+        // Clamp pre-Jun-19 dates to Jun 19 (same logic as ScoreHistoryView)
+        const clamped = ds < '2026-06-19' ? '2026-06-19' : ds;
+        return clamped === clearDate;
+      });
+      setClearPreview(matches);
+    };
+    const executeClear = async () => {
+      if (!clearPreview || clearPreview.length === 0) return;
+      if (!window.confirm(`⚠️ SUPERADMIN ONLY\n\nClear results for ${clearDate}?\n\n${clearPreview.length} matches will be reset to no result:\n${clearPreview.map(m => `• ${m.home} vs ${m.away}`).join('\n')}\n\nThis writes to Firestore immediately and all users are updated.\nThis cannot be undone.`)) return;
+      const newGroup = {
+        ...results.group
+      };
+      clearPreview.forEach(m => {
+        delete newGroup[m.id];
+      });
+      await onSave({
+        ...results,
+        group: newGroup
+      });
+      setClearPreview(null);
+      setClearDate('');
+      alert(`✅ Cleared ${clearPreview.length} results for ${clearDate}. All users updated via Firestore instantly.`);
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '14px 16px',
+        background: 'rgba(159,27,27,.06)',
+        border: '1px solid rgba(159,27,27,.25)',
+        borderRadius: 6,
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontSize: 13,
+        color: 'var(--burgundy)',
+        marginBottom: 8
+      }
+    }, "🗑 Clear Results by Date — Superadmin Only"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: 'var(--ink-soft)',
+        marginBottom: 10
+      }
+    }, "Select a date to find and delete all match results for that day from Firestore. All users are updated instantly via live sync — no one can push old data back."), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 8,
+        flexWrap: 'wrap',
+        alignItems: 'center'
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "date",
+      value: clearDate,
+      onChange: e => {
+        setClearDate(e.target.value);
+        setClearPreview(null);
+      },
+      min: "2026-06-12",
+      max: "2026-07-19",
+      style: {
+        padding: '7px 10px',
+        borderRadius: 6,
+        border: '1px solid var(--line)',
+        fontSize: 13,
+        fontFamily: 'inherit',
+        background: 'white'
+      }
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: previewClear,
+      disabled: !clearDate,
+      style: {
+        padding: '7px 16px',
+        borderRadius: 6,
+        border: '1px solid var(--burgundy)',
+        background: 'white',
+        color: 'var(--burgundy)',
+        fontWeight: 700,
+        fontSize: 12,
+        cursor: clearDate ? 'pointer' : 'not-allowed'
+      }
+    }, "Preview"), clearPreview && /*#__PURE__*/React.createElement("button", {
+      onClick: executeClear,
+      disabled: clearPreview.length === 0,
+      style: {
+        padding: '7px 16px',
+        borderRadius: 6,
+        border: 'none',
+        background: clearPreview.length > 0 ? 'var(--burgundy)' : 'var(--line)',
+        color: 'white',
+        fontWeight: 700,
+        fontSize: 12,
+        cursor: clearPreview.length > 0 ? 'pointer' : 'not-allowed'
+      }
+    }, "🗑 Clear ", clearPreview.length, " result", clearPreview.length !== 1 ? 's' : '')), clearPreview && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10,
+        padding: '8px 12px',
+        background: 'white',
+        borderRadius: 6,
+        border: '1px solid var(--line)'
+      }
+    }, clearPreview.length === 0 ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: 'var(--ink-soft)',
+        fontStyle: 'italic'
+      }
+    }, "No results found for ", clearDate, ".") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--ink-soft)',
+        marginBottom: 6
+      }
+    }, "MATCHES TO CLEAR (", clearPreview.length, "):"), clearPreview.map(m => /*#__PURE__*/React.createElement("div", {
+      key: m.id,
+      style: {
+        fontSize: 12,
+        padding: '3px 0',
+        borderBottom: '1px solid var(--line-soft)',
+        display: 'flex',
+        justifyContent: 'space-between'
+      }
+    }, /*#__PURE__*/React.createElement("span", null, m.home, " vs ", m.away, " ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--ink-soft)'
+      }
+    }, "— Group ", m.group, " MD", m.matchday)), /*#__PURE__*/React.createElement("span", {
+      className: "mono",
+      style: {
+        fontWeight: 700,
+        color: 'var(--burgundy)'
+      }
+    }, results.group[m.id]?.h, "–", results.group[m.id]?.a))))));
+  })(), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -14709,7 +14866,8 @@ function App() {
     matchCommentary: matchCommentary,
     saveCommentary: saveCommentary,
     onlineUsers: onlineUsers,
-    currentUser: currentUser
+    currentUser: currentUser,
+    kickoffTimes: kickoffTimes
   }))), view !== 'admin' && /*#__PURE__*/React.createElement(SupportWall, {
     supportByUser: supportByUser,
     currentSupportTeam: currentSupportTeam,
