@@ -12575,8 +12575,11 @@ function App() {
       try {
         const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
         const now = new Date();
-        const [r0, r1, r2] = await Promise.all([fetch(`${ESPN_SB}?dates=${localDateStr(new Date(now.getTime() - 86400000))}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${localDateStr(now)}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${localDateStr(new Date(now.getTime() + 86400000))}`).then(r => r.json()).catch(() => ({}))]);
-        const matches = [...(r0.events || []), ...(r1.events || []), ...(r2.events || [])].map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
+        // Fetch 7-day lookback + 1 day ahead in a single ESPN range request
+        const from = localDateStr(new Date(now.getTime() - 7 * 86400000));
+        const to = localDateStr(new Date(now.getTime() + 86400000));
+        const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
+        const matches = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
         if (matches.length > 0) {
           setLiveMatches(matches);
           setLiveLoading(false);
@@ -12782,8 +12785,10 @@ function App() {
       try {
         const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
         const now = new Date();
-        const [r0, r1, r2] = await Promise.all([fetch(`${ESPN_SB}?dates=${localDateStr(new Date(now.getTime() - 86400000))}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${localDateStr(now)}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${localDateStr(new Date(now.getTime() + 86400000))}`).then(r => r.json()).catch(() => ({}))]);
-        const all = [...(r0.events || []), ...(r1.events || []), ...(r2.events || [])].map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
+        const from = localDateStr(new Date(now.getTime() - 7 * 86400000));
+        const to = localDateStr(new Date(now.getTime() + 86400000));
+        const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
+        const all = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
         if (all.length > 0) {
           setLiveMatches(all);
           if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
