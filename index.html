@@ -13339,8 +13339,24 @@ function App() {
       alert('🚫 Your account has been suspended. Please contact the admin.');
       return;
     }
-    const existing = participants.includes(name);
-    let finalParts = participants;
+    // Always check live Firestore participants list to prevent deleted users re-registering
+    // from stale localStorage cache on their device
+    let liveParticipants = participants;
+    if (FB_ON) {
+      try {
+        const liveSnap = await fbTimeout(db.collection('wc26').doc('participants').get());
+        if (liveSnap?.exists) {
+          const liveParts = JSON.parse(liveSnap.data().value || '[]');
+          if (Array.isArray(liveParts)) {
+            liveParticipants = liveParts;
+            setParticipants(liveParts);
+            lsSet('participants', liveParts);
+          }
+        }
+      } catch (_e) {}
+    }
+    const existing = liveParticipants.includes(name);
+    let finalParts = liveParticipants;
     if (existing) {
       const storedPin = userPins[name];
       if (storedPin && storedPin !== pin) {
