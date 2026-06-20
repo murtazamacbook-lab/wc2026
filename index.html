@@ -13060,6 +13060,13 @@ function App() {
       ...prev,
       [currentUser]: toWrite
     }));
+    // Signal all other clients that this user's predictions changed
+    if (FB_ON) db.collection('wc26').doc('predictions-meta').set({
+      by: currentUser,
+      ts: Date.now()
+    }, {
+      merge: true
+    }).catch(() => {});
     setSaveStatus('saved');
     setTimeout(() => setSaveStatus(''), 2000);
   }, [currentUser]);
@@ -13338,6 +13345,40 @@ function App() {
     }, () => {});
     return () => unsub();
   }, [FB_ON, pendingName]);
+
+  // ── PREDICTIONS SYNC: when any participant saves, fetch their updated predictions ──
+  // predictions-meta gets a tiny write on every save; all clients receive an onSnapshot push
+  // and re-fetch just that one participant's doc — keeps allPredictions fresh on all devices
+  useEffect(() => {
+    if (!FB_ON) return;
+    let lastMetaTs = 0;
+    const unsub = db.collection('wc26').doc('predictions-meta').onSnapshot(snap => {
+      try {
+        if (!snap.exists) return;
+        const {
+          by,
+          ts
+        } = snap.data() || {};
+        if (!by || !ts || ts === lastMetaTs) return;
+        lastMetaTs = ts;
+        if (by === currentUser) return; // we already have our own data
+        // Fetch the updated participant's predictions from Firestore
+        fbTimeout(db.collection('wc26').doc(`pred-${by}`).get()).then(pSnap => {
+          if (pSnap?.exists) {
+            try {
+              const d = JSON.parse(pSnap.data().value || '{}');
+              lsSet(`pred-${by}`, d);
+              setAllPredictions(prev => ({
+                ...prev,
+                [by]: d
+              }));
+            } catch (_e) {}
+          }
+        }).catch(() => {});
+      } catch (_e) {}
+    }, () => {});
+    return () => unsub();
+  }, [currentUser]);
 
   // When approved, auto-complete login
   useEffect(() => {
