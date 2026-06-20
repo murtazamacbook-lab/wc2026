@@ -12588,6 +12588,51 @@ function App() {
               fetchingAt: 0
             })
           }).catch(() => {});
+          // Auto-import FT results into results.group (ESPN as source of truth)
+          // Only the designated fetcher does this — no duplicate writes from other clients
+          if (FB_ON) {
+            try {
+              const ftMatches = matches.filter(m => m.status === 'FT' && m.homeScore !== '' && m.awayScore !== '');
+              if (ftMatches.length > 0) {
+                const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
+                const stored = resSnap?.exists ? JSON.parse(resSnap.data().value || '{}') : {
+                  group: {},
+                  ko: {},
+                  bonus: {}
+                };
+                const newGR = {
+                  ...(stored.group || {})
+                };
+                let changed = 0;
+                ftMatches.forEach(fm => {
+                  const gm = GROUP_MATCHES.find(m => m.home === fm.home && m.away === fm.away || m.home === fm.away && m.away === fm.home);
+                  if (!gm) return;
+                  const swap = gm.home === fm.away;
+                  const nh = String(swap ? fm.awayScore : fm.homeScore);
+                  const na = String(swap ? fm.homeScore : fm.awayScore);
+                  const ex = newGR[gm.id];
+                  if (ex && ex.h === nh && ex.a === na) return; // already stored
+                  newGR[gm.id] = {
+                    h: nh,
+                    a: na
+                  };
+                  changed++;
+                });
+                if (changed > 0) {
+                  const newResults = {
+                    ...stored,
+                    group: newGR
+                  };
+                  lastLocalWriteRef.current = Date.now();
+                  db.collection('wc26').doc('results').set({
+                    value: JSON.stringify(newResults)
+                  }).catch(() => {});
+                  setResults(newResults);
+                  lsSet('results', newResults);
+                }
+              }
+            } catch (_e) {}
+          }
         }
       } catch (_e) {}
       espnFetchingRef.current = false;
@@ -12748,6 +12793,50 @@ function App() {
               fetchingAt: 0
             })
           }).catch(() => {});
+          // Auto-import FT results into results.group (ESPN as source of truth)
+          if (FB_ON) {
+            try {
+              const ftMatches = all.filter(m => m.status === 'FT' && m.homeScore !== '' && m.awayScore !== '');
+              if (ftMatches.length > 0) {
+                const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
+                const stored = resSnap?.exists ? JSON.parse(resSnap.data().value || '{}') : {
+                  group: {},
+                  ko: {},
+                  bonus: {}
+                };
+                const newGR = {
+                  ...(stored.group || {})
+                };
+                let changed = 0;
+                ftMatches.forEach(fm => {
+                  const gm = GROUP_MATCHES.find(m => m.home === fm.home && m.away === fm.away || m.home === fm.away && m.away === fm.home);
+                  if (!gm) return;
+                  const swap = gm.home === fm.away;
+                  const nh = String(swap ? fm.awayScore : fm.homeScore);
+                  const na = String(swap ? fm.homeScore : fm.awayScore);
+                  const ex = newGR[gm.id];
+                  if (ex && ex.h === nh && ex.a === na) return;
+                  newGR[gm.id] = {
+                    h: nh,
+                    a: na
+                  };
+                  changed++;
+                });
+                if (changed > 0) {
+                  const newResults = {
+                    ...stored,
+                    group: newGR
+                  };
+                  lastLocalWriteRef.current = Date.now();
+                  db.collection('wc26').doc('results').set({
+                    value: JSON.stringify(newResults)
+                  }).catch(() => {});
+                  setResults(newResults);
+                  lsSet('results', newResults);
+                }
+              }
+            } catch (_e) {}
+          }
         }
       } catch (_e) {}
       espnFetchingRef.current = false;
