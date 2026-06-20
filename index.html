@@ -11803,7 +11803,23 @@ function BalloonPopup({
       color: 'rgba(255,255,255,.55)',
       marginTop: 4
     }
-  }, "Player #", notif.rank, " of ", notif.total, " 🏆"))));
+  }, "Player #", notif.rank, " of ", notif.total, " 🏆"), !notif.isNew && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: 'rgba(255,255,255,.5)',
+      marginTop: 6,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 22,
+      fontWeight: 900,
+      color: 'white'
+    }
+  }, notif.total), /*#__PURE__*/React.createElement("span", null, "player", notif.total !== 1 ? 's' : '', " competing ⚽")))));
 }
 
 // ── KICKOFF COUNTDOWN OVERLAY ──────────────────────────────────────
