@@ -1395,6 +1395,10 @@ const Tv = p => /*#__PURE__*/React.createElement(Ic, {
   ...p,
   d: ['M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z', 'M8 21h8', 'M12 17v4']
 });
+const TrendingUp = p => /*#__PURE__*/React.createElement(Ic, {
+  ...p,
+  d: ['M22 7l-8.5 8.5-5-5L2 17', 'M16 7h6v6']
+});
 
 // ── FLAG COMPONENT ───────────────────────────────────────────────
 const Flag = ({
@@ -4810,6 +4814,454 @@ const BrowseView = React.memo(({
         marginLeft: 4
       }
     }, "(+", jokerBonus, " 🃏)")) : null);
+  }))))));
+});
+
+// ── SCORE HISTORY VIEW ───────────────────────────────────────────
+const ScoreHistoryView = React.memo(({
+  participants,
+  allPredictions,
+  results,
+  kickoffTimes,
+  currentUser,
+  isAdmin,
+  isGuest
+}) => {
+  // Build day→matchIds from kickoffTimes; fall back to matchday grouping if ESPN not loaded
+  const days = useMemo(() => {
+    const today = new Date().toLocaleDateString('sv');
+    if (kickoffTimes.size > 0) {
+      const dayMap = {};
+      kickoffTimes.forEach((ms, id) => {
+        const ds = new Date(ms).toLocaleDateString('sv');
+        if (!dayMap[ds]) dayMap[ds] = [];
+        dayMap[ds].push(id);
+      });
+      return Object.entries(dayMap).filter(([, ids]) => ids.some(id => {
+        const r = results.group?.[id];
+        return r && r.h !== '' && r.h != null;
+      })).sort(([a], [b]) => b.localeCompare(a)).map(([ds, ids]) => {
+        const resultIds = ids.filter(id => {
+          const r = results.group?.[id];
+          return r && r.h !== '' && r.h != null;
+        });
+        const d = new Date(ds + 'T12:00:00');
+        const label = d.toLocaleDateString('en-GB', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short'
+        });
+        return {
+          dateStr: ds,
+          isToday: ds === today,
+          matchIds: resultIds,
+          label
+        };
+      });
+    }
+    // Fallback: group by matchday when kickoffTimes not loaded
+    const mdMap = {};
+    GROUP_MATCHES.forEach(m => {
+      if (m.matchday < COMP_START_MATCHDAY) return;
+      const r = results.group?.[m.id];
+      if (r && r.h !== '' && r.h != null) {
+        const k = `matchday-${m.matchday}`;
+        if (!mdMap[k]) mdMap[k] = [];
+        mdMap[k].push(m.id);
+      }
+    });
+    return Object.entries(mdMap).sort(([a], [b]) => b.localeCompare(a)).map(([k, ids]) => ({
+      dateStr: k,
+      isToday: false,
+      matchIds: ids,
+      label: {
+        2: 'Matchday 2 (Jun 19–25)',
+        3: 'Matchday 3 (Jun 26+)'
+      }[parseInt(k.split('-')[1])] || k
+    }));
+  }, [kickoffTimes, results]);
+  const showUsers = useMemo(() => {
+    if (isGuest || !currentUser) return [];
+    if (isAdmin) return [...participants].sort((a, b) => a.localeCompare(b));
+    return [currentUser];
+  }, [isAdmin, participants, currentUser, isGuest]);
+  const userDayScores = useMemo(() => {
+    const scores = {};
+    showUsers.forEach(p => {
+      const preds = allPredictions[p] || {};
+      scores[p] = {};
+      days.forEach(({
+        dateStr,
+        matchIds
+      }) => {
+        let pts = 0,
+          jokerBonus = 0;
+        matchIds.forEach(id => {
+          const m = GROUP_MATCHES.find(x => x.id === id);
+          if (!m || m.matchday < COMP_START_MATCHDAY) return;
+          const actual = results.group?.[id];
+          if (!actual || actual.h === '' || actual.h == null) return;
+          const pred = preds.group?.[id];
+          if (!pred || pred.h === '' || pred.h == null) return;
+          const {
+            total
+          } = scoreMatch(pred, actual, m.home, m.away, true);
+          const ej = getJokerForMatchday(preds.jokerHistory || null, m.matchday, preds.joker || {});
+          const mult = getJokerMultiplier(m, ej.team, ej.group);
+          pts += total * mult;
+          if (mult > 1) jokerBonus += total * (mult - 1);
+        });
+        scores[p][dateStr] = {
+          pts,
+          jokerBonus
+        };
+      });
+    });
+    return scores;
+  }, [days, showUsers, allPredictions, results]);
+
+  // Admin: sort users by grand total desc
+  const sortedUsers = useMemo(() => {
+    if (!isAdmin) return showUsers;
+    return [...showUsers].sort((a, b) => {
+      const at = days.reduce((s, {
+        dateStr
+      }) => s + (userDayScores[a]?.[dateStr]?.pts || 0), 0);
+      const bt = days.reduce((s, {
+        dateStr
+      }) => s + (userDayScores[b]?.[dateStr]?.pts || 0), 0);
+      return bt - at;
+    });
+  }, [isAdmin, showUsers, userDayScores, days]);
+  if (isGuest) return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
+    kicker: "Score History",
+    title: "Daily Scores"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 32,
+      textAlign: 'center',
+      color: 'var(--ink-soft)',
+      fontSize: 14,
+      fontStyle: 'italic'
+    }
+  }, "Sign in to view your score history."));
+  if (days.length === 0) return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
+    kicker: "Score History",
+    title: "Daily Scores"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 32,
+      textAlign: 'center',
+      color: 'var(--ink-soft)',
+      fontSize: 14,
+      fontStyle: 'italic'
+    }
+  }, "No match results yet — scores will appear here as matches are played."));
+
+  // ── User view (own daily cards) ──────────────────────────────────
+  if (!isAdmin) {
+    const p = currentUser;
+    const dayScores = userDayScores[p] || {};
+    let running = 0;
+    const dayRows = [...days].reverse().map(d => {
+      const s = dayScores[d.dateStr] || {
+        pts: 0,
+        jokerBonus: 0
+      };
+      running += s.pts;
+      return {
+        ...d,
+        ...s,
+        running
+      };
+    }).reverse();
+    const grandTotal = running;
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
+      kicker: "Your score history",
+      title: "Daily Scores",
+      subtitle: "Points earned per day with joker breakdown."
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        marginTop: 16
+      }
+    }, dayRows.map(({
+      dateStr,
+      label,
+      isToday,
+      pts,
+      jokerBonus,
+      running: rt,
+      matchIds
+    }) => /*#__PURE__*/React.createElement("div", {
+      key: dateStr,
+      className: "card fadein",
+      style: {
+        padding: '14px 18px',
+        borderLeft: isToday ? '3px solid var(--burgundy)' : '3px solid transparent'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontSize: 14
+      }
+    }, label, isToday && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 8,
+        fontSize: 9,
+        fontWeight: 700,
+        background: 'var(--burgundy)',
+        color: 'white',
+        borderRadius: 3,
+        padding: '1px 6px'
+      }
+    }, "TODAY")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        marginTop: 3
+      }
+    }, matchIds.length, " match", matchIds.length !== 1 ? 'es' : '', /*#__PURE__*/React.createElement("span", {
+      style: {
+        margin: '0 8px'
+      }
+    }, "·"), "Running total: ", /*#__PURE__*/React.createElement("strong", {
+      className: "mono"
+    }, rt), " pts"), jokerBonus > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--burgundy)',
+        fontWeight: 700,
+        marginTop: 3
+      }
+    }, "🃏 +", jokerBonus, " pts from joker multiplier")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: 'right',
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "mono",
+      style: {
+        fontSize: 28,
+        fontWeight: 800,
+        color: pts > 0 ? 'var(--burgundy)' : 'var(--ink-soft)'
+      }
+    }, pts), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)'
+      }
+    }, "pts today"))))), /*#__PURE__*/React.createElement("div", {
+      className: "card",
+      style: {
+        padding: '14px 18px',
+        background: 'var(--cream2)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontSize: 14
+      }
+    }, "Grand Total (group stage)"), /*#__PURE__*/React.createElement("span", {
+      className: "mono",
+      style: {
+        fontSize: 22,
+        fontWeight: 800,
+        color: 'var(--burgundy)'
+      }
+    }, grandTotal, " pts"))));
+  }
+
+  // ── Admin table view (all users × days) ─────────────────────────
+  const grandTotals = {};
+  sortedUsers.forEach(u => {
+    grandTotals[u] = days.reduce((s, {
+      dateStr
+    }) => s + (userDayScores[u]?.[dateStr]?.pts || 0), 0);
+  });
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
+    kicker: `${participants.length} participants`,
+    title: "Daily Scores — All Users",
+    subtitle: "Points per day per user. Burgundy +N = joker bonus."
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      overflowX: 'auto',
+      marginTop: 16
+    }
+  }, /*#__PURE__*/React.createElement("table", {
+    style: {
+      width: '100%',
+      borderCollapse: 'collapse',
+      fontSize: 12,
+      minWidth: 500
+    }
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+    style: {
+      background: 'var(--cream2)',
+      borderBottom: '2px solid var(--line)'
+    }
+  }, /*#__PURE__*/React.createElement("th", {
+    style: {
+      padding: '8px 12px',
+      textAlign: 'left',
+      fontWeight: 700,
+      whiteSpace: 'nowrap',
+      minWidth: 130
+    }
+  }, "Date"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      padding: '8px 6px',
+      textAlign: 'center',
+      fontWeight: 700,
+      color: 'var(--ink-soft)',
+      minWidth: 36
+    }
+  }, "Mch"), sortedUsers.map(u => /*#__PURE__*/React.createElement("th", {
+    key: u,
+    style: {
+      padding: '8px 8px',
+      textAlign: 'center',
+      fontWeight: 700,
+      minWidth: 72
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: 3
+    }
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: u,
+    size: 20
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      maxWidth: 68,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    }
+  }, u.split(' ')[0])))))), /*#__PURE__*/React.createElement("tbody", null, days.map(({
+    dateStr,
+    label,
+    isToday,
+    matchIds
+  }) => /*#__PURE__*/React.createElement("tr", {
+    key: dateStr,
+    style: {
+      borderBottom: '1px solid var(--line-soft)',
+      background: isToday ? 'rgba(159,27,27,.05)' : 'transparent'
+    }
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: '8px 12px',
+      fontWeight: isToday ? 700 : 400,
+      whiteSpace: 'nowrap',
+      fontSize: 12
+    }
+  }, label, isToday && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 6,
+      fontSize: 9,
+      fontWeight: 700,
+      background: 'var(--burgundy)',
+      color: 'white',
+      borderRadius: 3,
+      padding: '1px 5px'
+    }
+  }, "TODAY")), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: '8px 6px',
+      textAlign: 'center',
+      color: 'var(--ink-soft)'
+    }
+  }, matchIds.length), sortedUsers.map(u => {
+    const s = userDayScores[u]?.[dateStr] || {
+      pts: 0,
+      jokerBonus: 0
+    };
+    return /*#__PURE__*/React.createElement("td", {
+      key: u,
+      style: {
+        padding: '6px 8px',
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "mono",
+      style: {
+        fontWeight: 700,
+        fontSize: 13,
+        color: s.pts > 0 ? 'var(--ink)' : 'var(--ink-soft)'
+      }
+    }, s.pts), s.jokerBonus > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: 'var(--burgundy)',
+        fontWeight: 700,
+        lineHeight: 1.2
+      }
+    }, "+", s.jokerBonus, "🃏"));
+  }))), /*#__PURE__*/React.createElement("tr", {
+    style: {
+      borderTop: '2px solid var(--line)',
+      background: 'var(--cream2)'
+    }
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: '8px 12px',
+      fontWeight: 700,
+      fontSize: 12
+    }
+  }, "Total"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: '8px 6px',
+      textAlign: 'center',
+      color: 'var(--ink-soft)'
+    }
+  }, days.reduce((s, d) => s + d.matchIds.length, 0)), sortedUsers.map(u => {
+    const jokerTotal = days.reduce((s, {
+      dateStr
+    }) => s + (userDayScores[u]?.[dateStr]?.jokerBonus || 0), 0);
+    return /*#__PURE__*/React.createElement("td", {
+      key: u,
+      style: {
+        padding: '8px 8px',
+        textAlign: 'center'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "mono",
+      style: {
+        fontWeight: 800,
+        fontSize: 14,
+        color: 'var(--burgundy)'
+      }
+    }, grandTotals[u]), jokerTotal > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: 'var(--ink-soft)',
+        lineHeight: 1.2
+      }
+    }, "+", jokerTotal, "🃏"));
   }))))));
 });
 
@@ -11860,6 +12312,11 @@ const Header = ({
   l: 'Leaderboard',
   I: BarChart
 }, {
+  k: 'scores',
+  l: 'Score History',
+  I: TrendingUp,
+  mobileHide: true
+}, {
   k: 'browse',
   l: 'Browse Picks',
   I: Users2,
@@ -14171,6 +14628,19 @@ function App() {
       [currentUser]: predictions
     },
     results: results
+  })), view === 'scores' && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+    label: "Score History"
+  }, /*#__PURE__*/React.createElement(ScoreHistoryView, {
+    participants: participants,
+    allPredictions: isGuest ? allPredictions : {
+      ...allPredictions,
+      [currentUser]: predictions
+    },
+    results: results,
+    kickoffTimes: kickoffTimes,
+    currentUser: currentUser,
+    isAdmin: adminRole === 'admin' || adminRole === 'subadmin',
+    isGuest: isGuest
   })), view === 'browse' && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Browse Picks"
   }, /*#__PURE__*/React.createElement(BrowseView, {
