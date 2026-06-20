@@ -6792,7 +6792,13 @@ const OnlinePanel = ({
   }, []);
   const now = Date.now();
   void tick;
-  const list = Object.entries(onlineUsers).filter(([, ts]) => ts && now - ts < 3 * 60 * 1000).sort((a, b) => b[1] - a[1]);
+  const list = Object.entries(onlineUsers).map(([name, v]) => ({
+    name,
+    ts: typeof v === 'object' ? v.ts : v,
+    mob: typeof v === 'object' ? !!v.mob : false
+  })).filter(({
+    ts
+  }) => ts && now - ts < 3 * 60 * 1000).sort((a, b) => b.ts - a.ts);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 16,
@@ -6840,7 +6846,11 @@ const OnlinePanel = ({
       fontSize: 13,
       fontStyle: 'italic'
     }
-  }, "No active users right now.") : /*#__PURE__*/React.createElement("div", null, list.map(([name, ts], i) => {
+  }, "No active users right now.") : /*#__PURE__*/React.createElement("div", null, list.map(({
+    name,
+    ts,
+    mob
+  }, i) => {
     const secsAgo = Math.floor((now - ts) / 1000);
     const ago = secsAgo < 60 ? `${secsAgo}s ago` : secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago` : `${Math.floor(secsAgo / 3600)}h ago`;
     return /*#__PURE__*/React.createElement("div", {
@@ -6878,6 +6888,11 @@ const OnlinePanel = ({
         marginLeft: 6
       }
     }, "(you)")), /*#__PURE__*/React.createElement("span", {
+      title: mob ? 'Mobile' : 'Desktop',
+      style: {
+        fontSize: 14
+      }
+    }, mob ? '📱' : '🖥️'), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
         color: 'var(--ink-soft)',
@@ -6891,7 +6906,7 @@ const OnlinePanel = ({
       color: 'var(--ink-soft)',
       padding: '0 4px'
     }
-  }, "🟢 Bright green = active in last 90s · 🟠 Orange = seen 90s–3min ago"));
+  }, "🟢 Bright green = active in last 90s · 🟠 Orange = seen 90s–3min ago · 📱 Mobile · 🖥️ Desktop"));
 };
 
 // ── ADMIN VIEW ───────────────────────────────────────────────────
@@ -12222,6 +12237,9 @@ function App() {
   const [goalNotif, setGoalNotif] = useState(null);
   const [kickoffCountdown, setKickoffCountdown] = useState(null); // {matchLabel,secsLeft} for last-15s overlay
   const kickoffShownRef = useRef(new Set()); // track which match IDs have already shown overlay
+  const lastEspnSnapshotRef = useRef(0); // ts of last fresh espn-cache push received via onSnapshot
+  const espnFetchingRef = useRef(false); // prevent concurrent ESPN fetches on this client
+  const lastCachedRef = useRef({}); // last parsed espn-cache object, kept current by onSnapshot
   const [onlineUsers, setOnlineUsers] = useState({}); // name→lastSeen ms, for admin online panel
   const [supportByUser, setSupportByUser] = useState({});
   const [matchCommentary, setMatchCommentary] = useState({}); // matchId → {text,author,ts,matchLabel}
@@ -12515,9 +12533,14 @@ function App() {
 
   // ── END AUTO-POLL ─────────────────────────────────────────────────
 
-  // ── FETCH LIVE MATCHES ON MOUNT (ESPN primary, cache fallback) ───
+  // ── ESPN CACHE: onSnapshot subscription (eliminates per-user .get() polling) ────
+  // All 200 clients subscribe once; Firestore pushes updates over existing WebSocket.
+  // One designated client fetches ESPN and writes the cache; all others receive a push.
   useEffect(() => {
     const ESPN_SB = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard`;
+    const CACHE_DOC = 'espn-cache';
+    const CACHE_TTL = 55000;
+    const CLAIM_TTL = 10000;
     const espnToMatch = comp => {
       const hC = comp.competitors?.find(c => c.homeAway === 'home');
       const aC = comp.competitors?.find(c => c.homeAway === 'away');
@@ -12525,8 +12548,7 @@ function App() {
       const st = comp.status?.type || {};
       const min = parseInt(comp.status?.displayClock) || 0;
       let status = 'scheduled';
-      if (st.name === 'STATUS_FIRST_HALF') status = '1H';else if (st.name === 'STATUS_SECOND_HALF') status = '2H';else if (st.name === 'STATUS_HALFTIME') status = 'HT';else if (st.name === 'STATUS_EXTRA_TIME') status = 'ET';else if (st.name === 'STATUS_PENALTY') status = 'PEN';else if (st.name === 'STATUS_IN_PROGRESS') status = min > 45 ? '2H' : '1H'; // fallback
-      else if (st.name === 'STATUS_FULL_TIME' || st.completed) status = 'FT';
+      if (st.name === 'STATUS_FIRST_HALF') status = '1H';else if (st.name === 'STATUS_SECOND_HALF') status = '2H';else if (st.name === 'STATUS_HALFTIME') status = 'HT';else if (st.name === 'STATUS_EXTRA_TIME') status = 'ET';else if (st.name === 'STATUS_PENALTY') status = 'PEN';else if (st.name === 'STATUS_IN_PROGRESS') status = min > 45 ? '2H' : '1H';else if (st.name === 'STATUS_FULL_TIME' || st.completed) status = 'FT';
       return {
         home: normTeam(hC.team?.displayName || ''),
         away: normTeam(aC.team?.displayName || ''),
@@ -12537,43 +12559,63 @@ function App() {
         kickoff: comp.date || null
       };
     };
-    const loadFromCache = async () => {
+    const fetchAndWrite = async currentCached => {
+      if (espnFetchingRef.current) return; // already fetching on this client
+      espnFetchingRef.current = true;
+      // Write fetchingAt claim so other clients see it via their onSnapshot and skip
+      if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
+        value: JSON.stringify({
+          ...(currentCached || {}),
+          fetchingAt: Date.now()
+        })
+      }).catch(() => {});
       try {
-        const [cl, cu] = await Promise.all([storage.getShared('live-cache-live').catch(() => null), storage.getShared('live-cache-upcoming').catch(() => null)]);
-        const flat = obj => {
-          if (!obj || !obj.data) return [];
-          const d = obj.data;
-          if (Array.isArray(d)) return d;
-          const cands = [d?.data?.matches, d?.data?.live, d?.data?.upcoming, d?.data, d?.matches, d?.live, d?.upcoming];
-          for (const c of cands) {
-            if (Array.isArray(c) && c.length > 0) return c;
-          }
-          return [];
-        };
-        const all = [...flat(cl), ...flat(cu)];
-        if (all.length > 0) setLiveMatches(all);
-      } catch {}
-    };
-    setLiveLoading(true);
-    (async () => {
-      try {
-        // Use LOCAL date strings — ESPN API uses local event dates, not UTC
         const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
         const now = new Date();
-        const yStr = localDateStr(new Date(now.getTime() - 86400000));
-        const tStr = localDateStr(now);
-        const tmStr = localDateStr(new Date(now.getTime() + 86400000));
-        const [r0, r1, r2] = await Promise.all([fetch(`${ESPN_SB}?dates=${yStr}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${tStr}`).then(r => r.json()), fetch(`${ESPN_SB}?dates=${tmStr}`).then(r => r.json())]);
-        const all = [...(r0.events || []), ...(r1.events || []), ...(r2.events || [])].map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
-        if (all.length > 0) {
-          setLiveMatches(all);
+        const [r0, r1, r2] = await Promise.all([fetch(`${ESPN_SB}?dates=${localDateStr(new Date(now.getTime() - 86400000))}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${localDateStr(now)}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${localDateStr(new Date(now.getTime() + 86400000))}`).then(r => r.json()).catch(() => ({}))]);
+        const matches = [...(r0.events || []), ...(r1.events || []), ...(r2.events || [])].map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
+        if (matches.length > 0) {
+          setLiveMatches(matches);
           setLiveLoading(false);
+          // Write fresh cache — triggers onSnapshot push to all subscribed clients
+          if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
+            value: JSON.stringify({
+              matches,
+              ts: Date.now(),
+              fetchingAt: 0
+            })
+          }).catch(() => {});
+        }
+      } catch (_e) {}
+      espnFetchingRef.current = false;
+      setLiveLoading(false);
+    };
+    setLiveLoading(true);
+    if (!FB_ON) {
+      fetchAndWrite(null);
+      return;
+    }
+    // Subscribe to cache — fires immediately with current doc, then on every write
+    const unsub = db.collection('wc26').doc(CACHE_DOC).onSnapshot(snap => {
+      try {
+        if (!snap.exists) {
+          if (!espnFetchingRef.current) fetchAndWrite(null);
           return;
         }
-      } catch {}
-      await loadFromCache();
-      setLiveLoading(false);
-    })();
+        const cached = JSON.parse(snap.data().value || '{}');
+        if (cached.matches && Array.isArray(cached.matches) && cached.matches.length > 0) {
+          setLiveMatches(cached.matches);
+          setLiveLoading(false);
+        }
+        lastCachedRef.current = cached; // always keep latest snapshot for refreshBanner claim writes
+        if (cached.ts && Date.now() - cached.ts < CACHE_TTL) {
+          lastEspnSnapshotRef.current = cached.ts; // fresh — record ts so timer skips ESPN
+        } else if (!(cached.fetchingAt && Date.now() - cached.fetchingAt < CLAIM_TTL)) {
+          fetchAndWrite(cached); // stale & unclaimed — this client fetches
+        }
+      } catch (_e) {}
+    }, () => {});
+    return () => unsub();
   }, []);
 
   // ── SUPPORT WALL LISTENER ──────────────────────────────────────
@@ -12652,9 +12694,12 @@ function App() {
     }
   }, [supportByUser, getSupporterId]);
 
-  // ── BANNER AUTO-REFRESH every 60 seconds (ESPN primary, cache fallback) ──
+  // ── BANNER AUTO-REFRESH timer (triggers ESPN fetch when onSnapshot cache stale) ──
+  // No Firestore reads — uses lastEspnSnapshotRef to check staleness from onSnapshot pushes.
   useEffect(() => {
     const ESPN_SB = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard`;
+    const CACHE_DOC = 'espn-cache';
+    const CACHE_TTL = 55000;
     const espnToMatch = comp => {
       const hC = comp.competitors?.find(c => c.homeAway === 'home');
       const aC = comp.competitors?.find(c => c.homeAway === 'away');
@@ -12674,44 +12719,62 @@ function App() {
       };
     };
     const refreshBanner = async () => {
-      if (document.visibilityState === 'hidden') return; // skip while tab not visible
+      if (document.visibilityState === 'hidden') return;
+      if (Date.now() - lastEspnSnapshotRef.current < CACHE_TTL) return; // onSnapshot delivered fresh data
+      if (espnFetchingRef.current) return; // another fetch already in flight
+      espnFetchingRef.current = true;
+      // Write fetchingAt claim so other clients' onSnapshot sees it and skips their fetch.
+      // Spread lastCachedRef to preserve existing matches/ts fields in the value string.
+      if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
+        value: JSON.stringify({
+          ...lastCachedRef.current,
+          fetchingAt: Date.now()
+        })
+      }).catch(() => {});
       try {
         const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
         const now = new Date();
-        const yStr = localDateStr(new Date(now.getTime() - 86400000));
-        const tStr = localDateStr(now);
-        const tmStr = localDateStr(new Date(now.getTime() + 86400000));
-        const [r0, r1, r2] = await Promise.all([fetch(`${ESPN_SB}?dates=${yStr}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${tStr}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${tmStr}`).then(r => r.json()).catch(() => ({}))]);
+        const [r0, r1, r2] = await Promise.all([fetch(`${ESPN_SB}?dates=${localDateStr(new Date(now.getTime() - 86400000))}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${localDateStr(now)}`).then(r => r.json()).catch(() => ({})), fetch(`${ESPN_SB}?dates=${localDateStr(new Date(now.getTime() + 86400000))}`).then(r => r.json()).catch(() => ({}))]);
         const all = [...(r0.events || []), ...(r1.events || []), ...(r2.events || [])].map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
         if (all.length > 0) {
           setLiveMatches(all);
-          return;
+          if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
+            value: JSON.stringify({
+              matches: all,
+              ts: Date.now(),
+              fetchingAt: 0
+            })
+          }).catch(() => {});
         }
-      } catch {}
-      // ESPN failed — fall back to Firestore cache
-      try {
-        const [cl, cu] = await Promise.all([storage.getShared('live-cache-live').catch(() => null), storage.getShared('live-cache-upcoming').catch(() => null)]);
-        const flat = obj => {
-          if (!obj || !obj.data) return [];
-          const d = obj.data;
-          if (Array.isArray(d)) return d;
-          const cands = [d?.data?.matches, d?.data?.live, d?.data?.upcoming, d?.data, d?.matches, d?.live, d?.upcoming];
-          for (const c of cands) {
-            if (Array.isArray(c) && c.length > 0) return c;
-          }
-          return [];
-        };
-        const combined = [...flat(cl), ...flat(cu)];
-        if (combined.length > 0) setLiveMatches(combined);
-      } catch {}
+      } catch (_e) {}
+      espnFetchingRef.current = false;
     };
-    window.__refreshBanner = refreshBanner; // expose for manual refresh from banner
-    const t = setInterval(refreshBanner, 60000); // every 60 seconds
+    window.__refreshBanner = refreshBanner;
+    // Adaptive interval: 60s when a match is live or starting within 90min, else 10min
+    const getInterval = () => {
+      const now = Date.now();
+      const LIVE_RE = /^(1h|2h|ht|et|pen|live|in.?progress)$/i;
+      const hasLive = liveMatches.some(m => LIVE_RE.test(m.status || m.matchStatus || m.state || ''));
+      const soonKickoff = liveMatches.some(m => {
+        const ko = m.kickoff || m.datetime || m.date || null;
+        if (!ko) return false;
+        const koMs = new Date(ko).getTime();
+        return !isNaN(koMs) && koMs - now < 90 * 60 * 1000 && koMs > now;
+      });
+      return hasLive || soonKickoff ? 60000 : 600000; // 60s active, 10min idle
+    };
+    let t = setInterval(refreshBanner, getInterval());
+    // Re-evaluate interval whenever liveMatches changes (handled by re-mount via dep)
+    const tick = () => {
+      refreshBanner();
+      clearInterval(t);
+      t = setInterval(tick, getInterval());
+    };
     return () => {
       clearInterval(t);
       delete window.__refreshBanner;
     };
-  }, []);
+  }, [liveMatches]);
 
   // Set of GROUP_MATCHES IDs that are live or within 5 min of kickoff
   const lockedMatchIds = useMemo(() => {
@@ -13348,9 +13411,13 @@ function App() {
   useEffect(() => {
     const identity = currentUser && currentUser !== '__guest__' ? currentUser : adminRole ? `[${adminRole === 'superadmin' ? 'SuperAdmin' : 'SubAdmin'}]` : null;
     if (!FB_ON || !identity) return;
+    const isMob = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
     const beat = () => {
       db.collection('wc26').doc('online-users').set({
-        [identity]: Date.now()
+        [identity]: {
+          ts: Date.now(),
+          mob: isMob
+        }
       }, {
         merge: true
       }).catch(() => {});
@@ -13371,15 +13438,22 @@ function App() {
     }, snap => {
       if (!snap.exists) return;
       const data = snap.data() || {};
-      // Merge — only update entries that have a real timestamp; nulls (stale cleanup
-      // writes from old code) are ignored so they don't evict a user from the panel.
+      // Merge — handle both old format (plain timestamp number) and new format ({ts,mob}).
+      // Nulls (stale cleanup writes) are ignored.
       // Expiry is handled purely by the 3-min time-filter in OnlinePanel.
       setOnlineUsers(prev => {
         const merged = {
           ...prev
         };
-        Object.entries(data).forEach(([name, ts]) => {
-          if (ts) merged[name] = ts;
+        Object.entries(data).forEach(([name, v]) => {
+          if (!v) return;
+          if (typeof v === 'object' && v.ts) merged[name] = {
+            ts: v.ts,
+            mob: !!v.mob
+          };else if (typeof v === 'number') merged[name] = {
+            ts: v,
+            mob: false
+          }; // legacy
         });
         return merged;
       });
