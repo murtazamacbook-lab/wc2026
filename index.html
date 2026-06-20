@@ -13337,7 +13337,7 @@ function App() {
         [identity]: Date.now()
       }, {
         merge: true
-      }).catch(e => console.warn('[heartbeat] write failed:', e.code, e.message));
+      }).catch(() => {});
     };
     beat();
     const t = setInterval(beat, 30000); // every 30s for fresher data
