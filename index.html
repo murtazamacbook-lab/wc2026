@@ -2198,6 +2198,153 @@ const GroupCard = ({
   }))));
 };
 
+// ── MOBILE PREDICTIONS VIEW (today + tomorrow only) ──────────────
+const MobilePredictionsView = ({
+  predictions,
+  onSave,
+  results,
+  locked,
+  lockedMatchIds = new Set(),
+  kickoffTimes = new Map(),
+  matchCommentary = {}
+}) => {
+  const toDateStr = ms => new Date(ms).toLocaleDateString('sv'); // "YYYY-MM-DD" local
+  const todayStr = new Date().toLocaleDateString('sv');
+  const tomorrowStr = new Date(Date.now() + 864e5).toLocaleDateString('sv');
+  // For matches without a kickoffTime entry, fall back to matchday approximate date
+  const mdFallbackStr = {
+    1: toDateStr(new Date('2026-06-12T00:00:00Z').getTime()),
+    2: toDateStr(new Date('2026-06-19T00:00:00Z').getTime()),
+    3: toDateStr(new Date('2026-06-26T00:00:00Z').getTime())
+  };
+  const todayMatches = GROUP_MATCHES.filter(m => {
+    const ms = kickoffTimes.get(m.id);
+    const ds = ms ? toDateStr(ms) : mdFallbackStr[m.matchday];
+    return ds === todayStr || ds === tomorrowStr;
+  });
+  const setMatch = (mId, side, val) => {
+    if (locked) return;
+    if (val !== '' && (isNaN(parseInt(val)) || parseInt(val) < 0 || parseInt(val) > 20)) return;
+    onSave({
+      ...predictions,
+      group: {
+        ...predictions.group,
+        [mId]: {
+          ...predictions.group?.[mId],
+          [side]: val
+        }
+      }
+    });
+  };
+  if (todayMatches.length === 0) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 32,
+        textAlign: 'center',
+        padding: '0 16px'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 40,
+        marginBottom: 12
+      }
+    }, "📅"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontSize: 16,
+        marginBottom: 6
+      }
+    }, "No matches today or tomorrow"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: 'var(--ink-soft)'
+      }
+    }, "Check back on the next match day. You can view the full leaderboard in the meantime."));
+  }
+  // Group by date label
+  const byDate = {};
+  todayMatches.forEach(m => {
+    const ms = kickoffTimes.get(m.id);
+    const ds = ms ? toDateStr(ms) : mdFallbackStr[m.matchday];
+    const label = ds === todayStr ? 'Today' : ds === tomorrowStr ? 'Tomorrow' : ds;
+    if (!byDate[label]) byDate[label] = [];
+    byDate[label].push(m);
+  });
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
+    kicker: "Upcoming Matches",
+    title: "Your Predictions",
+    subtitle: "Enter scores for today and tomorrow's fixtures before kick-off."
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 6,
+      padding: '8px 12px',
+      background: 'rgba(214,137,42,.08)',
+      border: '1px solid rgba(214,137,42,.3)',
+      borderRadius: 6,
+      fontSize: 12,
+      color: 'var(--ink)',
+      lineHeight: 1.5
+    }
+  }, "⏰ ", /*#__PURE__*/React.createElement("strong", null, "Predictions lock 5 min before kick-off."), " Open desktop for full access (all groups, bracket, bonus)."), Object.entries(byDate).map(([label, matches]) => /*#__PURE__*/React.createElement("div", {
+    key: label,
+    style: {
+      marginTop: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "micro-caps",
+    style: {
+      marginBottom: 8,
+      fontSize: 12
+    }
+  }, label), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)',
+      alignItems: 'center',
+      padding: '4px 12px'
+    }
+  }, matches.map(m => {
+    const c = matchCommentary[m.id];
+    return /*#__PURE__*/React.createElement(React.Fragment, {
+      key: m.id
+    }, /*#__PURE__*/React.createElement(MatchCells, {
+      match: m,
+      pred: predictions.group?.[m.id] || {
+        h: '',
+        a: ''
+      },
+      actual: results.group?.[m.id],
+      onSet: setMatch,
+      jokerMultiplier: 1,
+      locked: locked,
+      matchLocked: lockedMatchIds.has(m.id),
+      kickoffMs: kickoffTimes.get(m.id) || null
+    }), c && /*#__PURE__*/React.createElement("div", {
+      style: {
+        gridColumn: '1/-1',
+        margin: '0 0 6px',
+        padding: '7px 10px',
+        background: 'rgba(27,94,63,.05)',
+        borderRadius: 4,
+        borderLeft: '3px solid var(--forest)',
+        fontSize: 11,
+        color: 'var(--ink)',
+        lineHeight: 1.5
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        color: 'var(--forest)'
+      }
+    }, "📝 "), c.text));
+  }))))));
+};
+
 // ── PREDICTIONS VIEW ─────────────────────────────────────────────
 const PredictionsView = ({
   predictions,
@@ -13387,7 +13534,15 @@ function App() {
     className: "main-primary"
   }, view === 'predictions' && !isGuest && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Group Stage"
-  }, /*#__PURE__*/React.createElement(PredictionsView, {
+  }, window.innerWidth <= 640 ? /*#__PURE__*/React.createElement(MobilePredictionsView, {
+    predictions: predictions,
+    onSave: savePredictions,
+    results: results,
+    locked: groupLocked,
+    lockedMatchIds: lockedMatchIds,
+    kickoffTimes: kickoffTimes,
+    matchCommentary: matchCommentary
+  }) : /*#__PURE__*/React.createElement(PredictionsView, {
     predictions: predictions,
     onSave: savePredictions,
     results: results,
