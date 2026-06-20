@@ -12992,14 +12992,27 @@ function App() {
             ...pws
           }));
         }
-        // Load per-user predictions from localStorage only (avoid N Firestore reads on every login)
-        // Predictions are written to localStorage on every save, so this is always fresh
+        // Load per-user predictions: localStorage first (fast), then Firestore for any missing
+        // (missing = fresh device / mobile with no localStorage — avoids 0-pts leaderboard)
         const parts = vals['participants'] || lsGet('participants') || [];
         const all = {};
+        const missing = [];
         parts.forEach(p => {
           const d = lsGet(`pred-${p}`);
-          if (d) all[p] = d;
+          if (d) all[p] = d;else missing.push(p);
         });
+        if (missing.length > 0) {
+          const predSnaps = await Promise.all(missing.map(p => fbTimeout(db.collection('wc26').doc(`pred-${p}`).get()).catch(() => null)));
+          predSnaps.forEach((snap, i) => {
+            if (snap?.exists) {
+              try {
+                const d = JSON.parse(snap.data().value || '{}');
+                all[missing[i]] = d;
+                lsSet(`pred-${missing[i]}`, d);
+              } catch (_e) {}
+            }
+          });
+        }
         setAllPredictions(all);
       } catch (e) {
         console.warn('Firebase bg sync error:', e);
