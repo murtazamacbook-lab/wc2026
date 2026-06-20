@@ -4827,42 +4827,42 @@ const ScoreHistoryView = React.memo(({
   isAdmin,
   isGuest
 }) => {
-  // Build day→matchIds from results directly (guarantees totals match leaderboard)
-  // kickoffTimes used as date lookup; falls back to a matchday-based date if not available
+  // Build day→matchIds grouped by matchday (avoids all timezone issues with kickoffTimes)
+  // MD2 = Jun 19–25, MD3 = Jun 26+
   const days = useMemo(() => {
-    const today = new Date().toLocaleDateString('sv');
-    const MD_FALLBACK_DATE = {
-      2: '2026-06-19',
-      3: '2026-06-26'
-    };
-    const dayMap = {};
+    const mdMap = {};
     GROUP_MATCHES.forEach(m => {
-      if (m.matchday < COMP_START_MATCHDAY) return;
+      if (m.matchday < COMP_START_MATCHDAY) return; // MD1 never scored
       const r = results.group?.[m.id];
       if (!r || r.h === '' || r.h == null) return;
-      // Use ESPN kickoff time if available, else matchday fallback date
-      const ms = kickoffTimes.get(m.id);
-      let ds = ms ? new Date(ms).toLocaleDateString('sv') : MD_FALLBACK_DATE[m.matchday] || '2026-06-19';
-      // Hard clamp — never show before competition start
-      if (ds < '2026-06-19') ds = '2026-06-19';
-      if (!dayMap[ds]) dayMap[ds] = [];
-      dayMap[ds].push(m.id);
+      if (!mdMap[m.matchday]) mdMap[m.matchday] = [];
+      mdMap[m.matchday].push(m.id);
     });
-    return Object.entries(dayMap).map(([ds, ids]) => {
-      const d = new Date(ds + 'T12:00:00');
-      const label = d.toLocaleDateString('en-GB', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short'
-      });
-      return {
-        dateStr: ds,
-        isToday: ds === today,
-        matchIds: ids,
-        label
+    const today = new Date().toLocaleDateString('sv');
+    const MD_INFO = {
+      2: {
+        dateStr: '2026-06-19',
+        label: 'MD2 · Jun 19–25'
+      },
+      3: {
+        dateStr: '2026-06-26',
+        label: 'MD3 · Jun 26+'
+      }
+    };
+    return Object.entries(mdMap).sort(([a], [b]) => Number(b) - Number(a)).map(([md, ids]) => {
+      const info = MD_INFO[Number(md)] || {
+        dateStr: `2026-07-0${md}`,
+        label: `Matchday ${md}`
       };
-    }).sort((a, b) => b.dateStr.localeCompare(a.dateStr));
-  }, [kickoffTimes, results]);
+      return {
+        dateStr: info.dateStr,
+        isToday: today >= info.dateStr && (Number(md) === 2 ? today < '2026-06-26' : true),
+        matchIds: ids,
+        label: info.label,
+        md: Number(md)
+      };
+    });
+  }, [results]);
   const showUsers = useMemo(() => {
     if (isGuest || !currentUser) return [];
     if (isAdmin) return [...participants].sort((a, b) => a.localeCompare(b));
@@ -4933,13 +4933,25 @@ const ScoreHistoryView = React.memo(({
     kicker: "Score History",
     title: "Daily Scores"
   }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '10px 14px',
+      background: 'rgba(159,27,27,.07)',
+      border: '1px solid rgba(159,27,27,.2)',
+      borderRadius: 6,
+      fontSize: 12,
+      color: 'var(--burgundy)',
+      fontWeight: 600,
+      marginTop: 14
+    }
+  }, "⚽ Competition scoring starts from ", /*#__PURE__*/React.createElement("strong", null, "Jun 19 (Matchday 2)"), ". Any predictions for matches before this date are not counted."), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 32,
       textAlign: 'center',
       color: 'var(--ink-soft)',
       fontSize: 14,
-      fontStyle: 'italic'
+      fontStyle: 'italic',
+      marginTop: 12
     }
   }, "No match results yet — scores will appear here as matches are played."));
 
@@ -4964,8 +4976,19 @@ const ScoreHistoryView = React.memo(({
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
       kicker: "Your score history",
       title: "Daily Scores",
-      subtitle: "Points earned per day with joker breakdown."
+      subtitle: "Points earned per matchday with joker breakdown."
     }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '10px 14px',
+        background: 'rgba(159,27,27,.07)',
+        border: '1px solid rgba(159,27,27,.2)',
+        borderRadius: 6,
+        fontSize: 12,
+        color: 'var(--burgundy)',
+        fontWeight: 600,
+        marginTop: 14
+      }
+    }, "⚽ Competition scoring starts from ", /*#__PURE__*/React.createElement("strong", null, "Jun 19 (Matchday 2)"), ". Predictions for matches before this date are not counted."), /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         flexDirection: 'column',
@@ -5083,8 +5106,19 @@ const ScoreHistoryView = React.memo(({
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
     kicker: `${participants.length} participants`,
     title: "Daily Scores — All Users",
-    subtitle: "Points per day per user. Burgundy +N = joker bonus."
+    subtitle: "Points per matchday per user. Burgundy +N = joker bonus."
   }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '10px 14px',
+      background: 'rgba(159,27,27,.07)',
+      border: '1px solid rgba(159,27,27,.2)',
+      borderRadius: 6,
+      fontSize: 12,
+      color: 'var(--burgundy)',
+      fontWeight: 600,
+      marginTop: 14
+    }
+  }, "⚽ Competition scoring starts from ", /*#__PURE__*/React.createElement("strong", null, "Jun 19 (Matchday 2)"), ". Predictions for matches before this date are not counted."), /*#__PURE__*/React.createElement("div", {
     style: {
       overflowX: 'auto',
       marginTop: 16
