@@ -1191,6 +1191,18 @@ const range = (a, b) => Array.from({
   length: b - a + 1
 }, (_, i) => a + i);
 
+// Reactive mobile detection — true when viewport ≤768px (phones + small tablets)
+const useMobile = () => {
+  const mq = window.matchMedia('(max-width:768px)');
+  const [isMobile, setIsMobile] = useState(mq.matches);
+  useEffect(() => {
+    const h = e => setIsMobile(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
+  return isMobile;
+};
+
 // ── CSS ──────────────────────────────────────────────────────────
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
@@ -1280,7 +1292,7 @@ const CSS = `
   a{color:var(--burgundy);text-decoration:none}
   a:hover{text-decoration:underline}
   @media(max-width:1100px){.main-shell{flex-direction:column}.support-wall{width:100%;max-height:none;position:static;top:auto}}
-  @media(max-width:640px){
+  @media(max-width:768px){
     .input-score{width:36px;height:36px;font-size:14px}
     .group-letter{font-size:36px}
     .tab-btn{padding:6px 9px;font-size:12px;gap:3px}
@@ -13348,11 +13360,12 @@ function App() {
 
   // On mobile, redirect away from views that are hidden in the nav
   const MOBILE_HIDDEN_VIEWS = ['bracket', 'bonus', 'browse', 'rules', 'admin'];
+  const isMobile = useMobile();
   useEffect(() => {
-    if (window.innerWidth <= 640 && MOBILE_HIDDEN_VIEWS.includes(view)) {
-      setView(view === 'admin' ? 'leaderboard' : 'leaderboard');
+    if (isMobile && MOBILE_HIDDEN_VIEWS.includes(view)) {
+      setView('leaderboard');
     }
-  }, [view]); // eslint-disable-line
+  }, [isMobile, view]); // eslint-disable-line
 
   const handleAdminLogin = useCallback(pw => {
     if (!pw) return;
@@ -13534,7 +13547,7 @@ function App() {
     className: "main-primary"
   }, view === 'predictions' && !isGuest && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Group Stage"
-  }, window.innerWidth <= 640 ? /*#__PURE__*/React.createElement(MobilePredictionsView, {
+  }, isMobile ? /*#__PURE__*/React.createElement(MobilePredictionsView, {
     predictions: predictions,
     onSave: savePredictions,
     results: results,
