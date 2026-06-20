@@ -4827,58 +4827,41 @@ const ScoreHistoryView = React.memo(({
   isAdmin,
   isGuest
 }) => {
-  // Build day→matchIds from kickoffTimes; fall back to matchday grouping if ESPN not loaded
+  // Build day→matchIds from results directly (guarantees totals match leaderboard)
+  // kickoffTimes used as date lookup; falls back to a matchday-based date if not available
   const days = useMemo(() => {
     const today = new Date().toLocaleDateString('sv');
-    if (kickoffTimes.size > 0) {
-      const dayMap = {};
-      kickoffTimes.forEach((ms, id) => {
-        // Skip MD1 matches entirely — they are never scored
-        const gm = GROUP_MATCHES.find(x => x.id === id);
-        if (!gm || gm.matchday < COMP_START_MATCHDAY) return;
-        const ds = new Date(ms).toLocaleDateString('sv');
-        if (!dayMap[ds]) dayMap[ds] = [];
-        dayMap[ds].push(id);
-      });
-      return Object.entries(dayMap).map(([ds, ids]) => {
-        const resultIds = ids.filter(id => {
-          const r = results.group?.[id];
-          return r && r.h !== '' && r.h != null;
-        });
-        const d = new Date(ds + 'T12:00:00');
-        const label = d.toLocaleDateString('en-GB', {
-          weekday: 'short',
-          day: 'numeric',
-          month: 'short'
-        });
-        return {
-          dateStr: ds,
-          isToday: ds === today,
-          matchIds: resultIds,
-          label
-        };
-      }).filter(d => d.matchIds.length > 0 && d.dateStr >= '2026-06-19').sort((a, b) => b.dateStr.localeCompare(a.dateStr));
-    }
-    // Fallback: group by matchday when kickoffTimes not loaded
-    const mdMap = {};
+    const MD_FALLBACK_DATE = {
+      2: '2026-06-19',
+      3: '2026-06-26'
+    };
+    const dayMap = {};
     GROUP_MATCHES.forEach(m => {
       if (m.matchday < COMP_START_MATCHDAY) return;
       const r = results.group?.[m.id];
-      if (r && r.h !== '' && r.h != null) {
-        const k = `matchday-${m.matchday}`;
-        if (!mdMap[k]) mdMap[k] = [];
-        mdMap[k].push(m.id);
-      }
+      if (!r || r.h === '' || r.h == null) return;
+      // Use ESPN kickoff time if available, else matchday fallback date
+      const ms = kickoffTimes.get(m.id);
+      let ds = ms ? new Date(ms).toLocaleDateString('sv') : MD_FALLBACK_DATE[m.matchday] || '2026-06-19';
+      // Hard clamp — never show before competition start
+      if (ds < '2026-06-19') ds = '2026-06-19';
+      if (!dayMap[ds]) dayMap[ds] = [];
+      dayMap[ds].push(m.id);
     });
-    return Object.entries(mdMap).sort(([a], [b]) => b.localeCompare(a)).map(([k, ids]) => ({
-      dateStr: k,
-      isToday: false,
-      matchIds: ids,
-      label: {
-        2: 'Matchday 2 (Jun 19–25)',
-        3: 'Matchday 3 (Jun 26+)'
-      }[parseInt(k.split('-')[1])] || k
-    }));
+    return Object.entries(dayMap).map(([ds, ids]) => {
+      const d = new Date(ds + 'T12:00:00');
+      const label = d.toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
+      });
+      return {
+        dateStr: ds,
+        isToday: ds === today,
+        matchIds: ids,
+        label
+      };
+    }).sort((a, b) => b.dateStr.localeCompare(a.dateStr));
   }, [kickoffTimes, results]);
   const showUsers = useMemo(() => {
     if (isGuest || !currentUser) return [];
