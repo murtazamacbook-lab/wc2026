@@ -7607,7 +7607,10 @@ const AdminView = ({
       marginTop: 16,
       flexWrap: 'wrap'
     }
-  }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.keys(onlineUsers).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+  }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.values(onlineUsers).filter(v => {
+    const ts = typeof v === 'object' ? v.ts : v;
+    return ts && Date.now() - ts < 3 * 60 * 1000;
+  }).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
     key: k,
     className: "tab-btn",
     style: {
