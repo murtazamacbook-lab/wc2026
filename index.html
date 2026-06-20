@@ -1280,7 +1280,16 @@ const CSS = `
   a{color:var(--burgundy);text-decoration:none}
   a:hover{text-decoration:underline}
   @media(max-width:1100px){.main-shell{flex-direction:column}.support-wall{width:100%;max-height:none;position:static;top:auto}}
-  @media(max-width:640px){.input-score{width:36px;height:36px;font-size:14px}.group-letter{font-size:36px}}
+  @media(max-width:640px){
+    .input-score{width:36px;height:36px;font-size:14px}
+    .group-letter{font-size:36px}
+    .tab-btn{padding:6px 9px;font-size:12px;gap:3px}
+    .match-row{gap:3px;padding:7px 0}
+    .team-name{font-size:12px}
+    .main-content{padding:12px 8px 80px!important}
+    .chat-btn{left:12px!important;bottom:12px!important;width:46px!important;height:46px!important;font-size:20px!important}
+    .chat-panel{width:calc(100vw - 28px)!important;left:12px!important;bottom:72px!important}
+  }
   `;
 
 // ── ICON COMPONENTS (inline SVG) ─────────────────────────────────
@@ -13350,6 +13359,7 @@ function App() {
       fontWeight: 600
     }
   }, "🔒 COMPETITION LOCKED — predictions are now closed. Good luck!"), /*#__PURE__*/React.createElement("main", {
+    className: "main-content",
     style: {
       maxWidth: 1420,
       margin: '0 auto',
@@ -13754,6 +13764,7 @@ const ChatWidget = ({
       animation: 'emojiFloat 2.4s cubic-bezier(.2,.8,.4,1) forwards'
     }
   }, f.emoji)), /*#__PURE__*/React.createElement("button", {
+    className: "chat-btn",
     onClick: () => setOpen(o => !o),
     style: {
       position: 'fixed',
@@ -13801,6 +13812,7 @@ const ChatWidget = ({
       border: '2px solid white'
     }
   }, unread > 9 ? '9+' : unread)), open && /*#__PURE__*/React.createElement("div", {
+    className: "chat-panel",
     style: {
       position: 'fixed',
       bottom: 88,
