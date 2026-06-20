@@ -679,6 +679,8 @@ const getUnderdog = (h, a) => {
 
 // Approximate last-kick-off times for each group-stage matchday (UTC+5).
 // Used to snapshot which joker was active when a matchday was played.
+const COMP_START_MATCHDAY = 2; // Only score matches from this matchday onwards (June 19+)
+
 const MATCHDAY_CUTOFFS = {
   1: new Date('2026-06-12T19:00:00Z').getTime(),
   // first MD1 kickoff (June 12 19:00 UTC)
@@ -1092,6 +1094,7 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
   const joker = userPreds.joker || {};
   const jokerHistory = userPreds.jokerHistory || null;
   GROUP_MATCHES.forEach(m => {
+    if (m.matchday < COMP_START_MATCHDAY) return; // competition starts from MD2 (June 19+)
     const actual = actualGroupResults[m.id];
     if (!actual || actual.h === '' || actual.a === '' || actual.h == null) return;
     const pred = userPreds.group?.[m.id];
@@ -12628,6 +12631,9 @@ function App() {
                   // ── Group stage match ──
                   const gm = GROUP_MATCHES.find(m => m.home === fm.home && m.away === fm.away || m.home === fm.away && m.away === fm.home);
                   if (gm) {
+                    if (gm.matchday < COMP_START_MATCHDAY) {
+                      return;
+                    } // skip pre-competition matches
                     const swap = gm.home === fm.away;
                     const nh = String(swap ? fm.awayScore : fm.homeScore);
                     const na = String(swap ? fm.homeScore : fm.awayScore);
@@ -12866,6 +12872,9 @@ function App() {
                 ftMatches.forEach(fm => {
                   const gm = GROUP_MATCHES.find(m => m.home === fm.home && m.away === fm.away || m.home === fm.away && m.away === fm.home);
                   if (gm) {
+                    if (gm.matchday < COMP_START_MATCHDAY) {
+                      return;
+                    } // skip pre-competition matches
                     const swap = gm.home === fm.away;
                     const nh = String(swap ? fm.awayScore : fm.homeScore);
                     const na = String(swap ? fm.homeScore : fm.awayScore);
