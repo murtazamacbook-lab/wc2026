@@ -12927,10 +12927,42 @@ function App() {
     if (!currentUser || currentUser === '__guest__') return;
     setPredictions(newPreds);
     setSaveStatus('saving');
-    await storage.setJSON(`pred-${currentUser}`, newPreds, true);
+    // Merge with latest Firestore copy so a second tab/device can't clobber the other's changes.
+    // We do a quick read first; if it fails we fall back to writing newPreds directly.
+    let toWrite = newPreds;
+    if (FB_ON) {
+      try {
+        const snap = await fbTimeout(db.collection('wc26').doc(`pred-${currentUser}`).get());
+        if (snap.exists) {
+          const remote = JSON.parse(snap.data().value || '{}');
+          // Deep-merge: remote is the base; newPreds wins on any key that changed locally
+          toWrite = {
+            ...remote,
+            ...newPreds,
+            group: {
+              ...(remote.group || {}),
+              ...(newPreds.group || {})
+            },
+            ko: {
+              ...(remote.ko || {}),
+              ...(newPreds.ko || {})
+            },
+            bonus: {
+              ...(remote.bonus || {}),
+              ...(newPreds.bonus || {})
+            },
+            joker: newPreds.joker || remote.joker || {},
+            jokerHistory: newPreds.jokerHistory || remote.jokerHistory || [],
+            jokerLockedDate: newPreds.jokerLockedDate || remote.jokerLockedDate || null
+          };
+        }
+      } catch (_e) {/* network error — write what we have */}
+    }
+    await storage.setJSON(`pred-${currentUser}`, toWrite, true);
+    setPredictions(toWrite);
     setAllPredictions(prev => ({
       ...prev,
-      [currentUser]: newPreds
+      [currentUser]: toWrite
     }));
     setSaveStatus('saved');
     setTimeout(() => setSaveStatus(''), 2000);
