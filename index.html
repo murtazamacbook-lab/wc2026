@@ -4833,15 +4833,15 @@ const ScoreHistoryView = React.memo(({
     if (kickoffTimes.size > 0) {
       const dayMap = {};
       kickoffTimes.forEach((ms, id) => {
+        // Skip MD1 matches entirely — they are never scored
+        const gm = GROUP_MATCHES.find(x => x.id === id);
+        if (!gm || gm.matchday < COMP_START_MATCHDAY) return;
         const ds = new Date(ms).toLocaleDateString('sv');
         if (!dayMap[ds]) dayMap[ds] = [];
         dayMap[ds].push(id);
       });
       return Object.entries(dayMap).map(([ds, ids]) => {
-        // Only include matches from scored matchdays (MD2+) that have a result
         const resultIds = ids.filter(id => {
-          const m = GROUP_MATCHES.find(x => x.id === id);
-          if (!m || m.matchday < COMP_START_MATCHDAY) return false;
           const r = results.group?.[id];
           return r && r.h !== '' && r.h != null;
         });
@@ -14586,7 +14586,9 @@ function App() {
     className: "main-shell"
   }, /*#__PURE__*/React.createElement("div", {
     className: "main-primary"
-  }, view === 'predictions' && !isGuest && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }, /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'predictions' && !isGuest
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Group Stage"
   }, isMobile ? /*#__PURE__*/React.createElement(MobilePredictionsView, {
     predictions: predictions,
@@ -14605,21 +14607,27 @@ function App() {
     kickoffTimes: kickoffTimes,
     jumpToGroup: jumpToGroup,
     matchCommentary: matchCommentary
-  })), view === 'bracket' && !isGuest && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'bracket' && !isGuest
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Bracket"
   }, /*#__PURE__*/React.createElement(BracketView, {
     predictions: predictions,
     onSave: savePredictions,
     results: results,
     locked: koLocked
-  })), view === 'bonus' && !isGuest && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'bonus' && !isGuest
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Bonus Picks"
   }, /*#__PURE__*/React.createElement(BonusView, {
     predictions: predictions,
     onSave: savePredictions,
     results: results,
     locked: koLocked
-  })), view === 'leaderboard' && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'leaderboard'
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Leaderboard"
   }, /*#__PURE__*/React.createElement(LeaderboardView, {
     participants: isGuest ? participants : participants.includes(currentUser) ? participants : [...participants, currentUser],
@@ -14628,7 +14636,9 @@ function App() {
       [currentUser]: predictions
     },
     results: results
-  })), view === 'scores' && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'scores'
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Score History"
   }, /*#__PURE__*/React.createElement(ScoreHistoryView, {
     participants: participants,
@@ -14641,19 +14651,25 @@ function App() {
     currentUser: currentUser,
     isAdmin: adminRole === 'superadmin' || adminRole === 'subadmin',
     isGuest: isGuest
-  })), view === 'browse' && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'browse'
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Browse Picks"
   }, /*#__PURE__*/React.createElement(BrowseView, {
     participants: participants,
     allPredictions: allPredictions,
     results: results
-  })), view === 'live' && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'live'
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Live Data"
   }, /*#__PURE__*/React.createElement(LiveDataView, {
     adminRole: adminRole
-  })), view === 'rules' && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'rules'
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Rules"
-  }, /*#__PURE__*/React.createElement(RulesView, null)), view === 'admin' && adminAuthed && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }, /*#__PURE__*/React.createElement(RulesView, null))), view === 'admin' && adminAuthed && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Admin"
   }, /*#__PURE__*/React.createElement(AdminView, {
     results: results,
@@ -15372,6 +15388,23 @@ const ChatWidget = ({
 };
 
 // ── MOUNT ────────────────────────────────────────────────
+// LazyMount: mounts on first visit, then stays alive hidden — instant tab switches, no extra network calls
+const LazyMount = ({
+  active,
+  children
+}) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    if (active) setMounted(true);
+  }, [active]);
+  if (!mounted) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: active ? '' : 'none'
+    }
+  }, children);
+};
+
 // Per-view error boundary: isolates crashes so one broken view doesn't blank the whole app
 class ViewErrorBoundary extends React.Component {
   constructor(props) {
