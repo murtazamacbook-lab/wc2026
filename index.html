@@ -1195,6 +1195,7 @@ const range = (a, b) => Array.from({
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
   *{box-sizing:border-box}
+  body{overflow-x:hidden}
   .app{--cream:#F5F1E8;--cream2:#EDE7D6;--paper:#FBF8F0;--ink:#1A1715;--ink-soft:#6B635B;--burgundy:#9F1B1B;--forest:#1B5E3F;--amber:#D6892A;--line:#DFDAD3;--line-soft:#EDE7D6;font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--paper);min-height:100vh}
   .display{font-family:'Fraunces',serif}
   .mono{font-family:'JetBrains Mono',monospace}
@@ -10958,7 +10959,7 @@ const LiveMatchBanner = ({
       alignItems: 'center',
       gap: 12,
       flexWrap: 'nowrap',
-      minWidth: 'max-content'
+      width: 'max-content'
     }
   }, live.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     style: {
