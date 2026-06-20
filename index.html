@@ -4837,11 +4837,11 @@ const ScoreHistoryView = React.memo(({
         if (!dayMap[ds]) dayMap[ds] = [];
         dayMap[ds].push(id);
       });
-      return Object.entries(dayMap).filter(([, ids]) => ids.some(id => {
-        const r = results.group?.[id];
-        return r && r.h !== '' && r.h != null;
-      })).sort(([a], [b]) => b.localeCompare(a)).map(([ds, ids]) => {
+      return Object.entries(dayMap).map(([ds, ids]) => {
+        // Only include matches from scored matchdays (MD2+) that have a result
         const resultIds = ids.filter(id => {
+          const m = GROUP_MATCHES.find(x => x.id === id);
+          if (!m || m.matchday < COMP_START_MATCHDAY) return false;
           const r = results.group?.[id];
           return r && r.h !== '' && r.h != null;
         });
@@ -4857,7 +4857,7 @@ const ScoreHistoryView = React.memo(({
           matchIds: resultIds,
           label
         };
-      });
+      }).filter(d => d.matchIds.length > 0).sort((a, b) => b.dateStr.localeCompare(a.dateStr));
     }
     // Fallback: group by matchday when kickoffTimes not loaded
     const mdMap = {};
@@ -14639,7 +14639,7 @@ function App() {
     results: results,
     kickoffTimes: kickoffTimes,
     currentUser: currentUser,
-    isAdmin: adminRole === 'admin' || adminRole === 'subadmin',
+    isAdmin: adminRole === 'superadmin' || adminRole === 'subadmin',
     isGuest: isGuest
   })), view === 'browse' && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Browse Picks"
