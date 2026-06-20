@@ -2377,14 +2377,33 @@ const PredictionsView = ({
   matchCommentary = {}
 }) => {
   const [openGroup, setOpenGroup] = useState('A');
-  // Jump to a specific group when requested from outside (e.g. banner click)
+  const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     if (jumpToGroup) setOpenGroup(jumpToGroup);
   }, [jumpToGroup]);
+  // Tick every 30s to keep countdown fresh
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
   const joker = predictions.joker || {};
   const todayDateStr = new Date().toLocaleDateString('sv'); // "YYYY-MM-DD" in local time
   const jokerLockedDate = predictions.jokerLockedDate || null;
   const jokerLockedToday = jokerLockedDate === todayDateStr;
+  // Find today's earliest kickoff from kickoffTimes (used for joker cutoff countdown)
+  const todayFirstKickoff = useMemo(() => {
+    const todayStart = new Date(todayDateStr + 'T00:00:00').getTime();
+    const todayEnd = todayStart + 86400000;
+    let earliest = null;
+    kickoffTimes.forEach(ms => {
+      if (ms >= todayStart && ms < todayEnd) {
+        if (!earliest || ms < earliest) earliest = ms;
+      }
+    });
+    return earliest;
+  }, [kickoffTimes, todayDateStr]);
+  const jokerCutoffPassed = todayFirstKickoff && nowTick >= todayFirstKickoff;
+  const jokerMinsLeft = todayFirstKickoff && !jokerCutoffPassed ? Math.round((todayFirstKickoff - nowTick) / 60000) : null;
   const setMatch = (mId, side, val) => {
     if (locked) return;
     if (val !== '' && (isNaN(parseInt(val)) || parseInt(val) < 0 || parseInt(val) > 20)) return;
@@ -2429,7 +2448,11 @@ const PredictionsView = ({
       alert('Please select a Joker Team and/or Joker Group first.');
       return;
     }
-    if (!window.confirm(`Lock your Joker for today (${todayDateStr})?\n\n\u2022 Joker Team: ${joker.team || '(none)'}\n\u2022 Joker Group: ${joker.group ? 'Group ' + joker.group : '(none)'}\n\nYou won\u2019t be able to change it until tomorrow.`)) return;
+    if (jokerCutoffPassed) {
+      if (!window.confirm(`⚠️ The cutoff for today's matches has passed.\n\nYour joker will NOT count for matches that have already started.\n\nDo you still want to lock it for remaining matches today?`)) return;
+    } else {
+      if (!window.confirm(`Lock your Joker for today (${todayDateStr})?\n\n• Joker Team: ${joker.team || '(none)'}\n• Joker Group: ${joker.group ? 'Group ' + joker.group : '(none)'}\n\nYou won't be able to change it until tomorrow.`)) return;
+    }
     onSave({
       ...predictions,
       jokerLockedDate: todayDateStr
@@ -2614,7 +2637,8 @@ const PredictionsView = ({
     style: {
       display: 'flex',
       alignItems: 'center',
-      gap: 12
+      gap: 12,
+      flexWrap: 'wrap'
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: submitJokerForToday,
@@ -2630,7 +2654,27 @@ const PredictionsView = ({
       cursor: joker.team || joker.group ? 'pointer' : 'not-allowed',
       fontFamily: 'inherit'
     }
-  }, "🔒 Submit Joker for Today"), jokerLockedDate && jokerLockedDate !== todayDateStr && /*#__PURE__*/React.createElement("span", {
+  }, "🔒 Submit Joker for Today"), (joker.team || joker.group) && todayFirstKickoff && !jokerCutoffPassed && jokerMinsLeft !== null && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: jokerMinsLeft < 30 ? 'var(--burgundy)' : 'var(--forest)',
+      background: jokerMinsLeft < 30 ? 'rgba(159,27,27,.08)' : 'rgba(27,94,63,.08)',
+      padding: '4px 10px',
+      borderRadius: 4,
+      border: `1px solid ${jokerMinsLeft < 30 ? 'rgba(159,27,27,.3)' : 'rgba(27,94,63,.3)'}`
+    }
+  }, "⏰ Locks in ", jokerMinsLeft >= 60 ? `${Math.floor(jokerMinsLeft / 60)}h ${jokerMinsLeft % 60}m` : `${jokerMinsLeft}m`), (joker.team || joker.group) && jokerCutoffPassed && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--burgundy)',
+      background: 'rgba(159,27,27,.08)',
+      padding: '4px 10px',
+      borderRadius: 4,
+      border: '1px solid rgba(159,27,27,.3)'
+    }
+  }, "⚠️ Cutoff passed — missed matches won't count"), jokerLockedDate && jokerLockedDate !== todayDateStr && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)'
@@ -2641,7 +2685,7 @@ const PredictionsView = ({
       color: 'var(--ink-soft)',
       fontStyle: 'italic'
     }
-  }, "Select a team and/or group first")), (joker.team || joker.group) && !jokerLockedToday && /*#__PURE__*/React.createElement("div", {
+  }, "Select a team and/or group first")), (joker.team || joker.group) && !jokerLockedToday && !jokerCutoffPassed && /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -2661,7 +2705,7 @@ const PredictionsView = ({
       color: 'var(--amber)',
       fontWeight: 600
     }
-  }, "Your joker is not locked yet — click Submit before today's matches start or anyone could change it."))))), /*#__PURE__*/React.createElement(ProgressBar, {
+  }, "Your joker is not locked yet — click Submit before today's first match kicks off."))))), /*#__PURE__*/React.createElement(ProgressBar, {
     done: totalDone,
     total: 72,
     label: "matches predicted"
@@ -4646,7 +4690,96 @@ const BrowseView = React.memo(({
       color: 'var(--ink-soft)',
       fontStyle: 'italic'
     }
-  }, "Not set"))))))));
+  }, "Not set")))), viewPreds.jokerHistory && viewPreds.jokerHistory.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      paddingTop: 10,
+      borderTop: '1px solid var(--line)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: 'var(--ink-soft)',
+      marginBottom: 6,
+      letterSpacing: '.05em',
+      textTransform: 'uppercase'
+    }
+  }, "Joker History"), [1, 2, 3].map(md => {
+    const cutoff = MATCHDAY_CUTOFFS[md];
+    if (!cutoff) return null;
+    const relevant = viewPreds.jokerHistory.filter(e => e.setAt <= cutoff);
+    const ej = relevant.length ? relevant[relevant.length - 1] : {
+      team: null,
+      group: null
+    };
+    const skipped = md < COMP_START_MATCHDAY;
+    const mdDate = {
+      1: 'Jun 12–18',
+      2: 'Jun 19–25',
+      3: 'Jun 26+'
+    }[md];
+    const isTripleH = ej.team && ej.group && GROUP_KEYS.find(g => GROUPS[g].includes(ej.team)) === ej.group;
+    return /*#__PURE__*/React.createElement("div", {
+      key: md,
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '5px 0',
+        borderBottom: '1px solid var(--line-soft)',
+        opacity: skipped ? 0.4 : 1
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 700,
+        color: 'var(--ink-soft)',
+        width: 24,
+        flexShrink: 0
+      }
+    }, "MD", md), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        width: 70,
+        flexShrink: 0
+      }
+    }, mdDate), ej.team || ej.group ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        flex: 1
+      }
+    }, ej.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[ej.team] || '⚽', " ", ej.team), ej.team && ej.group && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--ink-soft)'
+      }
+    }, " · "), ej.group && /*#__PURE__*/React.createElement("span", null, "Group ", ej.group), isTripleH && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 6,
+        fontSize: 10,
+        fontWeight: 700,
+        color: 'var(--burgundy)',
+        background: 'rgba(159,27,27,.1)',
+        padding: '1px 5px',
+        borderRadius: 3
+      }
+    }, "3×")) : /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: 'var(--ink-soft)',
+        fontStyle: 'italic',
+        flex: 1
+      }
+    }, "Not set"), skipped && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)',
+        fontStyle: 'italic'
+      }
+    }, "not scored"));
+  }))))));
 });
 
 // ── LIVE DATA VIEW  (memoized — re-renders only when mounted/unmounted) ───────────────────────────────────────────────
