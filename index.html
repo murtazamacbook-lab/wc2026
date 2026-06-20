@@ -4857,7 +4857,7 @@ const ScoreHistoryView = React.memo(({
           matchIds: resultIds,
           label
         };
-      }).filter(d => d.matchIds.length > 0).sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+      }).filter(d => d.matchIds.length > 0 && d.dateStr >= '2026-06-19').sort((a, b) => b.dateStr.localeCompare(a.dateStr));
     }
     // Fallback: group by matchday when kickoffTimes not loaded
     const mdMap = {};
