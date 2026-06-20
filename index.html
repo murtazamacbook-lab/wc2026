@@ -12591,11 +12591,11 @@ function App() {
               fetchingAt: 0
             })
           }).catch(() => {});
-          // Auto-import FT results into results.group (ESPN as source of truth)
+          // Auto-import FT/PEN results into results.group + results.ko (ESPN as source of truth)
           // Only the designated fetcher does this — no duplicate writes from other clients
           if (FB_ON) {
             try {
-              const ftMatches = matches.filter(m => m.status === 'FT' && m.homeScore !== '' && m.awayScore !== '');
+              const ftMatches = matches.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
                 const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
                 const stored = resSnap?.exists ? JSON.parse(resSnap.data().value || '{}') : {
@@ -12606,25 +12606,59 @@ function App() {
                 const newGR = {
                   ...(stored.group || {})
                 };
+                const newKO = {
+                  ...(stored.ko || {})
+                };
                 let changed = 0;
+                // Build current KO bracket so we can match ESPN teams to matchIds 73-104
+                const {
+                  bracket
+                } = buildActualBracket(stored.group || {}, stored.ko || {});
                 ftMatches.forEach(fm => {
+                  // ── Group stage match ──
                   const gm = GROUP_MATCHES.find(m => m.home === fm.home && m.away === fm.away || m.home === fm.away && m.away === fm.home);
-                  if (!gm) return;
-                  const swap = gm.home === fm.away;
+                  if (gm) {
+                    const swap = gm.home === fm.away;
+                    const nh = String(swap ? fm.awayScore : fm.homeScore);
+                    const na = String(swap ? fm.homeScore : fm.awayScore);
+                    const ex = newGR[gm.id];
+                    if (!ex || ex.h !== nh || ex.a !== na) {
+                      newGR[gm.id] = {
+                        h: nh,
+                        a: na
+                      };
+                      changed++;
+                    }
+                    return;
+                  }
+                  // ── KO stage match ──
+                  const koId = Object.keys(bracket).map(Number).find(id => {
+                    const s = bracket[id];
+                    return s && s.home && s.away && (s.home === fm.home && s.away === fm.away || s.home === fm.away && s.away === fm.home);
+                  });
+                  if (!koId) return;
+                  const swap = bracket[koId].home === fm.away;
                   const nh = String(swap ? fm.awayScore : fm.homeScore);
                   const na = String(swap ? fm.homeScore : fm.awayScore);
-                  const ex = newGR[gm.id];
-                  if (ex && ex.h === nh && ex.a === na) return; // already stored
-                  newGR[gm.id] = {
-                    h: nh,
-                    a: na
-                  };
-                  changed++;
+                  // Penalty winner: ESPN marks competitor.winner=true on the shootout winner
+                  const pkWinner = fm.status === 'PEN' ? swap ? fm.away : fm.home : undefined;
+                  const ex = newKO[koId];
+                  if (!ex || ex.h !== nh || ex.a !== na || ex.pkWinner !== pkWinner) {
+                    newKO[koId] = {
+                      h: nh,
+                      a: na,
+                      ...(pkWinner ? {
+                        pkWinner
+                      } : {})
+                    };
+                    changed++;
+                  }
                 });
                 if (changed > 0) {
                   const newResults = {
                     ...stored,
-                    group: newGR
+                    group: newGR,
+                    ko: newKO
                   };
                   lastLocalWriteRef.current = Date.now();
                   db.collection('wc26').doc('results').set({
@@ -12798,10 +12832,10 @@ function App() {
               fetchingAt: 0
             })
           }).catch(() => {});
-          // Auto-import FT results into results.group (ESPN as source of truth)
+          // Auto-import FT/PEN results into results.group + results.ko (ESPN as source of truth)
           if (FB_ON) {
             try {
-              const ftMatches = all.filter(m => m.status === 'FT' && m.homeScore !== '' && m.awayScore !== '');
+              const ftMatches = all.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
                 const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
                 const stored = resSnap?.exists ? JSON.parse(resSnap.data().value || '{}') : {
@@ -12812,25 +12846,55 @@ function App() {
                 const newGR = {
                   ...(stored.group || {})
                 };
+                const newKO = {
+                  ...(stored.ko || {})
+                };
                 let changed = 0;
+                const {
+                  bracket
+                } = buildActualBracket(stored.group || {}, stored.ko || {});
                 ftMatches.forEach(fm => {
                   const gm = GROUP_MATCHES.find(m => m.home === fm.home && m.away === fm.away || m.home === fm.away && m.away === fm.home);
-                  if (!gm) return;
-                  const swap = gm.home === fm.away;
+                  if (gm) {
+                    const swap = gm.home === fm.away;
+                    const nh = String(swap ? fm.awayScore : fm.homeScore);
+                    const na = String(swap ? fm.homeScore : fm.awayScore);
+                    const ex = newGR[gm.id];
+                    if (!ex || ex.h !== nh || ex.a !== na) {
+                      newGR[gm.id] = {
+                        h: nh,
+                        a: na
+                      };
+                      changed++;
+                    }
+                    return;
+                  }
+                  const koId = Object.keys(bracket).map(Number).find(id => {
+                    const s = bracket[id];
+                    return s && s.home && s.away && (s.home === fm.home && s.away === fm.away || s.home === fm.away && s.away === fm.home);
+                  });
+                  if (!koId) return;
+                  const swap = bracket[koId].home === fm.away;
                   const nh = String(swap ? fm.awayScore : fm.homeScore);
                   const na = String(swap ? fm.homeScore : fm.awayScore);
-                  const ex = newGR[gm.id];
-                  if (ex && ex.h === nh && ex.a === na) return;
-                  newGR[gm.id] = {
-                    h: nh,
-                    a: na
-                  };
-                  changed++;
+                  const pkWinner = fm.status === 'PEN' ? swap ? fm.away : fm.home : undefined;
+                  const ex = newKO[koId];
+                  if (!ex || ex.h !== nh || ex.a !== na || ex.pkWinner !== pkWinner) {
+                    newKO[koId] = {
+                      h: nh,
+                      a: na,
+                      ...(pkWinner ? {
+                        pkWinner
+                      } : {})
+                    };
+                    changed++;
+                  }
                 });
                 if (changed > 0) {
                   const newResults = {
                     ...stored,
-                    group: newGR
+                    group: newGR,
+                    ko: newKO
                   };
                   lastLocalWriteRef.current = Date.now();
                   db.collection('wc26').doc('results').set({
