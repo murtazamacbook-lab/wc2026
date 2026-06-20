@@ -679,7 +679,10 @@ const getUnderdog = (h, a) => {
 
 // Approximate last-kick-off times for each group-stage matchday (UTC+5).
 // Used to snapshot which joker was active when a matchday was played.
-const COMP_START_MATCHDAY = 2; // Only score matches from this matchday onwards (June 19+)
+const COMP_START_MATCHDAY = 2; // Only score matches from this matchday onwards
+const COMP_START_TS = new Date('2026-06-19T00:00:00Z').getTime(); // Hard date cutoff — matches before this are never scored
+// Known kickoff times for MD2 matches that fell before the Jun 19 cutoff (June 18 UTC)
+const EARLY_MD2_IDS = new Set(['A-4', 'B-3', 'B-4']); // Czechia-SAfrica, Canada-Qatar, Switzerland-Bosnia
 
 const MATCHDAY_CUTOFFS = {
   1: new Date('2026-06-12T19:00:00Z').getTime(),
@@ -1095,7 +1098,8 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
   const jokerHistory = userPreds.jokerHistory || null;
   const matchPts = {}; // matchId → final pts (after joker) — used by ScoreHistoryView for guaranteed parity
   GROUP_MATCHES.forEach(m => {
-    if (m.matchday < COMP_START_MATCHDAY) return; // competition starts from MD2 (June 19+)
+    if (m.matchday < COMP_START_MATCHDAY) return; // exclude MD1
+    if (EARLY_MD2_IDS.has(m.id)) return; // exclude MD2 games played before Jun 19 00:00 UTC
     const actual = actualGroupResults[m.id];
     if (!actual || actual.h === '' || actual.a === '' || actual.h == null) return;
     const pred = userPreds.group?.[m.id];
@@ -4615,7 +4619,7 @@ const BrowseView = React.memo(({
       const mPts = viewScore?.matchPts?.[m.id] ?? null;
       const ej = getJokerForMatchday(viewPreds.jokerHistory || null, m.matchday, viewPreds.joker || {});
       const mult = hasResult && hasPred ? getJokerMultiplier(m, ej.team, ej.group) : 1;
-      const skipped = m.matchday < COMP_START_MATCHDAY;
+      const skipped = m.matchday < COMP_START_MATCHDAY || EARLY_MD2_IDS.has(m.id);
       return /*#__PURE__*/React.createElement("div", {
         key: m.id,
         style: {
@@ -4780,7 +4784,7 @@ const BrowseView = React.memo(({
     const mdTotal = !skipped && viewScore ? viewScore.sectionPts[`md${md}`] || 0 : null;
     let jokerBonus = 0;
     if (!skipped && (ej.team || ej.group)) {
-      GROUP_MATCHES.filter(m => m.matchday === md).forEach(m => {
+      GROUP_MATCHES.filter(m => m.matchday === md && !EARLY_MD2_IDS.has(m.id)).forEach(m => {
         const actual = results.group?.[m.id];
         if (!actual || actual.h === '' || actual.h == null) return;
         const pred = viewPreds.group?.[m.id];
@@ -4887,11 +4891,12 @@ const ScoreHistoryView = React.memo(({
     const dayMap = {};
     GROUP_MATCHES.forEach(m => {
       if (m.matchday < COMP_START_MATCHDAY) return; // MD1 never scored
+      if (EARLY_MD2_IDS.has(m.id)) return; // exclude Jun 18 MD2 games
       const r = results.group?.[m.id];
       if (!r || r.h === '' || r.h == null) return;
       const ms = kickoffTimes.get(m.id);
       let ds = ms ? new Date(ms).toLocaleDateString('sv') : '2026-06-19';
-      if (ds < '2026-06-19') ds = '2026-06-19'; // clamp timezone artifacts into Jun 19
+      if (ds < '2026-06-19') ds = '2026-06-19'; // clamp timezone artifacts
       if (!dayMap[ds]) dayMap[ds] = [];
       dayMap[ds].push(m.id);
     });
