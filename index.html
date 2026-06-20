@@ -679,9 +679,11 @@ const getUnderdog = (h, a) => {
 // Approximate last-kick-off times for each group-stage matchday (UTC+5).
 // Used to snapshot which joker was active when a matchday was played.
 const MATCHDAY_CUTOFFS = {
-  1: new Date('2026-06-17T23:59:59+05:00').getTime(),
-  2: new Date('2026-06-24T23:59:59+05:00').getTime(),
-  3: new Date('2026-07-02T23:59:59+05:00').getTime()
+  1: new Date('2026-06-12T00:00:00Z').getTime(),
+  // first MD1 kickoff (June 12 UTC)
+  2: new Date('2026-06-19T00:00:00Z').getTime(),
+  // first MD2 kickoff (June 19 UTC)
+  3: new Date('2026-06-26T00:00:00Z').getTime() // first MD3 kickoff (June 26 UTC)
 };
 // Returns the joker ({team,group}) that was active when matchday `md` was played.
 // `history` is the jokerHistory array stored in predictions.
@@ -1252,6 +1254,12 @@ const CSS = `
   a:hover{text-decoration:underline}
   @media(max-width:1100px){.main-shell{flex-direction:column}.support-wall{width:100%;max-height:none;position:static;top:auto}}
   @media(max-width:640px){.input-score{width:36px;height:36px;font-size:14px}.group-letter{font-size:36px}}
+  @media(max-width:480px){
+    .tab-label{display:none}
+    .tab-btn{padding:10px 12px;min-width:40px;justify-content:center}
+    .user-label{display:none}
+    .mobile-safe-bottom{bottom:calc(16px + env(safe-area-inset-bottom,0px)) !important}
+  }
   `;
 
 // ── ICON COMPONENTS (inline SVG) ─────────────────────────────────
@@ -11253,6 +11261,7 @@ const Header = ({
   name: user,
   size: 28
 }), /*#__PURE__*/React.createElement("div", {
+  className: "user-label",
   style: {
     fontWeight: 600,
     display: 'flex',
@@ -11341,10 +11350,13 @@ const Header = ({
 }) => /*#__PURE__*/React.createElement("button", {
   key: k,
   className: `tab-btn${view === k ? ' active' : ''}`,
-  onClick: () => setView(k)
+  onClick: () => setView(k),
+  title: l
 }, /*#__PURE__*/React.createElement(I, {
   size: 13
-}), " ", l))));
+}), " ", /*#__PURE__*/React.createElement("span", {
+  className: "tab-label"
+}, l)))));
 
 // ── BALLOON POPUP ─────────────────────────────────────────────────
 const BALLOON_COLORS = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6', '#e91e63', '#00bcd4'];
@@ -13300,6 +13312,7 @@ function App() {
     notif: balloonNotif ? null : winnerNotif,
     onClose: () => setWinnerNotif(null)
   }), /*#__PURE__*/React.createElement("div", {
+    className: "mobile-safe-bottom",
     style: {
       position: 'fixed',
       bottom: 24,
@@ -13594,6 +13607,7 @@ const ChatWidget = ({
     }
   }, f.emoji)), /*#__PURE__*/React.createElement("button", {
     onClick: () => setOpen(o => !o),
+    className: "mobile-safe-bottom",
     style: {
       position: 'fixed',
       bottom: 24,
