@@ -6578,6 +6578,121 @@ const CommentaryPanel = ({
   })))));
 };
 
+// ── ONLINE PANEL (proper component so hooks are legal) ────────
+const OnlinePanel = ({
+  onlineUsers = {},
+  currentUser,
+  adminRole
+}) => {
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => setTick(n => n + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+  const now = Date.now();
+  void tick;
+  const list = Object.entries(onlineUsers).filter(([, ts]) => ts && now - ts < 3 * 60 * 1000).sort((a, b) => b[1] - a[1]);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16,
+      maxWidth: 480
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '12px 16px',
+      background: 'var(--cream2)',
+      borderBottom: '1px solid var(--line)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: 'inline-block',
+      width: 10,
+      height: 10,
+      borderRadius: '50%',
+      background: '#27ae60',
+      animation: 'liveBlink 2s ease-in-out infinite'
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      fontSize: 14
+    }
+  }, list.length, " user", list.length !== 1 ? 's' : '', " online right now"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)',
+      marginLeft: 'auto'
+    }
+  }, "Updates live · seen in last 3 min")), list.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24,
+      textAlign: 'center',
+      color: 'var(--ink-soft)',
+      fontSize: 13,
+      fontStyle: 'italic'
+    }
+  }, "No active users right now.") : /*#__PURE__*/React.createElement("div", null, list.map(([name, ts], i) => {
+    const secsAgo = Math.floor((now - ts) / 1000);
+    const ago = secsAgo < 60 ? `${secsAgo}s ago` : secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago` : `${Math.floor(secsAgo / 3600)}h ago`;
+    return /*#__PURE__*/React.createElement("div", {
+      key: name,
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '10px 16px',
+        borderBottom: '1px solid var(--line-soft)',
+        background: i % 2 ? 'var(--cream2)' : ''
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: 'inline-block',
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        background: secsAgo < 90 ? '#27ae60' : '#f0932b',
+        flexShrink: 0
+      }
+    }), /*#__PURE__*/React.createElement(Avatar, {
+      name: name,
+      size: 26
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600,
+        fontSize: 13,
+        flex: 1
+      }
+    }, name, (name === currentUser || adminRole === 'superadmin' && name === '[SuperAdmin]' || adminRole === 'subadmin' && name === '[SubAdmin]') && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)',
+        marginLeft: 6
+      }
+    }, "(you)")), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        fontFamily: 'monospace'
+      }
+    }, ago));
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8,
+      fontSize: 11,
+      color: 'var(--ink-soft)',
+      padding: '0 4px'
+    }
+  }, "🟢 Bright green = active in last 90s · 🟠 Orange = seen 90s–3min ago"));
+};
+
 // ── ADMIN VIEW ───────────────────────────────────────────────────
 const AdminView = ({
   results,
@@ -9622,110 +9737,11 @@ const AdminView = ({
         whiteSpace: 'nowrap'
       }
     }, "⟳ Refresh")));
-  }))), section === 'online' && (() => {
-    const now = Date.now();
-    const list = Object.entries(onlineUsers).sort((a, b) => b[1] - a[1]);
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 16,
-        maxWidth: 480
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "card",
-      style: {
-        overflow: 'hidden'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '12px 16px',
-        background: 'var(--cream2)',
-        borderBottom: '1px solid var(--line)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        display: 'inline-block',
-        width: 10,
-        height: 10,
-        borderRadius: '50%',
-        background: '#27ae60',
-        animation: 'liveBlink 2s ease-in-out infinite'
-      }
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontWeight: 700,
-        fontSize: 14
-      }
-    }, list.length, " user", list.length !== 1 ? 's' : '', " online right now"), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: 'var(--ink-soft)',
-        marginLeft: 'auto'
-      }
-    }, "Updates live · seen in last 3 min")), list.length === 0 ? /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: 24,
-        textAlign: 'center',
-        color: 'var(--ink-soft)',
-        fontSize: 13,
-        fontStyle: 'italic'
-      }
-    }, "No active users right now.") : /*#__PURE__*/React.createElement("div", null, list.map(([name, ts], i) => {
-      const secsAgo = Math.floor((now - ts) / 1000);
-      const ago = secsAgo < 60 ? `${secsAgo}s ago` : secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago` : `${Math.floor(secsAgo / 3600)}h ago`;
-      const isAdmin = name === currentUser;
-      return /*#__PURE__*/React.createElement("div", {
-        key: name,
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '10px 16px',
-          borderBottom: '1px solid var(--line-soft)',
-          background: i % 2 ? 'var(--cream2)' : ''
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          display: 'inline-block',
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: secsAgo < 90 ? '#27ae60' : '#f0932b',
-          flexShrink: 0
-        }
-      }), /*#__PURE__*/React.createElement(Avatar, {
-        name: name,
-        size: 26
-      }), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontWeight: 600,
-          fontSize: 13,
-          flex: 1
-        }
-      }, name, (name === currentUser || adminRole === 'superadmin' && name === '[SuperAdmin]' || adminRole === 'subadmin' && name === '[SubAdmin]') && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          color: 'var(--ink-soft)',
-          marginLeft: 6
-        }
-      }, "(you)")), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 11,
-          color: 'var(--ink-soft)',
-          fontFamily: 'monospace'
-        }
-      }, ago));
-    }))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 8,
-        fontSize: 11,
-        color: 'var(--ink-soft)',
-        padding: '0 4px'
-      }
-    }, "🟢 Bright green = active in last 90s · 🟠 Orange = seen 90s–3min ago"));
-  })(), section === 'settings' && /*#__PURE__*/React.createElement("div", {
+  }))), section === 'online' && /*#__PURE__*/React.createElement(OnlinePanel, {
+    onlineUsers: onlineUsers,
+    currentUser: currentUser,
+    adminRole: adminRole
+  }), section === 'settings' && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 16,
       display: 'flex',
@@ -13143,37 +13159,27 @@ function App() {
       }).catch(() => {});
     };
     beat();
-    const t = setInterval(beat, 60000);
-    const cleanup = () => {
-      db.collection('wc26').doc('online-users').set({
-        [identity]: null
-      }, {
-        merge: true
-      }).catch(() => {});
-    };
-    window.addEventListener('beforeunload', cleanup);
+    const t = setInterval(beat, 30000); // every 30s for fresher data
+    // No null-write on cleanup — entries expire naturally via 3-min filter in the panel
     return () => {
       clearInterval(t);
-      cleanup();
-      window.removeEventListener('beforeunload', cleanup);
     };
   }, [currentUser, adminRole]);
 
   // ── ONLINE USERS LISTENER: admin reads the heartbeat doc ────────────────
   useEffect(() => {
     if (!FB_ON || !(adminRole === 'superadmin' || adminRole === 'subadmin')) return;
-    const unsub = db.collection('wc26').doc('online-users').onSnapshot(snap => {
-      if (!snap.exists) {
-        setOnlineUsers({});
-        return;
-      }
+    const unsub = db.collection('wc26').doc('online-users').onSnapshot({
+      includeMetadataChanges: false
+    }, snap => {
+      if (!snap.exists) return; // doc missing: wait for heartbeat to create it, don't clear
       const data = snap.data() || {};
-      const now = Date.now();
-      const active = {};
+      // Store raw timestamps — panel filters by current time at render
+      const entries = {};
       Object.entries(data).forEach(([name, ts]) => {
-        if (ts && now - ts < 3 * 60 * 1000) active[name] = ts;
+        if (ts) entries[name] = ts;
       });
-      setOnlineUsers(active);
+      if (Object.keys(entries).length > 0) setOnlineUsers(entries); // never replace with empty on a real snapshot
     }, () => {});
     return () => unsub();
   }, [adminRole]);
