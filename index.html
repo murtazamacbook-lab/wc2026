@@ -1289,6 +1289,7 @@ const CSS = `
     .main-content{padding:12px 8px 80px!important}
     .chat-btn{left:12px!important;bottom:12px!important;width:46px!important;height:46px!important;font-size:20px!important}
     .chat-panel{width:calc(100vw - 28px)!important;left:12px!important;bottom:72px!important}
+    .mobile-hide{display:none!important}
   }
   `;
 
@@ -11487,12 +11488,14 @@ const Header = ({
   k: 'bracket',
   l: 'Bracket',
   I: Trophy,
-  hide: user === '__guest__'
+  hide: user === '__guest__',
+  mobileHide: true
 }, {
   k: 'bonus',
   l: 'Bonus Picks',
   I: Star,
-  hide: user === '__guest__'
+  hide: user === '__guest__',
+  mobileHide: true
 }, {
   k: 'leaderboard',
   l: 'Leaderboard',
@@ -11500,7 +11503,8 @@ const Header = ({
 }, {
   k: 'browse',
   l: 'Browse Picks',
-  I: Users2
+  I: Users2,
+  mobileHide: true
 }, {
   k: 'live',
   l: 'Live Data',
@@ -11508,18 +11512,21 @@ const Header = ({
 }, {
   k: 'rules',
   l: 'Rules',
-  I: BookOpen
+  I: BookOpen,
+  mobileHide: true
 }, {
   k: 'admin',
   l: 'Admin',
-  I: Settings2
+  I: Settings2,
+  mobileHide: true
 }].filter(t => !t.hide).map(({
   k,
   l,
-  I
+  I,
+  mobileHide
 }) => /*#__PURE__*/React.createElement("button", {
   key: k,
-  className: `tab-btn${view === k ? ' active' : ''}`,
+  className: `tab-btn${view === k ? ' active' : ''}${mobileHide ? ' mobile-hide' : ''}`,
   onClick: () => setView(k)
 }, /*#__PURE__*/React.createElement(I, {
   size: 13
@@ -13191,6 +13198,15 @@ function App() {
     setCurrentUser(null);
     setView('predictions');
   }, []);
+
+  // On mobile, redirect away from views that are hidden in the nav
+  const MOBILE_HIDDEN_VIEWS = ['bracket', 'bonus', 'browse', 'rules', 'admin'];
+  useEffect(() => {
+    if (window.innerWidth <= 640 && MOBILE_HIDDEN_VIEWS.includes(view)) {
+      setView(view === 'admin' ? 'leaderboard' : 'leaderboard');
+    }
+  }, [view]); // eslint-disable-line
+
   const handleAdminLogin = useCallback(pw => {
     if (!pw) return;
     if (pw === adminPws.super) {
