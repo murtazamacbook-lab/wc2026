@@ -7410,8 +7410,15 @@ const AdminView = ({
     delete na[name];
     setAllPredictions(na);
     lastLocalWriteRef.current = Date.now();
-    await storage.setJSON('participants', np, true);
-    await storage.setJSON('pins', npins, true);
+    lsSet('participants', np);
+    lsSet('pins', npins);
+    if (FB_ON) {
+      await Promise.all([db.collection('wc26').doc('participants').set({
+        value: JSON.stringify(np)
+      }).catch(() => {}), db.collection('wc26').doc('pins').set({
+        value: JSON.stringify(npins)
+      }).catch(() => {})]);
+    }
   };
   const handleResetPin = async name => {
     const pin = resetPins[name] || '';
@@ -7425,7 +7432,10 @@ const AdminView = ({
     };
     setUserPins(npins);
     lastLocalWriteRef.current = Date.now();
-    await storage.setJSON('pins', npins, true);
+    lsSet('pins', npins);
+    if (FB_ON) await db.collection('wc26').doc('pins').set({
+      value: JSON.stringify(npins)
+    }).catch(() => {});
     setResetPins(p => ({
       ...p,
       [name]: ''
