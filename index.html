@@ -12045,7 +12045,13 @@ function WinnerPopup({
 
 // ── MAIN APP ─────────────────────────────────────────────────────
 function App() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      return sessionStorage.getItem('wc26_cu') || null;
+    } catch {
+      return null;
+    }
+  });
   const [participants, setParticipants] = useState([]);
   const [userPins, setUserPins] = useState({});
   const [predictions, setPredictions] = useState({
@@ -12751,6 +12757,14 @@ function App() {
     }
     setLoading(false); // always called — catch above is safe (no circular refs)
 
+    // Session restore: if currentUser was saved in sessionStorage (survived hard refresh),
+    // load their predictions from localStorage so they don't see a blank predictions page.
+    const restoredUser = sessionStorage.getItem('wc26_cu');
+    if (restoredUser && restoredUser !== '__guest__') {
+      const p = lsGet(`pred-${restoredUser}`);
+      if (p) setPredictions(p);
+    }
+
     // Phase 2: refresh from Firebase in background (non-blocking)
     if (!FB_ON) return;
     (async () => {
@@ -12966,6 +12980,9 @@ function App() {
       await storage.setJSON('pins', newPins, true);
     }
     setCurrentUser(name);
+    try {
+      sessionStorage.setItem('wc26_cu', name);
+    } catch {}
     const p = (await storage.getJSON(`pred-${name}`, true)) || {
       group: {},
       ko: {},
@@ -13172,14 +13189,20 @@ function App() {
     const unsub = db.collection('wc26').doc('online-users').onSnapshot({
       includeMetadataChanges: false
     }, snap => {
-      if (!snap.exists) return; // doc missing: wait for heartbeat to create it, don't clear
+      if (!snap.exists) return;
       const data = snap.data() || {};
-      // Store raw timestamps — panel filters by current time at render
-      const entries = {};
-      Object.entries(data).forEach(([name, ts]) => {
-        if (ts) entries[name] = ts;
+      // Merge — only update entries that have a real timestamp; nulls (stale cleanup
+      // writes from old code) are ignored so they don't evict a user from the panel.
+      // Expiry is handled purely by the 3-min time-filter in OnlinePanel.
+      setOnlineUsers(prev => {
+        const merged = {
+          ...prev
+        };
+        Object.entries(data).forEach(([name, ts]) => {
+          if (ts) merged[name] = ts;
+        });
+        return merged;
       });
-      if (Object.keys(entries).length > 0) setOnlineUsers(entries); // never replace with empty on a real snapshot
     }, () => {});
     return () => unsub();
   }, [adminRole]);
@@ -13201,6 +13224,9 @@ function App() {
     return () => unsub();
   }, [currentUser]);
   const handleLogout = useCallback(async () => {
+    try {
+      sessionStorage.removeItem('wc26_cu');
+    } catch {}
     setCurrentUser(null);
     setView('predictions');
   }, []);
