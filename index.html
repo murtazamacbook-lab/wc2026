@@ -4720,6 +4720,22 @@ const BrowseView = React.memo(({
       3: 'Jun 26+'
     }[md];
     const isTripleH = ej.team && ej.group && GROUP_KEYS.find(g => GROUPS[g].includes(ej.team)) === ej.group;
+    // Compute matchday pts and joker bonus
+    const mdTotal = !skipped && viewScore ? viewScore.sectionPts[`md${md}`] || 0 : null;
+    let jokerBonus = 0;
+    if (!skipped && (ej.team || ej.group)) {
+      GROUP_MATCHES.filter(m => m.matchday === md).forEach(m => {
+        const actual = results.group?.[m.id];
+        if (!actual || actual.h === '' || actual.h == null) return;
+        const pred = viewPreds.group?.[m.id];
+        if (!pred || pred.h === '' || pred.h == null) return;
+        const {
+          total
+        } = scoreMatch(pred, actual, m.home, m.away, true);
+        const mult = getJokerMultiplier(m, ej.team, ej.group);
+        if (mult > 1) jokerBonus += total * (mult - 1);
+      });
+    }
     return /*#__PURE__*/React.createElement("div", {
       key: md,
       style: {
@@ -4772,13 +4788,28 @@ const BrowseView = React.memo(({
         fontStyle: 'italic',
         flex: 1
       }
-    }, "Not set"), skipped && /*#__PURE__*/React.createElement("span", {
+    }, "Not set"), skipped ? /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 10,
         color: 'var(--ink-soft)',
         fontStyle: 'italic'
       }
-    }, "not scored"));
+    }, "not scored") : mdTotal != null ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 700,
+        color: 'var(--ink)',
+        flexShrink: 0,
+        textAlign: 'right'
+      }
+    }, mdTotal, " pts", jokerBonus > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        fontWeight: 700,
+        color: 'var(--burgundy)',
+        marginLeft: 4
+      }
+    }, "(+", jokerBonus, " 🃏)")) : null);
   }))))));
 });
 
