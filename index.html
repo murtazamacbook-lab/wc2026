@@ -13226,8 +13226,16 @@ function App() {
       setParticipants(finalParts);
       setUserPins(newPins);
       lastLocalWriteRef.current = Date.now();
-      await storage.setJSON('participants', finalParts, true);
-      await storage.setJSON('pins', newPins, true);
+      // Write to localStorage immediately, then await Firestore to confirm registration persists
+      lsSet('participants', finalParts);
+      lsSet('pins', newPins);
+      if (FB_ON) {
+        await Promise.all([db.collection('wc26').doc('participants').set({
+          value: JSON.stringify(finalParts)
+        }).catch(() => {}), db.collection('wc26').doc('pins').set({
+          value: JSON.stringify(newPins)
+        }).catch(() => {})]);
+      }
     }
     setCurrentUser(name);
     try {
@@ -13414,8 +13422,15 @@ function App() {
         setParticipants(finalParts);
         setUserPins(newPins);
         lastLocalWriteRef.current = Date.now();
-        await storage.setJSON('participants', finalParts, true);
-        await storage.setJSON('pins', newPins, true);
+        lsSet('participants', finalParts);
+        lsSet('pins', newPins);
+        if (FB_ON) {
+          await Promise.all([db.collection('wc26').doc('participants').set({
+            value: JSON.stringify(finalParts)
+          }).catch(() => {}), db.collection('wc26').doc('pins').set({
+            value: JSON.stringify(newPins)
+          }).catch(() => {})]);
+        }
         setCurrentUser(pendingName);
         const p = (await storage.getJSON(`pred-${pendingName}`, true)) || {
           group: {},
