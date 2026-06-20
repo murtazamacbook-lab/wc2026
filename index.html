@@ -6598,7 +6598,9 @@ const AdminView = ({
   onRejectPending,
   onForceRefreshUser,
   matchCommentary,
-  saveCommentary
+  saveCommentary,
+  onlineUsers = {},
+  currentUser
 }) => {
   const isSuperAdmin = adminRole === 'superadmin';
   const isSubAdmin = adminRole === 'subadmin';
@@ -7274,7 +7276,7 @@ const AdminView = ({
       marginTop: 16,
       flexWrap: 'wrap'
     }
-  }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+  }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.keys(onlineUsers).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
     key: k,
     className: "tab-btn",
     style: {
@@ -9620,7 +9622,110 @@ const AdminView = ({
         whiteSpace: 'nowrap'
       }
     }, "⟳ Refresh")));
-  }))), section === 'settings' && /*#__PURE__*/React.createElement("div", {
+  }))), section === 'online' && (() => {
+    const now = Date.now();
+    const list = Object.entries(onlineUsers).sort((a, b) => b[1] - a[1]);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 16,
+        maxWidth: 480
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "card",
+      style: {
+        overflow: 'hidden'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '12px 16px',
+        background: 'var(--cream2)',
+        borderBottom: '1px solid var(--line)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: 'inline-block',
+        width: 10,
+        height: 10,
+        borderRadius: '50%',
+        background: '#27ae60',
+        animation: 'liveBlink 2s ease-in-out infinite'
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontSize: 14
+      }
+    }, list.length, " user", list.length !== 1 ? 's' : '', " online right now"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        marginLeft: 'auto'
+      }
+    }, "Updates live · seen in last 3 min")), list.length === 0 ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 24,
+        textAlign: 'center',
+        color: 'var(--ink-soft)',
+        fontSize: 13,
+        fontStyle: 'italic'
+      }
+    }, "No active users right now.") : /*#__PURE__*/React.createElement("div", null, list.map(([name, ts], i) => {
+      const secsAgo = Math.floor((now - ts) / 1000);
+      const ago = secsAgo < 60 ? `${secsAgo}s ago` : secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago` : `${Math.floor(secsAgo / 3600)}h ago`;
+      const isAdmin = name === currentUser;
+      return /*#__PURE__*/React.createElement("div", {
+        key: name,
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--line-soft)',
+          background: i % 2 ? 'var(--cream2)' : ''
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          display: 'inline-block',
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: secsAgo < 90 ? '#27ae60' : '#f0932b',
+          flexShrink: 0
+        }
+      }), /*#__PURE__*/React.createElement(Avatar, {
+        name: name,
+        size: 26
+      }), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontWeight: 600,
+          fontSize: 13,
+          flex: 1
+        }
+      }, name, (name === currentUser || adminRole === 'superadmin' && name === '[SuperAdmin]' || adminRole === 'subadmin' && name === '[SubAdmin]') && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: 'var(--ink-soft)',
+          marginLeft: 6
+        }
+      }, "(you)")), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: 'var(--ink-soft)',
+          fontFamily: 'monospace'
+        }
+      }, ago));
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 8,
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        padding: '0 4px'
+      }
+    }, "🟢 Bright green = active in last 90s · 🟠 Orange = seen 90s–3min ago"));
+  })(), section === 'settings' && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 16,
       display: 'flex',
@@ -11960,6 +12065,7 @@ function App() {
   const [goalNotif, setGoalNotif] = useState(null);
   const [kickoffCountdown, setKickoffCountdown] = useState(null); // {matchLabel,secsLeft} for last-15s overlay
   const kickoffShownRef = useRef(new Set()); // track which match IDs have already shown overlay
+  const [onlineUsers, setOnlineUsers] = useState({}); // name→lastSeen ms, for admin online panel
   const [supportByUser, setSupportByUser] = useState({});
   const [matchCommentary, setMatchCommentary] = useState({}); // matchId → {text,author,ts,matchLabel}
   const commentarySessionStart = useRef(Date.now());
@@ -13025,6 +13131,53 @@ function App() {
     return () => unsub();
   }, [currentUser]);
 
+  // ── HEARTBEAT: write own presence every 60s so admin can see who's online ───
+  useEffect(() => {
+    const identity = currentUser && currentUser !== '__guest__' ? currentUser : adminRole ? `[${adminRole === 'superadmin' ? 'SuperAdmin' : 'SubAdmin'}]` : null;
+    if (!FB_ON || !identity) return;
+    const beat = () => {
+      db.collection('wc26').doc('online-users').set({
+        [identity]: Date.now()
+      }, {
+        merge: true
+      }).catch(() => {});
+    };
+    beat();
+    const t = setInterval(beat, 60000);
+    const cleanup = () => {
+      db.collection('wc26').doc('online-users').set({
+        [identity]: null
+      }, {
+        merge: true
+      }).catch(() => {});
+    };
+    window.addEventListener('beforeunload', cleanup);
+    return () => {
+      clearInterval(t);
+      cleanup();
+      window.removeEventListener('beforeunload', cleanup);
+    };
+  }, [currentUser, adminRole]);
+
+  // ── ONLINE USERS LISTENER: admin reads the heartbeat doc ────────────────
+  useEffect(() => {
+    if (!FB_ON || !(adminRole === 'superadmin' || adminRole === 'subadmin')) return;
+    const unsub = db.collection('wc26').doc('online-users').onSnapshot(snap => {
+      if (!snap.exists) {
+        setOnlineUsers({});
+        return;
+      }
+      const data = snap.data() || {};
+      const now = Date.now();
+      const active = {};
+      Object.entries(data).forEach(([name, ts]) => {
+        if (ts && now - ts < 3 * 60 * 1000) active[name] = ts;
+      });
+      setOnlineUsers(active);
+    }, () => {});
+    return () => unsub();
+  }, [adminRole]);
+
   // ── FORCE-REFRESH LISTENER: superadmin can trigger a reload for a specific user ──
   const forceRefreshSessionStart = useRef(Date.now());
   useEffect(() => {
@@ -13289,7 +13442,9 @@ function App() {
     onRejectPending: onRejectPending,
     onForceRefreshUser: onForceRefreshUser,
     matchCommentary: matchCommentary,
-    saveCommentary: saveCommentary
+    saveCommentary: saveCommentary,
+    onlineUsers: onlineUsers,
+    currentUser: currentUser
   }))), view !== 'admin' && /*#__PURE__*/React.createElement(SupportWall, {
     supportByUser: supportByUser,
     currentSupportTeam: currentSupportTeam,
