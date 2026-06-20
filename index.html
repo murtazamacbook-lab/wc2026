@@ -680,11 +680,11 @@ const getUnderdog = (h, a) => {
 // Approximate last-kick-off times for each group-stage matchday (UTC+5).
 // Used to snapshot which joker was active when a matchday was played.
 const MATCHDAY_CUTOFFS = {
-  1: new Date('2026-06-12T00:00:00Z').getTime(),
-  // first MD1 kickoff (June 12 UTC)
-  2: new Date('2026-06-19T00:00:00Z').getTime(),
-  // first MD2 kickoff (June 19 UTC)
-  3: new Date('2026-06-26T00:00:00Z').getTime() // first MD3 kickoff (June 26 UTC)
+  1: new Date('2026-06-12T19:00:00Z').getTime(),
+  // first MD1 kickoff (June 12 19:00 UTC)
+  2: new Date('2026-06-19T19:00:00Z').getTime(),
+  // first MD2 kickoff (June 19 19:00 UTC)
+  3: new Date('2026-06-26T18:00:00Z').getTime() // first MD3 kickoff (June 26 18:00 UTC — all simultaneous)
 };
 // Returns the joker ({team,group}) that was active when matchday `md` was played.
 // `history` is the jokerHistory array stored in predictions.
