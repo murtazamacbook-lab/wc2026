@@ -12529,6 +12529,12 @@ function App() {
           matchLabel: soonest.label,
           secsLeft: Math.ceil(soonest.secs)
         });
+      } else {
+        // Match just kicked off — push secsLeft=0 so the overlay fades out
+        setKickoffCountdown(prev => prev ? {
+          ...prev,
+          secsLeft: 0
+        } : null);
       }
     };
     const t = setInterval(check, 1000);
