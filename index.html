@@ -13282,7 +13282,30 @@ function App() {
         if (Date.now() - lastLocalWriteRef.current < 2000) return; // ignore echo of our own write
         const parts = parse(snap, null);
         if (Array.isArray(parts)) {
-          setParticipants(parts);
+          // Detect participants that are new since we last loaded — fetch their predictions
+          setParticipants(prev => {
+            const prevSet = new Set(prev);
+            const newOnes = parts.filter(p => !prevSet.has(p) && !lsGet(`pred-${p}`));
+            if (newOnes.length > 0) {
+              Promise.all(newOnes.map(p => fbTimeout(db.collection('wc26').doc(`pred-${p}`).get()).catch(() => null))).then(snaps => {
+                const updates = {};
+                snaps.forEach((s, i) => {
+                  if (s?.exists) {
+                    try {
+                      const d = JSON.parse(s.data().value || '{}');
+                      lsSet(`pred-${newOnes[i]}`, d);
+                      updates[newOnes[i]] = d;
+                    } catch (_e) {}
+                  }
+                });
+                if (Object.keys(updates).length > 0) setAllPredictions(a => ({
+                  ...a,
+                  ...updates
+                }));
+              });
+            }
+            return parts;
+          });
           lsSet('participants', parts);
         }
       } catch (_e) {}
