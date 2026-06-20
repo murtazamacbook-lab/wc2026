@@ -9968,7 +9968,7 @@ const AdminView = ({
       gap: 14,
       maxWidth: 520
     }
-  }, isSuperAdmin && /*#__PURE__*/React.createElement("div", {
+  }, (isSuperAdmin || adminRole === 'subadmin') && /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 20
