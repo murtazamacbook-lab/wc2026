@@ -15074,19 +15074,19 @@ function App() {
               ts: Date.now()
             };
             const todayKey = new Date().toLocaleDateString('sv');
+            const todayStart = new Date(todayKey + 'T00:00:00').getTime();
             // Merge into today's array — replace existing entry for same match, else append
             setTodaySpotlights(prev => {
               const filtered = prev.filter(s => !(s.home === gm.home && s.away === gm.away));
               return [...filtered, spotlight];
             });
             if (FB_ON) {
-              // Read current doc, update today's array, write back
               db.collection('wc26').doc('prediction-spotlight').get().then(snap => {
                 const stored = snap.exists ? JSON.parse(snap.data().value || '{}') : {};
-                const todayArr = (stored[todayKey] || []).filter(s => !(s.home === gm.home && s.away === gm.away));
+                // Only keep today's entries with ts >= todayStart
+                const todayArr = (stored[todayKey] || []).filter(s => s.ts && s.ts >= todayStart && !(s.home === gm.home && s.away === gm.away));
                 todayArr.push(spotlight);
                 stored[todayKey] = todayArr;
-                // Keep only last 3 days to avoid unbounded growth
                 const keys = Object.keys(stored).sort();
                 if (keys.length > 3) delete stored[keys[0]];
                 db.collection('wc26').doc('prediction-spotlight').set({
@@ -16645,9 +16645,9 @@ function App() {
       try {
         if (!snap.exists) return;
         const stored = JSON.parse(snap.data().value || '{}');
-        const todayKey = new Date().toLocaleDateString('sv');
-        const todayArr = stored[todayKey] || [];
-        // Only show entries newer than session start on first load, but always show all after that
+        const todayKey = new Date().toLocaleDateString('sv'); // "YYYY-MM-DD" local
+        const todayStart = new Date(todayKey + 'T00:00:00').getTime();
+        const todayArr = (stored[todayKey] || []).filter(s => s.ts && s.ts >= todayStart);
         setTodaySpotlights(todayArr);
       } catch (_e) {}
     }, () => {});
