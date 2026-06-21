@@ -15777,6 +15777,16 @@ function App() {
         if (Date.now() - lastLocalWriteRef.current < 2000) return; // ignore echo of our own write
         const parts = parse(snap, null);
         if (Array.isArray(parts)) {
+          // Auto-logout if this user was deleted by admin
+          setCurrentUser(prev => {
+            if (prev && prev !== '__guest__' && !parts.includes(prev)) {
+              try {
+                sessionStorage.removeItem('wc26_cu');
+              } catch (_e) {}
+              return null;
+            }
+            return prev;
+          });
           // Detect participants that are new since we last loaded — fetch their predictions
           setParticipants(prev => {
             const prevSet = new Set(prev);
