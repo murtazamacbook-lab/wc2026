@@ -8740,6 +8740,7 @@ const AdminView = ({
   const [clearDate, setClearDate] = useState('');
   const [clearPreview, setClearPreview] = useState(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState(null); // {name, pin, score}
+  const [deleteStatus, setDeleteStatus] = useState(null); // {ok:bool, msg:string}
   const handleRecoverApproved = async () => {
     if (!FB_ON) {
       setRecoverLog('Firebase not available.');
@@ -9197,6 +9198,7 @@ const AdminView = ({
   };
   const executeDeleteUser = async name => {
     setDeleteConfirmUser(null);
+    setDeleteStatus(null);
     const np = participants.filter(p => p !== name),
       npins = {
         ...userPins
@@ -9213,18 +9215,29 @@ const AdminView = ({
     lsSet('participants', np);
     lsSet('pins', npins);
     if (!FB_ON) {
-      alert(`⚠️ Firebase is offline — "${name}" removed locally only. Reload may restore them.`);
+      setDeleteStatus({
+        ok: false,
+        msg: `Firebase is offline — "${name}" removed locally only. Reload may restore them.`
+      });
       return;
     }
     try {
+      // cleanPending is best-effort — never blocks main delete
       const cleanPending = async () => {
-        const snap = await db.collection('wc26').doc('pending-users').get();
-        if (snap.exists) {
-          const pending = JSON.parse(snap.data().value || '{}');
-          const cleaned = Object.fromEntries(Object.entries(pending).filter(([, v]) => v.name !== name));
-          await db.collection('wc26').doc('pending-users').set({
-            value: JSON.stringify(cleaned)
-          });
+        try {
+          const snap = await db.collection('wc26').doc('pending-users').get();
+          if (snap.exists) {
+            const pending = JSON.parse(snap.data().value || '{}');
+            const cleaned = Object.fromEntries(Object.entries(pending).filter(([k, v]) => {
+              if (typeof v === 'object' && v !== null) return v.name !== name;
+              return k !== name;
+            }));
+            await db.collection('wc26').doc('pending-users').set({
+              value: JSON.stringify(cleaned)
+            });
+          }
+        } catch (e) {
+          console.warn('cleanPending failed:', e);
         }
       };
       await Promise.all([db.collection('wc26').doc('participants').set({
@@ -9232,20 +9245,20 @@ const AdminView = ({
       }), db.collection('wc26').doc('pins').set({
         value: JSON.stringify(npins)
       }), db.collection('wc26').doc(`pred-${name}`).delete().catch(() => {}), cleanPending()]);
-      alert(`✅ "${name}" permanently deleted from Firestore.`);
+      setDeleteStatus({
+        ok: true,
+        msg: `✅ "${name}" permanently deleted from Firestore.`
+      });
+      setTimeout(() => setDeleteStatus(null), 6000);
     } catch (err) {
-      // Firestore write failed — restore local state to match Firestore
-      alert(`❌ Firestore delete failed: ${err.message}\n\nReverting local state. Please try again.`);
-      // Re-add to local state so UI matches Firestore
-      setParticipants(prev => [...prev, name]);
-      setUserPins(prev => ({
-        ...prev,
-        [name]: userPins[name]
-      }));
-      setAllPredictions(prev => ({
-        ...prev,
-        [name]: allPredictions[name]
-      }));
+      console.error('executeDeleteUser failed:', err);
+      setDeleteStatus({
+        ok: false,
+        msg: `❌ Firestore delete failed: ${err.message} — reverting.`
+      });
+      setParticipants(participants);
+      setUserPins(userPins);
+      setAllPredictions(allPredictions);
       lsSet('participants', participants);
       lsSet('pins', userPins);
     }
@@ -9436,7 +9449,24 @@ const AdminView = ({
     ids: [104],
     label: 'Final'
   }];
-  return /*#__PURE__*/React.createElement("div", null, deleteConfirmUser && /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement("div", null, deleteStatus && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      top: 16,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 10000,
+      padding: '12px 20px',
+      borderRadius: 8,
+      background: deleteStatus.ok ? '#1a7a3a' : '#9f1b1b',
+      color: 'white',
+      fontWeight: 600,
+      fontSize: 14,
+      boxShadow: '0 4px 16px rgba(0,0,0,.3)',
+      maxWidth: 420,
+      textAlign: 'center'
+    }
+  }, deleteStatus.msg), deleteConfirmUser && /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
       inset: 0,
