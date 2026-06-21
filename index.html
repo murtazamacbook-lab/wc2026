@@ -1244,6 +1244,7 @@ const CSS = `
   .scrollbar::-webkit-scrollbar{height:6px;width:6px}
   .scrollbar::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
   @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  @keyframes savedPop{0%{transform:scale(.85);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
   @keyframes fadeSlideUp{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @keyframes balloonFloat{0%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-18px) rotate(3deg)}100%{transform:translateY(0) rotate(-3deg)}}
   @keyframes shrink{from{width:100%}to{width:0%}}
@@ -2316,7 +2317,30 @@ const MobilePredictionsView = ({
       color: 'var(--ink)',
       lineHeight: 1.5
     }
-  }, "⏰ ", /*#__PURE__*/React.createElement("strong", null, "Predictions lock 5 min before kick-off."), " Open desktop for full access (all groups, bracket, bonus)."), Object.entries(byDate).map(([label, matches]) => /*#__PURE__*/React.createElement("div", {
+  }, "⏰ ", /*#__PURE__*/React.createElement("strong", null, "Predictions lock 5 min before kick-off."), " Open desktop for full access (all groups, bracket, bonus)."), !locked && Object.values(predictions.group || {}).filter(p => p && p.h !== '' && p.a !== '' && p.h != null && p.a != null).length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      padding: '12px 14px',
+      background: 'linear-gradient(135deg,rgba(27,94,63,.08) 0%,var(--paper) 70%)',
+      border: '1px solid rgba(27,94,63,.3)',
+      borderRadius: 8,
+      display: 'flex',
+      gap: 12,
+      alignItems: 'flex-start',
+      animation: 'fadein .4s ease'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 22,
+      flexShrink: 0
+    }
+  }, "👋"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink)',
+      lineHeight: 1.6
+    }
+  }, /*#__PURE__*/React.createElement("strong", null, "New here?"), " Type the score you predict for each match. Picks auto-save — look for ", /*#__PURE__*/React.createElement("strong", null, "✅ Saved"), " at the top.")), Object.entries(byDate).map(([label, matches]) => /*#__PURE__*/React.createElement("div", {
     key: label,
     style: {
       marginTop: 18
@@ -2488,11 +2512,41 @@ const PredictionsView = ({
   const standings = useMemo(() => computeAllStandings(predictions.group || {}), [predictions]);
   const jTeamGroup = joker.team ? GROUP_KEYS.find(g => GROUPS[g].includes(joker.team)) : null;
   const isTriple = joker.team && joker.group && jTeamGroup === joker.group;
+  const totalPredsMade = Object.values(predictions.group || {}).filter(p => p && p.h !== '' && p.a !== '' && p.h != null && p.a != null).length;
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
     kicker: "Stage 1 of 2",
     title: "Group Stage",
     subtitle: "Predict the score of all 72 group matches. Standings auto-update."
-  }), /*#__PURE__*/React.createElement("div", {
+  }), totalPredsMade === 0 && !locked && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14,
+      padding: '16px 18px',
+      background: 'linear-gradient(135deg,rgba(27,94,63,.08) 0%,var(--paper) 70%)',
+      border: '1px solid rgba(27,94,63,.3)',
+      borderRadius: 8,
+      display: 'flex',
+      gap: 14,
+      alignItems: 'flex-start',
+      animation: 'fadein .4s ease'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 28,
+      flexShrink: 0
+    }
+  }, "👋"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 14,
+      marginBottom: 4
+    }
+  }, "Welcome! Start entering your predictions"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      lineHeight: 1.6
+    }
+  }, "Open any group below and type the score you predict for each match. Picks auto-save instantly — look for the ", /*#__PURE__*/React.createElement("strong", null, "✅ Saved"), " in the top-right corner. Set your ", /*#__PURE__*/React.createElement("strong", null, "🃏 Joker"), " above to double or triple your points on chosen matches."))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 18,
@@ -3768,113 +3822,128 @@ const LeaderboardView = React.memo(({
       textAlign: 'center',
       color: 'var(--ink-soft)'
     }
-  }, "No participants yet."), scores.map((s, i) => /*#__PURE__*/React.createElement("div", {
-    key: s.name,
-    className: "card fadein",
-    style: {
-      padding: '14px 18px',
-      borderLeft: i === 0 ? '3px solid var(--amber)' : i === 1 ? '3px solid #9b9087' : i === 2 ? '3px solid #8b6e4e' : '3px solid transparent'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 20,
-      minWidth: 28,
-      textAlign: 'center'
-    }
-  }, ['🥇', '🥈', '🥉'][i] || /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 14,
-      color: 'var(--ink-soft)',
-      fontWeight: 600
-    }
-  }, i + 1)), /*#__PURE__*/React.createElement(Avatar, {
-    name: s.name,
-    size: 36
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      minWidth: 0
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 700,
-      fontSize: 14,
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis'
-    }
-  }, s.name), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ink-soft)',
-      marginTop: 2,
-      display: 'flex',
-      gap: 10,
-      flexWrap: 'wrap'
-    }
-  }, /*#__PURE__*/React.createElement("span", null, "Group: ", /*#__PURE__*/React.createElement("strong", {
-    className: "mono"
-  }, s.groupPoints)), /*#__PURE__*/React.createElement("span", null, "KO: ", /*#__PURE__*/React.createElement("strong", {
-    className: "mono"
-  }, s.koPoints)), s.bonusPoints > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--amber)'
-    }
-  }, "Bonus: ", /*#__PURE__*/React.createElement("strong", {
-    className: "mono"
-  }, s.bonusPoints)), /*#__PURE__*/React.createElement("span", null, "Exact: ", /*#__PURE__*/React.createElement("strong", {
-    className: "mono"
-  }, s.detail.exactScores)), s.tiebreakSecs != null && /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--ink-soft)'
-    }
-  }, "⏱ ", Math.floor(s.tiebreakSecs / 60), ":", String(s.tiebreakSecs % 60).padStart(2, '0'), actualTiebreakSecs != null && /*#__PURE__*/React.createElement("span", {
-    style: {
-      marginLeft: 4,
-      color: Math.abs(s.tiebreakSecs - actualTiebreakSecs) === Math.min(...scores.filter(x => x.tiebreakSecs != null).map(x => Math.abs(x.tiebreakSecs - actualTiebreakSecs))) ? 'var(--forest)' : 'inherit',
-      fontWeight: Math.abs(s.tiebreakSecs - actualTiebreakSecs) === Math.min(...scores.filter(x => x.tiebreakSecs != null).map(x => Math.abs(x.tiebreakSecs - actualTiebreakSecs))) ? 700 : 400
-    }
-  }, "(", Math.abs(s.tiebreakSecs - actualTiebreakSecs) === 0 ? 'exact' : '+' + Math.abs(s.tiebreakSecs - actualTiebreakSecs) + 's off', ")"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      height: 3,
-      background: 'var(--cream2)',
-      borderRadius: 2,
-      marginTop: 8,
-      overflow: 'hidden'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: `${s.total / maxScore * 100}%`,
-      height: '100%',
-      background: i === 0 ? 'var(--amber)' : 'var(--burgundy)'
-    }
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: 'right',
-      flexShrink: 0
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "mono",
-    style: {
-      fontSize: 26,
-      fontWeight: 800,
-      color: i === 0 ? 'var(--amber)' : i < 3 ? 'var(--ink)' : 'var(--burgundy)'
-    }
-  }, s.total), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: 'var(--ink-soft)'
-    }
-  }, "pts")))))));
+  }, "No participants yet."), scores.map((s, i) => {
+    const hasPreds = allPredictions[s.name] && Object.values(allPredictions[s.name]?.group || {}).some(p => p && p.h !== '' && p.h != null);
+    return /*#__PURE__*/React.createElement("div", {
+      key: s.name,
+      className: "card fadein",
+      style: {
+        padding: '14px 18px',
+        borderLeft: i === 0 ? '3px solid var(--amber)' : i === 1 ? '3px solid #9b9087' : i === 2 ? '3px solid #8b6e4e' : '3px solid transparent'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 20,
+        minWidth: 28,
+        textAlign: 'center'
+      }
+    }, ['🥇', '🥈', '🥉'][i] || /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 14,
+        color: 'var(--ink-soft)',
+        fontWeight: 600
+      }
+    }, i + 1)), /*#__PURE__*/React.createElement(Avatar, {
+      name: s.name,
+      size: 36
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontSize: 14,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6
+      }
+    }, s.name, !hasPreds && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        fontWeight: 600,
+        color: 'var(--ink-soft)',
+        background: 'var(--cream2)',
+        border: '1px solid var(--line)',
+        borderRadius: 3,
+        padding: '1px 5px',
+        flexShrink: 0
+      }
+    }, "no picks yet")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        marginTop: 2,
+        display: 'flex',
+        gap: 10,
+        flexWrap: 'wrap'
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "Group: ", /*#__PURE__*/React.createElement("strong", {
+      className: "mono"
+    }, s.groupPoints)), /*#__PURE__*/React.createElement("span", null, "KO: ", /*#__PURE__*/React.createElement("strong", {
+      className: "mono"
+    }, s.koPoints)), s.bonusPoints > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--amber)'
+      }
+    }, "Bonus: ", /*#__PURE__*/React.createElement("strong", {
+      className: "mono"
+    }, s.bonusPoints)), /*#__PURE__*/React.createElement("span", null, "Exact: ", /*#__PURE__*/React.createElement("strong", {
+      className: "mono"
+    }, s.detail.exactScores)), s.tiebreakSecs != null && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--ink-soft)'
+      }
+    }, "⏱ ", Math.floor(s.tiebreakSecs / 60), ":", String(s.tiebreakSecs % 60).padStart(2, '0'), actualTiebreakSecs != null && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 4,
+        color: Math.abs(s.tiebreakSecs - actualTiebreakSecs) === Math.min(...scores.filter(x => x.tiebreakSecs != null).map(x => Math.abs(x.tiebreakSecs - actualTiebreakSecs))) ? 'var(--forest)' : 'inherit',
+        fontWeight: Math.abs(s.tiebreakSecs - actualTiebreakSecs) === Math.min(...scores.filter(x => x.tiebreakSecs != null).map(x => Math.abs(x.tiebreakSecs - actualTiebreakSecs))) ? 700 : 400
+      }
+    }, "(", Math.abs(s.tiebreakSecs - actualTiebreakSecs) === 0 ? 'exact' : '+' + Math.abs(s.tiebreakSecs - actualTiebreakSecs) + 's off', ")"))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 3,
+        background: 'var(--cream2)',
+        borderRadius: 2,
+        marginTop: 8,
+        overflow: 'hidden'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: `${s.total / maxScore * 100}%`,
+        height: '100%',
+        background: i === 0 ? 'var(--amber)' : 'var(--burgundy)'
+      }
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: 'right',
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "mono",
+      style: {
+        fontSize: 26,
+        fontWeight: 800,
+        color: i === 0 ? 'var(--amber)' : i < 3 ? 'var(--ink)' : 'var(--burgundy)'
+      }
+    }, s.total), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)'
+      }
+    }, "pts"))));
+  })));
 });
-
-// ── RULES VIEW ───────────────────────────────────────────────────
 const RulesView = () => /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
   kicker: "How it works",
   title: "Rules & Scoring"
@@ -13926,14 +13995,22 @@ const Header = ({
     fontSize: 13
   }
 }, saveStatus === 'saving' && /*#__PURE__*/React.createElement("span", {
-  className: "pill"
+  className: "pill",
+  style: {
+    animation: 'fadein .2s ease'
+  }
 }, /*#__PURE__*/React.createElement(RefreshCw, {
-  size: 11
-}), " Saving"), saveStatus === 'saved' && /*#__PURE__*/React.createElement("span", {
-  className: "pill pill-success"
-}, /*#__PURE__*/React.createElement(Check, {
-  size: 11
-}), " Saved"), /*#__PURE__*/React.createElement(Avatar, {
+  size: 11,
+  style: {
+    animation: 'spin .7s linear infinite'
+  }
+}), " Saving…"), saveStatus === 'saved' && /*#__PURE__*/React.createElement("span", {
+  className: "pill pill-success",
+  style: {
+    animation: 'savedPop .35s ease',
+    fontWeight: 700
+  }
+}, "✅ Saved"), /*#__PURE__*/React.createElement(Avatar, {
   name: user,
   size: 28
 }), /*#__PURE__*/React.createElement("div", {
