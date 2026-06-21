@@ -691,19 +691,22 @@ const MATCHDAY_CUTOFFS = {
   // first MD2 kickoff (June 19 19:00 UTC)
   3: new Date('2026-06-26T18:00:00Z').getTime() // first MD3 kickoff (June 26 18:00 UTC — all simultaneous)
 };
-// Returns the joker ({team,group}) that was active when matchday `md` was played.
-// `history` is the jokerHistory array stored in predictions.
-// Falls back to `fallback` when no history is available (old data).
-const getJokerForMatchday = (history, md, fallback) => {
+// Returns the joker active at a specific match kickoff timestamp.
+// Falls back to MATCHDAY_CUTOFFS[md] when kickoffMs not available.
+const getJokerForTimestamp = (history, cutoffMs, fallback) => {
   if (!history || !history.length) return fallback;
-  const cutoff = MATCHDAY_CUTOFFS[md];
-  if (!cutoff) return fallback;
-  const relevant = history.filter(e => e.setAt <= cutoff);
+  if (!cutoffMs) return fallback;
+  const relevant = history.filter(e => e.setAt <= cutoffMs);
   if (!relevant.length) return {
     team: null,
     group: null
-  }; // joker not set before this matchday
-  return relevant[relevant.length - 1]; // last entry before cutoff
+  }; // joker not set before this match
+  return relevant[relevant.length - 1];
+};
+
+// Keep old function as alias for backward compat (used in Joker Picks admin tab)
+const getJokerForMatchday = (history, md, fallback) => {
+  return getJokerForTimestamp(history, MATCHDAY_CUTOFFS[md], fallback);
 };
 const getJokerMultiplier = (match, jTeam, jGroup) => {
   if (!jTeam && !jGroup) return 1;
@@ -1069,7 +1072,7 @@ const scoreMatch = (pred, actual, homeTeam, awayTeam, isGroup = false) => {
     breakdown: bd
   };
 };
-const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actualBonus = {}) => {
+const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actualBonus = {}, kickoffTimes = new Map()) => {
   let groupPoints = 0,
     koPoints = 0,
     bracketPoints = 0,
@@ -1108,7 +1111,10 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
       total,
       breakdown
     } = scoreMatch(pred, actual, m.home, m.away, true);
-    const ej = getJokerForMatchday(jokerHistory, m.matchday, joker);
+    // Per-match joker cutoff: use this match's kickoff if available, else fall back to matchday cutoff
+    const matchKickoffMs = kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : kickoffTimes?.[m.id];
+    const jokerCutoffMs = matchKickoffMs || MATCHDAY_CUTOFFS[m.matchday];
+    const ej = getJokerForTimestamp(jokerHistory, jokerCutoffMs, joker);
     const mult = getJokerMultiplier(m, ej.team, ej.group);
     const pts = total * mult;
     matchPts[m.id] = pts;
@@ -3749,7 +3755,8 @@ const BonusView = ({
 const LeaderboardView = React.memo(({
   participants,
   allPredictions,
-  results
+  results,
+  kickoffTimes = new Map()
 }) => {
   const actualTiebreakSecs = parseTiebreakTime(results.bonus?.tiebreak);
   const scores = useMemo(() => {
@@ -3760,7 +3767,7 @@ const LeaderboardView = React.memo(({
             group: {},
             ko: {}
           };
-          const score = computeUserScore(preds, results.group || {}, results.ko || {}, results.bonus || {});
+          const score = computeUserScore(preds, results.group || {}, results.ko || {}, results.bonus || {}, kickoffTimes);
           return {
             name: p,
             ...score
@@ -4563,7 +4570,8 @@ const SupportWall = React.memo(({
 const BrowseView = React.memo(({
   participants,
   allPredictions,
-  results
+  results,
+  kickoffTimes = new Map()
 }) => {
   const [selected, setSelected] = useState(null);
   const sorted = useMemo(() => [...participants].sort((a, b) => a.localeCompare(b)), [participants]);
@@ -4572,7 +4580,7 @@ const BrowseView = React.memo(({
     ko: {},
     bonus: {}
   } : null;
-  const viewScore = useMemo(() => viewPreds ? computeUserScore(viewPreds, results.group || {}, results.ko || {}, results.bonus || {}) : null, [viewPreds, results]);
+  const viewScore = useMemo(() => viewPreds ? computeUserScore(viewPreds, results.group || {}, results.ko || {}, results.bonus || {}, kickoffTimes) : null, [viewPreds, results, kickoffTimes]);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
     kicker: `${participants.length} participants`,
     title: "Browse Picks",
@@ -6085,7 +6093,7 @@ const ScoreHistoryView = React.memo(({
     showUsers.forEach(p => {
       const preds = allPredictions[p] || {};
       // Use computeUserScore as single source of truth — guaranteed parity with leaderboard
-      const scored = computeUserScore(preds, results.group || {}, results.ko || {}, results.bonus || {});
+      const scored = computeUserScore(preds, results.group || {}, results.ko || {}, results.bonus || {}, kickoffTimes);
       scores[p] = {};
       days.forEach(({
         dateStr,
@@ -9446,7 +9454,7 @@ const AdminView = ({
     alert(`✅ Predictions reset for "${name}". Their score is now 0.`);
   };
   const scores = useMemo(() => participants.map(p => {
-    const s = computeUserScore(allPredictions[p] || {}, results.group || {}, results.ko || {}, results.bonus || {});
+    const s = computeUserScore(allPredictions[p] || {}, results.group || {}, results.ko || {}, results.bonus || {}, kickoffTimes);
     return {
       name: p,
       total: s.total,
@@ -9454,7 +9462,7 @@ const AdminView = ({
       koPts: s.koPoints + s.bracketPoints,
       bonusPts: s.bonusPoints
     };
-  }).sort((a, b) => b.total - a.total), [participants, allPredictions, results]);
+  }).sort((a, b) => b.total - a.total), [participants, allPredictions, results, kickoffTimes]);
   const setGroupResult = (mId, side, val) => {
     if (val !== '' && (isNaN(parseInt(val)) || parseInt(val) < 0 || parseInt(val) > 20)) return;
     onSave({
@@ -15477,7 +15485,7 @@ function App() {
     if (!prev && currentUser && currentUser !== '__guest__') {
       const allParts = participants.length > 0 ? participants : [];
       const scores = allParts.map(p => {
-        const s = computeUserScore(allPredictions[p] || {}, results.group || {}, results.ko || {}, results.bonus || {});
+        const s = computeUserScore(allPredictions[p] || {}, results.group || {}, results.ko || {}, results.bonus || {}, kickoffTimes);
         return {
           name: p,
           total: s.total
@@ -16422,7 +16430,8 @@ function App() {
       ...allPredictions,
       [currentUser]: predictions
     },
-    results: results
+    results: results,
+    kickoffTimes: kickoffTimes
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'scores'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
@@ -16457,7 +16466,8 @@ function App() {
   }, /*#__PURE__*/React.createElement(BrowseView, {
     participants: participants,
     allPredictions: allPredictions,
-    results: results
+    results: results,
+    kickoffTimes: kickoffTimes
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'live'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
