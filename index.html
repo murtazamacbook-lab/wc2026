@@ -9178,7 +9178,6 @@ const AdminView = ({
       };
     setParticipants(np);
     setUserPins(npins);
-    lastLocalWriteRef.current = Date.now();
     await storage.setJSON('participants', np, true);
     await storage.setJSON('pins', npins, true);
     setNewName('');
@@ -9212,7 +9211,6 @@ const AdminView = ({
     };
     delete na[name];
     setAllPredictions(na);
-    lastLocalWriteRef.current = Date.now();
     lsSet('participants', np);
     lsSet('pins', npins);
     if (!FB_ON) {
@@ -9278,7 +9276,6 @@ const AdminView = ({
       [name]: pin
     };
     setUserPins(npins);
-    lastLocalWriteRef.current = Date.now();
     lsSet('pins', npins);
     if (FB_ON) await db.collection('wc26').doc('pins').set({
       value: JSON.stringify(npins)
@@ -9325,7 +9322,6 @@ const AdminView = ({
     setParticipants(np);
     setUserPins(npins);
     setAllPredictions(na);
-    lastLocalWriteRef.current = Date.now();
     await storage.setJSON('participants', np, true);
     await storage.setJSON('pins', npins, true);
     setRenameTarget(null);
