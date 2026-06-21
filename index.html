@@ -9200,11 +9200,24 @@ const AdminView = ({
     lsSet('participants', np);
     lsSet('pins', npins);
     if (FB_ON) {
+      // Also remove from pending-users so they don't reappear on login screen
+      const cleanPending = async () => {
+        try {
+          const snap = await db.collection('wc26').doc('pending-users').get();
+          if (snap.exists) {
+            const pending = JSON.parse(snap.data().value || '{}');
+            const cleaned = Object.fromEntries(Object.entries(pending).filter(([, v]) => v.name !== name));
+            await db.collection('wc26').doc('pending-users').set({
+              value: JSON.stringify(cleaned)
+            });
+          }
+        } catch (_e) {}
+      };
       await Promise.all([db.collection('wc26').doc('participants').set({
         value: JSON.stringify(np)
       }).catch(() => {}), db.collection('wc26').doc('pins').set({
         value: JSON.stringify(npins)
-      }).catch(() => {})]);
+      }).catch(() => {}), db.collection('wc26').doc(`pred-${name}`).delete().catch(() => {}), cleanPending()]);
     }
   };
   const handleResetPin = async name => {
