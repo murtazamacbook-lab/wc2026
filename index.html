@@ -8739,6 +8739,7 @@ const AdminView = ({
   const [recoverLog, setRecoverLog] = useState('');
   const [clearDate, setClearDate] = useState('');
   const [clearPreview, setClearPreview] = useState(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState(null); // {name, pin, score}
   const handleRecoverApproved = async () => {
     if (!FB_ON) {
       setRecoverLog('Firebase not available.');
@@ -9183,7 +9184,19 @@ const AdminView = ({
     setNewPin('');
   };
   const handleDeleteUser = async name => {
-    if (!window.confirm(`Delete "${name}" and all their predictions? This cannot be undone.`)) return;
+    // Show confirmation modal with PIN + score data instead of browser confirm
+    const pin = userPins[name] || '(none)';
+    const scoreData = scores.find(s => s.name === name);
+    setDeleteConfirmUser({
+      name,
+      pin,
+      score: scoreData?.total || 0,
+      groupPts: scoreData?.groupPts || 0,
+      koPts: scoreData?.koPts || 0
+    });
+  };
+  const executeDeleteUser = async name => {
+    setDeleteConfirmUser(null);
     const np = participants.filter(p => p !== name),
       npins = {
         ...userPins
@@ -9200,7 +9213,6 @@ const AdminView = ({
     lsSet('participants', np);
     lsSet('pins', npins);
     if (FB_ON) {
-      // Also remove from pending-users so they don't reappear on login screen
       const cleanPending = async () => {
         try {
           const snap = await db.collection('wc26').doc('pending-users').get();
@@ -9406,7 +9418,122 @@ const AdminView = ({
     ids: [104],
     label: 'Final'
   }];
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
+  return /*#__PURE__*/React.createElement("div", null, deleteConfirmUser && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      zIndex: 9999,
+      background: 'rgba(0,0,0,.65)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20
+    },
+    onClick: e => {
+      if (e.target === e.currentTarget) setDeleteConfirmUser(null);
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      maxWidth: 420,
+      width: '100%',
+      padding: 28,
+      borderTop: '4px solid var(--burgundy)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 800,
+      fontSize: 17,
+      color: 'var(--burgundy)',
+      marginBottom: 18
+    }
+  }, "⚠️ Confirm Delete Participant"), /*#__PURE__*/React.createElement("table", {
+    style: {
+      width: '100%',
+      borderCollapse: 'collapse',
+      fontSize: 13,
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: '6px 0',
+      color: 'var(--ink-soft)',
+      width: 130
+    }
+  }, "Name"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 700,
+      fontSize: 15
+    }
+  }, deleteConfirmUser.name)), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: '6px 0',
+      color: 'var(--ink-soft)'
+    }
+  }, "PIN"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontFamily: 'monospace',
+      fontWeight: 700,
+      fontSize: 15,
+      letterSpacing: 2
+    }
+  }, deleteConfirmUser.pin)), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: '6px 0',
+      color: 'var(--ink-soft)'
+    }
+  }, "Total Score"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 700
+    }
+  }, deleteConfirmUser.score, " pts ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--ink-soft)',
+      fontWeight: 400,
+      fontSize: 12
+    }
+  }, "(Grp ", deleteConfirmUser.groupPts, " + KO ", deleteConfirmUser.koPts, ")"))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      background: 'rgba(159,27,27,.06)',
+      border: '1px solid rgba(159,27,27,.2)',
+      borderRadius: 6,
+      padding: '10px 12px',
+      marginBottom: 20
+    }
+  }, "This will permanently delete the participant, their PIN, all their predictions, and remove them from the login screen. ", /*#__PURE__*/React.createElement("strong", null, "This cannot be undone.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 10,
+      justifyContent: 'flex-end'
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setDeleteConfirmUser(null),
+    style: {
+      padding: '8px 20px',
+      borderRadius: 5,
+      border: '1px solid var(--line)',
+      background: 'transparent',
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => executeDeleteUser(deleteConfirmUser.name),
+    style: {
+      padding: '8px 20px',
+      borderRadius: 5,
+      border: 'none',
+      background: 'var(--burgundy)',
+      color: 'white',
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, "🗑 Delete ", deleteConfirmUser.name)))), /*#__PURE__*/React.createElement(SectionHeader, {
     kicker: isSuperAdmin ? '👑 Super Admin' : '🔧 Sub Admin',
     title: "Admin Console",
     subtitle: isSuperAdmin ? 'Full access — results, users, sync, settings.' : 'Limited access — results, approvals, chat & login controls.'
