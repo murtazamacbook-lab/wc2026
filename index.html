@@ -9212,24 +9212,42 @@ const AdminView = ({
     lastLocalWriteRef.current = Date.now();
     lsSet('participants', np);
     lsSet('pins', npins);
-    if (FB_ON) {
+    if (!FB_ON) {
+      alert(`⚠️ Firebase is offline — "${name}" removed locally only. Reload may restore them.`);
+      return;
+    }
+    try {
       const cleanPending = async () => {
-        try {
-          const snap = await db.collection('wc26').doc('pending-users').get();
-          if (snap.exists) {
-            const pending = JSON.parse(snap.data().value || '{}');
-            const cleaned = Object.fromEntries(Object.entries(pending).filter(([, v]) => v.name !== name));
-            await db.collection('wc26').doc('pending-users').set({
-              value: JSON.stringify(cleaned)
-            });
-          }
-        } catch (_e) {}
+        const snap = await db.collection('wc26').doc('pending-users').get();
+        if (snap.exists) {
+          const pending = JSON.parse(snap.data().value || '{}');
+          const cleaned = Object.fromEntries(Object.entries(pending).filter(([, v]) => v.name !== name));
+          await db.collection('wc26').doc('pending-users').set({
+            value: JSON.stringify(cleaned)
+          });
+        }
       };
       await Promise.all([db.collection('wc26').doc('participants').set({
         value: JSON.stringify(np)
-      }).catch(() => {}), db.collection('wc26').doc('pins').set({
+      }), db.collection('wc26').doc('pins').set({
         value: JSON.stringify(npins)
-      }).catch(() => {}), db.collection('wc26').doc(`pred-${name}`).delete().catch(() => {}), cleanPending()]);
+      }), db.collection('wc26').doc(`pred-${name}`).delete().catch(() => {}), cleanPending()]);
+      alert(`✅ "${name}" permanently deleted from Firestore.`);
+    } catch (err) {
+      // Firestore write failed — restore local state to match Firestore
+      alert(`❌ Firestore delete failed: ${err.message}\n\nReverting local state. Please try again.`);
+      // Re-add to local state so UI matches Firestore
+      setParticipants(prev => [...prev, name]);
+      setUserPins(prev => ({
+        ...prev,
+        [name]: userPins[name]
+      }));
+      setAllPredictions(prev => ({
+        ...prev,
+        [name]: allPredictions[name]
+      }));
+      lsSet('participants', participants);
+      lsSet('pins', userPins);
     }
   };
   const handleResetPin = async name => {
