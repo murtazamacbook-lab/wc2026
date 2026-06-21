@@ -2617,7 +2617,7 @@ const PredictionsView = ({
       fontSize: 14,
       color: 'var(--burgundy)'
     }
-  }, "Joker submitted for ", jokerLockedDate), /*#__PURE__*/React.createElement("div", {
+  }, "🔒 Joker locked for today"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: 'var(--ink-soft)',
@@ -2639,7 +2639,7 @@ const PredictionsView = ({
       color: 'var(--ink-soft)',
       marginTop: 4
     }
-  }, "Unlocks automatically tomorrow."))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "Locked to prevent accidental changes. Unlocks automatically tomorrow."))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -2697,7 +2697,13 @@ const PredictionsView = ({
       fontWeight: 600,
       color: isTriple ? 'var(--burgundy)' : 'var(--amber)'
     }
-  }, isTriple ? `🃏 TRIPLE: ${joker.team} matches score 3×` : `${joker.team ? `${TEAM_FLAGS[joker.team] || ''} ${joker.team} matches → 2×` : ''} ${joker.group ? `All Group ${joker.group} matches → 2×` : ''}`)), /*#__PURE__*/React.createElement("div", {
+  }, isTriple ? `🃏 TRIPLE: ${joker.team} matches score 3×` : `${joker.team ? `${TEAM_FLAGS[joker.team] || ''} ${joker.team} matches → 2×` : ''} ${joker.group ? `All Group ${joker.group} matches → 2×` : ''}`), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)',
+      marginTop: 4
+    }
+  }, "✅ Takes effect immediately — applies to all upcoming matches from this moment onwards.")), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 14,
       display: 'flex',
@@ -2725,7 +2731,7 @@ const PredictionsView = ({
       cursor: joker.team || joker.group ? 'pointer' : 'not-allowed',
       fontFamily: 'inherit'
     }
-  }, "🔒 Submit Joker for Today"), (joker.team || joker.group) && todayFirstKickoff && !jokerCutoffPassed && jokerMinsLeft !== null && /*#__PURE__*/React.createElement("span", {
+  }, "🔒 Lock Joker (prevent changes)"), (joker.team || joker.group) && todayFirstKickoff && !jokerCutoffPassed && jokerMinsLeft !== null && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
       fontWeight: 700,
@@ -6538,7 +6544,7 @@ const LiveDataView = React.memo(({
   const [rawDebug, setRawDebug] = useState(null); // {key, json} shown in debug modal
   const [espnPreview, setEspnPreview] = useState(null); // {panelKey,payload,isStandings,summary,rows} — confirm before save
 
-  // ── Auto-load cached data from Firestore on mount ─────────────────────────
+  // ── Auto-load cached data from Firestore on mount + live standings subscription ──
   useEffect(() => {
     const keys = ['results', 'standings', 'scorers', 'upcoming', 'live'];
     keys.forEach(async k => {
@@ -6558,6 +6564,64 @@ const LiveDataView = React.memo(({
         }
       } catch (e) {}
     });
+    // Subscribe to standings cache so auto-computed updates push to this view instantly
+    if (!FB_ON) return;
+    const unsubStandings = db.collection('wc26').doc('live-cache-standings').onSnapshot(snap => {
+      try {
+        if (!snap.exists) return;
+        const cached = JSON.parse(snap.data().value || '{}');
+        if (cached && cached.data) {
+          setLiveStandings(cached.data);
+          setCacheInfo(prev => ({
+            ...prev,
+            standings: {
+              updatedAt: cached.updatedAt
+            }
+          }));
+        }
+      } catch (_e) {}
+    }, () => {});
+    const unsubResults = db.collection('wc26').doc('live-cache-results').onSnapshot(snap => {
+      try {
+        if (!snap.exists) return;
+        const cached = JSON.parse(snap.data().value || '{}');
+        if (cached && cached.data) {
+          setLiveData(prev => ({
+            ...prev,
+            results: cached
+          }));
+          setCacheInfo(prev => ({
+            ...prev,
+            results: {
+              updatedAt: cached.updatedAt
+            }
+          }));
+        }
+      } catch (_e) {}
+    }, () => {});
+    const unsubScorers = db.collection('wc26').doc('live-cache-scorers').onSnapshot(snap => {
+      try {
+        if (!snap.exists) return;
+        const cached = JSON.parse(snap.data().value || '{}');
+        if (cached && cached.data) {
+          setLiveData(prev => ({
+            ...prev,
+            scorers: cached
+          }));
+          setCacheInfo(prev => ({
+            ...prev,
+            scorers: {
+              updatedAt: cached.updatedAt
+            }
+          }));
+        }
+      } catch (_e) {}
+    }, () => {});
+    return () => {
+      unsubStandings();
+      unsubResults();
+      unsubScorers();
+    };
   }, []);
 
   // ── Auto-refresh Live panel every 60 seconds ──────────────────────────────
@@ -14391,9 +14455,13 @@ function FireworksOverlay({
     const t = setTimeout(() => {
       setVisible(false);
       setTimeout(onClose, 500);
-    }, 3500);
+    }, 180000);
     return () => clearTimeout(t);
   }, [notif]);
+  const dismiss = () => {
+    setVisible(false);
+    setTimeout(onClose, 500);
+  };
   const FW_COLORS = ['#e74c3c', '#f39c12', '#2ecc71', '#3498db', '#9b59b6', '#f1c40f', '#e91e63', '#1abc9c', '#e67e22', '#00bcd4'];
   const particles = React.useMemo(() => Array.from({
     length: 60
@@ -14407,6 +14475,7 @@ function FireworksOverlay({
   })), [notif]);
   if (!notif) return null;
   return /*#__PURE__*/React.createElement("div", {
+    onClick: dismiss,
     style: {
       position: 'fixed',
       inset: 0,
@@ -14414,7 +14483,8 @@ function FireworksOverlay({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      pointerEvents: 'none',
+      pointerEvents: 'auto',
+      cursor: 'pointer',
       opacity: visible ? 1 : 0,
       transition: 'opacity .5s ease'
     }
@@ -14472,7 +14542,14 @@ function FireworksOverlay({
       fontFamily: 'monospace',
       marginTop: 6
     }
-  }, notif.score)));
+  }, notif.score), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: 'rgba(255,255,255,.4)',
+      marginTop: 10,
+      letterSpacing: 1
+    }
+  }, "TAP TO DISMISS")));
 }
 
 // ── WINNER TOAST (right-side slide-in, auto-fades) ───────────────
@@ -15141,6 +15218,9 @@ function App() {
                   }).catch(() => {});
                   setResults(newResults);
                   lsSet('results', newResults);
+                  pushComputedStandings(newGR);
+                  pushComputedResults(newGR);
+                  autoFetchScorers();
                 }
               }
             } catch (_e) {}
@@ -15380,6 +15460,9 @@ function App() {
                   }).catch(() => {});
                   setResults(newResults);
                   lsSet('results', newResults);
+                  pushComputedStandings(newGR);
+                  pushComputedResults(newGR);
+                  autoFetchScorers();
                 }
               }
             } catch (_e) {}
@@ -15707,7 +15790,10 @@ function App() {
     lastLocalWriteRef.current = Date.now();
     setResults(newRes);
     await storage.setJSON('results', newRes, true);
-  }, []);
+    pushComputedStandings(newRes.group || {});
+    pushComputedResults(newRes.group || {});
+    autoFetchScorers();
+  }, [pushComputedStandings, pushComputedResults, autoFetchScorers]);
   const saveConfig = useCallback(async newCfg => {
     lastLocalWriteRef.current = Date.now();
     setConfig(newCfg);
@@ -15925,6 +16011,124 @@ function App() {
   // ── LIVE DATA LISTENERS (participants, pins, results, config) ──
   // These replace the 1-hour poll — all users see changes instantly
   const lastLocalWriteRef = useRef(0); // track our own writes so we don't loop
+
+  // Auto-compute group standings from actual results and push to live-cache-standings
+  const pushComputedStandings = useCallback(async groupResults => {
+    try {
+      const standings = {};
+      GROUP_KEYS.forEach(g => {
+        const rows = computeGroupStandings(g, groupResults);
+        // Convert to the same shape as RapidAPI standings so LiveDataView renders correctly
+        standings['Group ' + g] = rows.map(r => ({
+          team: r.team,
+          played: r.P,
+          win: r.W,
+          draw: r.D,
+          loss: r.L,
+          goals_for: r.GF,
+          goals_against: r.GA,
+          goal_difference: r.GD,
+          points: r.Pts
+        }));
+      });
+      const cEntry = {
+        data: standings,
+        updatedAt: new Date().toISOString()
+      };
+      if (FB_ON) await storage.setJSON('live-cache-standings', cEntry, true);
+      lsSet('live-cache-standings', cEntry);
+    } catch (_e) {}
+  }, []);
+
+  // Auto-compute match results from stored results and push to live-cache-results
+  const kickoffTimesRef = useRef(new Map());
+  const pushComputedResults = useCallback(async groupResults => {
+    try {
+      const kt = kickoffTimesRef.current;
+      const sevenDaysAgo = Date.now() - 7 * 86400000;
+      const matches = GROUP_MATCHES.filter(m => {
+        if (m.matchday < COMP_START_MATCHDAY || EARLY_MD2_IDS.has(m.id)) return false;
+        const r = groupResults[m.id];
+        return r && r.h !== '' && r.h != null;
+      }).map(m => {
+        const r = groupResults[m.id];
+        const kickoffMs = kt instanceof Map ? kt.get(m.id) : null;
+        const kickoff = kickoffMs ? new Date(kickoffMs).toISOString() : null;
+        if (kickoffMs && kickoffMs < sevenDaysAgo) return null;
+        return {
+          home: m.home,
+          away: m.away,
+          homeScore: r.h,
+          awayScore: r.a,
+          status: 'FT',
+          kickoff,
+          group: 'Group ' + m.group
+        };
+      }).filter(Boolean);
+      const cEntry = {
+        data: {
+          results: matches
+        },
+        updatedAt: new Date().toISOString()
+      };
+      if (FB_ON) await storage.setJSON('live-cache-results', cEntry, true);
+      lsSet('live-cache-results', cEntry);
+    } catch (_e) {}
+  }, []);
+
+  // Auto-fetch top scorers from ESPN leaders and push to live-cache-scorers (fire-and-forget)
+  const scorersFetchingRef = useRef(false);
+  const autoFetchScorers = useCallback(async () => {
+    if (scorersFetchingRef.current) return;
+    scorersFetchingRef.current = true;
+    try {
+      const toHttps = url => url.replace(/^http:\/\//, 'https://');
+      const r = await fetch('https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/seasons/2026/types/1/leaders').then(r => r.json()).catch(() => null);
+      if (!r) {
+        scorersFetchingRef.current = false;
+        return;
+      }
+      const goalsCat = r.categories?.find(c => c.name === 'goalsLeaders');
+      const assistsCat = r.categories?.find(c => c.name === 'assistsLeaders');
+      if (!goalsCat?.leaders?.length) {
+        scorersFetchingRef.current = false;
+        return;
+      }
+      const assistsMap = new Map();
+      (assistsCat?.leaders || []).forEach(e => {
+        if (e.athlete?.['$ref']) assistsMap.set(toHttps(e.athlete['$ref']), e.value || 0);
+      });
+      const scorers = await Promise.all(goalsCat.leaders.map(async (e, i) => {
+        try {
+          const [ad, td] = await Promise.all([fetch(toHttps(e.athlete['$ref'])).then(r => r.json()).catch(() => ({})), fetch(toHttps(e.team['$ref'])).then(r => r.json()).catch(() => ({}))]);
+          return {
+            rank: i + 1,
+            name: ad.displayName || ad.fullName || 'Unknown',
+            team: normTeam(td.displayName || td.name || ''),
+            goals: e.value || 0,
+            assists: assistsMap.get(toHttps(e.athlete['$ref'])) || 0
+          };
+        } catch {
+          return null;
+        }
+      }));
+      const clean = scorers.filter(Boolean).sort((a, b) => b.goals - a.goals || b.assists - a.assists).map((s, i) => ({
+        ...s,
+        rank: i + 1
+      }));
+      if (clean.length) {
+        const cEntry = {
+          data: {
+            scorers: clean
+          },
+          updatedAt: new Date().toISOString()
+        };
+        if (FB_ON) await storage.setJSON('live-cache-scorers', cEntry, true);
+        lsSet('live-cache-scorers', cEntry);
+      }
+    } catch (_e) {}
+    scorersFetchingRef.current = false;
+  }, []);
   useEffect(() => {
     if (!FB_ON) return;
     const parse = (snap, fallback) => {
@@ -16331,6 +16535,7 @@ function App() {
     kickoffTimes,
     results
   };
+  kickoffTimesRef.current = kickoffTimes;
   if (view === 'admin' && !adminAuthed) return /*#__PURE__*/React.createElement("div", {
     className: "app",
     style: {
