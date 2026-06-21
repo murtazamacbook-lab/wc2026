@@ -5081,56 +5081,61 @@ const CrowdView = React.memo(({
       borderRadius: 16,
       overflow: 'hidden',
       marginBottom: 20,
-      background: '#050810',
-      minHeight: 260
+      minHeight: 240
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
       inset: 0,
-      backgroundImage: 'radial-gradient(1px 1px at 10% 20%,rgba(255,255,255,.5) 0%,transparent 100%),radial-gradient(1px 1px at 30% 60%,rgba(255,255,255,.3) 0%,transparent 100%),radial-gradient(1px 1px at 55% 15%,rgba(255,255,255,.4) 0%,transparent 100%),radial-gradient(1px 1px at 70% 75%,rgba(255,255,255,.35) 0%,transparent 100%),radial-gradient(1px 1px at 85% 35%,rgba(255,255,255,.5) 0%,transparent 100%),radial-gradient(1px 1px at 92% 80%,rgba(255,255,255,.25) 0%,transparent 100%),radial-gradient(1px 1px at 18% 88%,rgba(255,255,255,.4) 0%,transparent 100%),radial-gradient(1px 1px at 45% 45%,rgba(255,255,255,.2) 0%,transparent 100%)',
-      backgroundSize: '100% 100%'
+      background: 'linear-gradient(105deg,#1a237e 0%,#283593 18%,#c62828 35%,#b71c1c 50%,#c62828 65%,#1b5e20 82%,#2e7d32 100%)'
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
-      bottom: -40,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: 340,
-      height: 340,
-      borderRadius: '50%',
-      background: 'radial-gradient(ellipse,rgba(212,175,55,.22) 0%,rgba(212,175,55,.08) 40%,transparent 70%)',
-      pointerEvents: 'none'
+      inset: 0,
+      background: 'rgba(255,255,255,.08)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      background: 'linear-gradient(135deg,rgba(255,255,255,.12) 0%,transparent 50%,rgba(0,0,0,.2) 100%)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: '55%',
+      background: 'linear-gradient(to top,rgba(0,0,0,.55) 0%,transparent 100%)'
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
       top: 0,
       left: 0,
-      width: '35%',
-      height: '100%',
-      background: 'linear-gradient(to right,rgba(60,59,110,.18) 0%,transparent 100%)',
-      pointerEvents: 'none'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      top: 0,
       right: 0,
-      width: '35%',
-      height: '100%',
-      background: 'linear-gradient(to left,rgba(0,104,71,.18) 0%,transparent 100%)',
+      height: '30%',
+      background: 'linear-gradient(to bottom,rgba(0,0,0,.3) 0%,transparent 100%)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 36px,rgba(255,255,255,.04) 36px,rgba(255,255,255,.04) 37px)',
       pointerEvents: 'none'
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
-      top: 0,
-      left: '30%',
-      width: '40%',
-      height: '60%',
-      background: 'radial-gradient(ellipse,rgba(255,0,0,.08) 0%,transparent 70%)',
+      top: '30%',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      width: 280,
+      height: 280,
+      borderRadius: '50%',
+      background: 'radial-gradient(circle,rgba(255,215,0,.18) 0%,transparent 65%)',
       pointerEvents: 'none'
     }
   }), /*#__PURE__*/React.createElement("div", {
@@ -5139,221 +5144,190 @@ const CrowdView = React.memo(({
       bottom: 0,
       left: 0,
       right: 0,
-      height: 52,
-      overflow: 'hidden',
-      opacity: .18
+      height: 5,
+      display: 'flex'
     }
-  }, /*#__PURE__*/React.createElement("svg", {
-    viewBox: "0 0 400 52",
-    preserveAspectRatio: "none",
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      width: '100%',
-      height: '100%'
-    },
-    fill: "white"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M0,52 L0,38 L8,38 L8,30 L12,30 L12,22 L16,22 L16,18 L20,18 L20,22 L24,22 L24,30 L28,30 L28,38 L36,38 L36,26 L40,26 L40,20 L42,20 L42,14 L44,14 L44,10 L46,10 L46,14 L48,14 L48,20 L50,20 L50,26 L54,26 L54,34 L62,34 L62,28 L66,28 L66,20 L68,20 L68,12 L70,12 L70,8 L72,8 L72,4 L74,4 L74,8 L76,8 L76,12 L78,12 L78,20 L80,20 L80,28 L84,28 L84,34 L90,34 L90,30 L94,30 L94,24 L96,22 L98,24 L100,24 L100,30 L106,30 L106,38 L120,38 L120,24 L124,24 L124,16 L126,16 L126,10 L128,8 L130,10 L130,16 L132,16 L132,24 L136,24 L136,38 L148,38 L148,28 L152,28 L152,20 L154,18 L156,20 L156,28 L160,28 L160,38 L170,38 L170,26 L174,26 L174,18 L176,14 L178,18 L178,26 L182,26 L182,38 L196,38 L196,30 L200,28 L204,30 L204,38 L216,38 L216,26 L220,22 L224,26 L224,38 L236,38 L236,28 L240,24 L244,28 L244,38 L258,38 L258,30 L262,26 L266,30 L266,38 L276,38 L276,24 L280,20 L282,16 L284,20 L286,24 L286,38 L298,38 L298,28 L302,22 L306,28 L306,38 L318,38 L318,30 L322,26 L326,30 L326,38 L340,38 L340,42 L350,42 L350,36 L354,32 L358,36 L358,42 L368,42 L368,38 L372,34 L376,38 L376,42 L400,42 L400,52 Z"
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      bottom: 24,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      opacity: .22,
-      pointerEvents: 'none'
+      flex: 1,
+      background: '#3C3B6E'
     }
-  }, /*#__PURE__*/React.createElement("svg", {
-    width: "80",
-    height: "100",
-    viewBox: "0 0 80 100",
-    fill: "none"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M40 8 C32 8 26 14 26 22 C26 34 32 42 40 46 C48 42 54 34 54 22 C54 14 48 8 40 8Z",
-    fill: "#D4AF37"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M26 22 C18 22 12 26 10 32 C14 38 20 40 26 38",
-    stroke: "#D4AF37",
-    strokeWidth: "2.5",
-    fill: "none"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M54 22 C62 22 68 26 70 32 C66 38 60 40 54 38",
-    stroke: "#D4AF37",
-    strokeWidth: "2.5",
-    fill: "none"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M36 46 L34 64 L28 68 L28 72 L52 72 L52 68 L46 64 L44 46Z",
-    fill: "#D4AF37"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "22",
-    y: "72",
-    width: "36",
-    height: "5",
-    rx: "2",
-    fill: "#B8960C"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "26",
-    y: "77",
-    width: "28",
-    height: "4",
-    rx: "1.5",
-    fill: "#D4AF37"
-  }), /*#__PURE__*/React.createElement("ellipse", {
-    cx: "40",
-    cy: "24",
-    rx: "8",
-    ry: "10",
-    fill: "rgba(255,220,80,.3)"
-  }))), /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
-      position: 'absolute',
-      bottom: -10,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      fontSize: 130,
-      fontWeight: 900,
-      letterSpacing: '-4px',
-      color: 'transparent',
-      WebkitTextStroke: '1px rgba(212,175,55,.12)',
-      whiteSpace: 'nowrap',
-      userSelect: 'none',
-      lineHeight: 1,
-      fontFamily: 'Georgia,serif'
+      flex: 1,
+      background: '#fff'
     }
-  }, "2026"), /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#B22234'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#FF0000'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#fff'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#FF0000'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#006847'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#fff'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#CE1126'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'relative',
       zIndex: 2,
-      padding: '28px 24px 24px'
+      padding: '22px 24px 28px'
     }
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: 'center',
-      marginBottom: 18
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      fontWeight: 700,
-      letterSpacing: '.22em',
-      textTransform: 'uppercase',
-      color: 'rgba(212,175,55,.65)',
-      marginBottom: 10
-    }
-  }, "Three Nations · One World · One Dream"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 10,
-      marginBottom: 6
+      gap: 12,
+      marginBottom: 14
+    }
+  }, [['🇺🇸', 'USA'], ['🇨🇦', 'CAN'], ['🇲🇽', 'MEX']].map(([flag, name]) => /*#__PURE__*/React.createElement("div", {
+    key: name,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 5,
+      background: 'rgba(255,255,255,.15)',
+      borderRadius: 20,
+      padding: '4px 10px',
+      border: '1px solid rgba(255,255,255,.2)',
+      backdropFilter: 'blur(4px)'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16
+    }
+  }, flag), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      color: '#fff',
+      letterSpacing: '.08em'
+    }
+  }, name)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginBottom: 20
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      height: 1,
-      width: 40,
-      background: 'linear-gradient(to right,transparent,rgba(212,175,55,.4))'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
       fontSize: 9,
       fontWeight: 700,
-      letterSpacing: '.18em',
+      letterSpacing: '.2em',
       textTransform: 'uppercase',
-      color: 'rgba(255,255,255,.4)'
+      color: 'rgba(255,255,255,.6)',
+      marginBottom: 8
     }
-  }, "FIFA World Cup 2026"), /*#__PURE__*/React.createElement("div", {
+  }, "FIFA World Cup 2026 · Crowd Intelligence"), /*#__PURE__*/React.createElement("div", {
     style: {
-      height: 1,
-      width: 40,
-      background: 'linear-gradient(to left,transparent,rgba(212,175,55,.4))'
-    }
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 38,
+      fontSize: 36,
       fontWeight: 900,
       letterSpacing: '-.02em',
-      lineHeight: 1,
-      fontFamily: 'Georgia,serif',
-      background: 'linear-gradient(to bottom,#fff 30%,#D4AF37 100%)',
-      WebkitBackgroundClip: 'text',
-      WebkitTextFillColor: 'transparent'
+      lineHeight: 1.05,
+      color: '#fff',
+      textShadow: '0 2px 20px rgba(0,0,0,.4)',
+      fontFamily: 'Georgia,serif'
     }
-  }, "Fan Predictions"), /*#__PURE__*/React.createElement("div", {
+  }, "Fan ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: '#FFD700',
+      textShadow: '0 0 30px rgba(255,215,0,.5)'
+    }
+  }, "Predictions")), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      color: 'rgba(255,255,255,.35)',
-      marginTop: 6,
+      color: 'rgba(255,255,255,.55)',
+      marginTop: 8,
       letterSpacing: '.04em'
     }
-  }, "What the crowd said vs what happened · Fan Predictions")), /*#__PURE__*/React.createElement("div", {
+  }, "What the crowd called · how they fared")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(4,1fr)',
-      gap: 1,
-      background: 'rgba(212,175,55,.12)',
-      borderRadius: 10,
-      overflow: 'hidden',
-      border: '1px solid rgba(212,175,55,.15)'
+      gap: 8
     }
   }, [{
     label: 'Matches',
     val: totalMatches,
-    sub: 'played'
+    sub: 'with results',
+    bg: 'rgba(255,255,255,.12)'
   }, {
-    label: 'Accuracy',
+    label: 'Avg Accuracy',
     val: `${avgAccuracy}%`,
-    sub: 'avg crowd'
+    sub: 'crowd correct',
+    bg: avgAccuracy >= 60 ? 'rgba(0,200,100,.25)' : avgAccuracy >= 40 ? 'rgba(255,215,0,.2)' : 'rgba(255,80,80,.2)'
   }, {
     label: 'Upsets',
     val: totalUpsets,
-    sub: 'crowd wrong'
+    sub: 'crowd wrong',
+    bg: 'rgba(255,255,255,.12)'
   }, {
     label: 'Players',
     val: total,
-    sub: 'competing'
+    sub: 'competing',
+    bg: 'rgba(255,255,255,.12)'
   }].map(({
     label,
     val,
-    sub
-  }, i) => /*#__PURE__*/React.createElement("div", {
+    sub,
+    bg
+  }) => /*#__PURE__*/React.createElement("div", {
     key: label,
     style: {
-      padding: '12px 4px',
       textAlign: 'center',
-      background: i % 2 ? 'rgba(255,255,255,.03)' : 'transparent',
-      position: 'relative'
+      background: bg,
+      borderRadius: 10,
+      padding: '10px 4px',
+      border: '1px solid rgba(255,255,255,.15)',
+      backdropFilter: 'blur(6px)'
     }
-  }, i > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      left: 0,
-      top: '20%',
-      height: '60%',
-      width: 1,
-      background: 'rgba(212,175,55,.15)'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 22,
       fontWeight: 900,
-      color: i === 1 ? avgAccuracy >= 60 ? '#00d68f' : avgAccuracy >= 40 ? '#FFD700' : '#ff6b6b' : '#D4AF37',
+      color: '#fff',
       lineHeight: 1,
-      fontVariantNumeric: 'tabular-nums'
+      fontVariantNumeric: 'tabular-nums',
+      textShadow: '0 1px 6px rgba(0,0,0,.3)'
     }
   }, val), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       fontWeight: 700,
-      color: 'rgba(255,255,255,.6)',
+      color: 'rgba(255,255,255,.8)',
       marginTop: 3,
       textTransform: 'uppercase',
-      letterSpacing: '.06em'
+      letterSpacing: '.05em'
     }
   }, label), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 9,
-      color: 'rgba(255,255,255,.25)',
-      letterSpacing: '.04em'
+      color: 'rgba(255,255,255,.4)'
     }
   }, sub)))))), bestMatch && worstMatch && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5364,121 +5338,221 @@ const CrowdView = React.memo(({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      background: '#0d1f14',
-      border: '1px solid rgba(0,214,143,.2)',
-      borderRadius: 10,
-      padding: '14px 16px',
       position: 'relative',
-      overflow: 'hidden'
+      borderRadius: 12,
+      overflow: 'hidden',
+      padding: '16px'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
-      top: 0,
-      right: 0,
-      width: 60,
-      height: 60,
-      background: 'radial-gradient(circle,rgba(0,214,143,.15) 0%,transparent 70%)'
+      inset: 0,
+      background: 'linear-gradient(135deg,#1b5e20 0%,#2e7d32 50%,#1b5e20 100%)'
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
+      position: 'absolute',
+      inset: 0,
+      background: 'linear-gradient(135deg,rgba(255,255,255,.10) 0%,transparent 60%)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: 4,
+      display: 'flex'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#006847'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: 'rgba(255,255,255,.6)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: '#CE1126'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: -20,
+      right: -20,
+      width: 90,
+      height: 90,
+      borderRadius: '50%',
+      background: 'radial-gradient(circle,rgba(255,255,255,.12) 0%,transparent 70%)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'relative',
+      zIndex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
       fontSize: 9,
       fontWeight: 700,
-      letterSpacing: '.12em',
-      color: '#00d68f',
+      letterSpacing: '.14em',
       textTransform: 'uppercase',
-      marginBottom: 8
+      color: 'rgba(255,255,255,.7)',
+      marginBottom: 6
     }
-  }, "Best Crowd Call"), /*#__PURE__*/React.createElement("div", {
+  }, "🏆 Best Crowd Call"), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontWeight: 700,
-      fontSize: 14,
+      fontWeight: 800,
+      fontSize: 15,
       color: '#fff',
-      marginBottom: 2
+      marginBottom: 2,
+      textShadow: '0 1px 4px rgba(0,0,0,.4)'
     }
   }, teamShort(bestMatch.m.home), " vs ", teamShort(bestMatch.m.away)), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      color: 'rgba(255,255,255,.35)',
-      marginBottom: 8
+      color: 'rgba(255,255,255,.6)',
+      marginBottom: 10
     }
   }, "Group ", bestMatch.m.group, " · Matchday ", bestMatch.m.matchday), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 28,
+      display: 'flex',
+      alignItems: 'baseline',
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 32,
       fontWeight: 900,
-      color: '#00d68f',
+      color: '#fff',
       lineHeight: 1,
+      textShadow: '0 2px 12px rgba(0,0,0,.3)',
       fontVariantNumeric: 'tabular-nums'
     }
-  }, bestMatch.crowdRight, /*#__PURE__*/React.createElement("span", {
+  }, bestMatch.crowdRight), /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 14,
-      fontWeight: 600
+      fontSize: 16,
+      fontWeight: 700,
+      color: 'rgba(255,255,255,.8)'
     }
-  }, "%")), /*#__PURE__*/React.createElement("div", {
+  }, "%"), /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,.3)'
+      fontSize: 11,
+      color: 'rgba(255,255,255,.55)',
+      marginLeft: 4
     }
-  }, "got the result right")), /*#__PURE__*/React.createElement("div", {
+  }, "got it right")))), /*#__PURE__*/React.createElement("div", {
     style: {
-      background: '#1a0d0d',
-      border: '1px solid rgba(255,80,80,.2)',
-      borderRadius: 10,
-      padding: '14px 16px',
       position: 'relative',
-      overflow: 'hidden'
+      borderRadius: 12,
+      overflow: 'hidden',
+      padding: '16px'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
-      top: 0,
-      right: 0,
-      width: 60,
-      height: 60,
-      background: 'radial-gradient(circle,rgba(255,80,80,.15) 0%,transparent 70%)'
+      inset: 0,
+      background: 'linear-gradient(135deg,#1a237e 0%,#283593 40%,#b71c1c 100%)'
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
+      position: 'absolute',
+      inset: 0,
+      background: 'linear-gradient(135deg,rgba(255,255,255,.08) 0%,transparent 60%)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: 4,
+      display: 'flex'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 2,
+      background: '#3C3B6E'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      background: 'rgba(255,255,255,.6)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 2,
+      background: '#B22234'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: -20,
+      right: -20,
+      width: 90,
+      height: 90,
+      borderRadius: '50%',
+      background: 'radial-gradient(circle,rgba(255,255,255,.10) 0%,transparent 70%)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'relative',
+      zIndex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
       fontSize: 9,
       fontWeight: 700,
-      letterSpacing: '.12em',
-      color: '#ff5050',
+      letterSpacing: '.14em',
       textTransform: 'uppercase',
-      marginBottom: 8
+      color: 'rgba(255,255,255,.7)',
+      marginBottom: 6
     }
-  }, "Biggest Upset"), /*#__PURE__*/React.createElement("div", {
+  }, "😱 Biggest Upset"), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontWeight: 700,
-      fontSize: 14,
+      fontWeight: 800,
+      fontSize: 15,
       color: '#fff',
-      marginBottom: 2
+      marginBottom: 2,
+      textShadow: '0 1px 4px rgba(0,0,0,.4)'
     }
   }, teamShort(worstMatch.m.home), " vs ", teamShort(worstMatch.m.away)), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      color: 'rgba(255,255,255,.35)',
-      marginBottom: 8
+      color: 'rgba(255,255,255,.6)',
+      marginBottom: 10
     }
   }, "Group ", worstMatch.m.group, " · Matchday ", worstMatch.m.matchday), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 28,
+      display: 'flex',
+      alignItems: 'baseline',
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 32,
       fontWeight: 900,
-      color: '#ff5050',
+      color: '#fff',
       lineHeight: 1,
+      textShadow: '0 2px 12px rgba(0,0,0,.3)',
       fontVariantNumeric: 'tabular-nums'
     }
-  }, worstMatch.crowdRight, /*#__PURE__*/React.createElement("span", {
+  }, worstMatch.crowdRight), /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 14,
-      fontWeight: 600
+      fontSize: 16,
+      fontWeight: 700,
+      color: 'rgba(255,255,255,.8)'
     }
-  }, "%")), /*#__PURE__*/React.createElement("div", {
+  }, "%"), /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,.3)'
+      fontSize: 11,
+      color: 'rgba(255,255,255,.55)',
+      marginLeft: 4
     }
-  }, "got the result right"))), /*#__PURE__*/React.createElement("div", {
+  }, "got it right"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
