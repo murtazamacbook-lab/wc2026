@@ -9197,6 +9197,7 @@ const AdminView = ({
     });
   };
   const executeDeleteUser = async name => {
+    console.log('[DELETE] starting for:', name, 'FB_ON:', FB_ON);
     setDeleteConfirmUser(null);
     setDeleteStatus(null);
     const np = participants.filter(p => p !== name),
@@ -9215,6 +9216,7 @@ const AdminView = ({
     lsSet('participants', np);
     lsSet('pins', npins);
     if (!FB_ON) {
+      console.warn('[DELETE] FB_ON is false');
       setDeleteStatus({
         ok: false,
         msg: `Firebase is offline — "${name}" removed locally only. Reload may restore them.`
@@ -9222,7 +9224,7 @@ const AdminView = ({
       return;
     }
     try {
-      // cleanPending is best-effort — never blocks main delete
+      console.log('[DELETE] writing to Firestore…');
       const cleanPending = async () => {
         try {
           const snap = await db.collection('wc26').doc('pending-users').get();
@@ -9235,9 +9237,10 @@ const AdminView = ({
             await db.collection('wc26').doc('pending-users').set({
               value: JSON.stringify(cleaned)
             });
+            console.log('[DELETE] pending-users cleaned');
           }
         } catch (e) {
-          console.warn('cleanPending failed:', e);
+          console.warn('[DELETE] cleanPending failed:', e);
         }
       };
       await Promise.all([db.collection('wc26').doc('participants').set({
@@ -9245,13 +9248,14 @@ const AdminView = ({
       }), db.collection('wc26').doc('pins').set({
         value: JSON.stringify(npins)
       }), db.collection('wc26').doc(`pred-${name}`).delete().catch(() => {}), cleanPending()]);
+      console.log('[DELETE] Firestore writes done ✅');
       setDeleteStatus({
         ok: true,
         msg: `✅ "${name}" permanently deleted from Firestore.`
       });
       setTimeout(() => setDeleteStatus(null), 6000);
     } catch (err) {
-      console.error('executeDeleteUser failed:', err);
+      console.error('[DELETE] Firestore write FAILED:', err);
       setDeleteStatus({
         ok: false,
         msg: `❌ Firestore delete failed: ${err.message} — reverting.`
