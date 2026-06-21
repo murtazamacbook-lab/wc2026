@@ -5278,14 +5278,14 @@ const CrowdView = React.memo(({
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent'
     }
-  }, "Heat Meter"), /*#__PURE__*/React.createElement("div", {
+  }, "Fan Predictions"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'rgba(255,255,255,.35)',
       marginTop: 6,
       letterSpacing: '.04em'
     }
-  }, "Crowd prediction intelligence")), /*#__PURE__*/React.createElement("div", {
+  }, "What the crowd said vs what happened · Fan Predictions")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(4,1fr)',
@@ -13720,9 +13720,9 @@ const Header = ({
   I: BarChart
 }, {
   k: 'crowd',
-  l: 'Heat Meter',
+  l: 'FP',
   I: null,
-  emoji: '🔥',
+  emoji: '👥',
   mobileHide: false
 }, {
   k: 'scores',
@@ -16068,7 +16068,7 @@ function App() {
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'crowd'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
-    label: "Heat Meter"
+    label: "Fan Predictions"
   }, /*#__PURE__*/React.createElement(CrowdView, {
     participants: participants,
     allPredictions: isGuest ? allPredictions : {
