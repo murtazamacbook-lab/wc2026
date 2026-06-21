@@ -4873,6 +4873,801 @@ const BrowseView = React.memo(({
   }))))));
 });
 
+// ── CROWD VIEW ───────────────────────────────────────────────────
+const CrowdView = React.memo(({
+  participants,
+  allPredictions,
+  results,
+  currentUser
+}) => {
+  const [selectedGroup, setSelectedGroup] = useState('ALL');
+  const [expandedMatch, setExpandedMatch] = useState(null);
+  const [animKey, setAnimKey] = useState(0);
+
+  // Trigger bar animation when group changes
+  useEffect(() => {
+    setAnimKey(k => k + 1);
+  }, [selectedGroup]);
+  const total = participants.length;
+
+  // Compute crowd stats per scored match
+  const matchStats = useMemo(() => {
+    const scored = GROUP_MATCHES.filter(m => {
+      if (m.matchday < COMP_START_MATCHDAY) return false;
+      if (EARLY_MD2_IDS.has(m.id)) return false;
+      const r = results.group?.[m.id];
+      return r && r.h !== '' && r.h != null;
+    });
+    return scored.map(m => {
+      const actual = results.group[m.id];
+      const ah = parseInt(actual.h),
+        aa = parseInt(actual.a);
+      const aResult = ah > aa ? 'H' : aa > ah ? 'A' : 'D';
+      let hWin = 0,
+        draw = 0,
+        aWin = 0,
+        predicted = 0;
+      const scoreCounts = {};
+      let correctResult = 0,
+        exactScore = 0;
+      participants.forEach(p => {
+        const pred = (allPredictions[p] || {}).group?.[m.id];
+        if (!pred || pred.h === '' || pred.h == null) return;
+        predicted++;
+        const ph = parseInt(pred.h),
+          pa = parseInt(pred.a);
+        const pRes = ph > pa ? 'H' : pa > ph ? 'A' : 'D';
+        if (pRes === 'H') hWin++;else if (pRes === 'A') aWin++;else draw++;
+        if (pRes === aResult) correctResult++;
+        if (ph === ah && pa === aa) exactScore++;
+        const key = `${ph}–${pa}`;
+        scoreCounts[key] = (scoreCounts[key] || 0) + 1;
+      });
+      // Top 3 predicted scores
+      const topScores = Object.entries(scoreCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      // Consensus result
+      const maxVotes = Math.max(hWin, draw, aWin);
+      const consensusStrength = predicted > 0 ? maxVotes / predicted : 0;
+      const heat = consensusStrength >= 0.7 ? '🔥' : consensusStrength >= 0.5 ? '🌡️' : '❄️';
+      const heatLabel = consensusStrength >= 0.7 ? 'HIGH' : consensusStrength >= 0.5 ? 'MEDIUM' : 'SPLIT';
+      const heatColor = consensusStrength >= 0.7 ? '#e74c3c' : consensusStrength >= 0.5 ? '#f39c12' : '#3498db';
+      const crowdRight = predicted > 0 ? Math.round(correctResult / predicted * 100) : 0;
+      const crowdExact = predicted > 0 ? Math.round(exactScore / predicted * 100) : 0;
+      // Was this an upset? crowd picked wrong winner majority
+      const crowdBacked = hWin > draw && hWin > aWin ? 'H' : aWin > draw && aWin > hWin ? 'A' : 'D';
+      const isUpset = predicted >= 3 && crowdBacked !== aResult && consensusStrength >= 0.5;
+      return {
+        m,
+        actual,
+        ah,
+        aa,
+        aResult,
+        hWin,
+        draw,
+        aWin,
+        predicted,
+        topScores,
+        heat,
+        heatLabel,
+        heatColor,
+        correctResult,
+        exactScore,
+        crowdRight,
+        crowdExact,
+        isUpset,
+        consensusStrength
+      };
+    });
+  }, [participants, allPredictions, results]);
+  const groups = ['ALL', ...GROUP_KEYS];
+  const filtered = selectedGroup === 'ALL' ? matchStats : matchStats.filter(s => s.m.group === selectedGroup);
+
+  // Summary stats
+  const totalMatches = matchStats.length;
+  const totalUpsets = matchStats.filter(s => s.isUpset).length;
+  const avgAccuracy = totalMatches > 0 ? Math.round(matchStats.reduce((s, x) => s + x.crowdRight, 0) / totalMatches) : 0;
+  const bestMatch = matchStats.length ? matchStats.reduce((best, s) => s.crowdRight > best.crowdRight ? s : best, matchStats[0]) : null;
+  const worstMatch = matchStats.length ? matchStats.reduce((worst, s) => s.crowdRight < worst.crowdRight ? s : worst, matchStats[0]) : null;
+
+  // Fireworks canvas for exact score celebration
+  const fireRef = useRef(null);
+  useEffect(() => {
+    if (!expandedMatch) return;
+    const s = matchStats.find(x => x.m.id === expandedMatch);
+    if (!s || s.crowdExact < 20) return;
+    const canvas = fireRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    const particles = [];
+    const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'];
+    for (let i = 0; i < 60; i++) {
+      particles.push({
+        x: canvas.width * (.3 + Math.random() * .4),
+        y: canvas.height * .5,
+        vx: (Math.random() - .5) * 8,
+        vy: (Math.random() - .5) * 8 - 3,
+        life: 1,
+        decay: .015 + Math.random() * .01,
+        r: 3 + Math.random() * 4,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      });
+    }
+    let rafId;
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += .15;
+        p.life -= p.decay;
+        if (p.life <= 0) return;
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      if (particles.some(p => p.life > 0)) rafId = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(rafId);
+  }, [expandedMatch, matchStats]);
+  const HeatBar = ({
+    label,
+    count,
+    total: tot,
+    color,
+    icon,
+    isWinner
+  }) => {
+    const pct = tot > 0 ? Math.round(count / tot * 100) : 0;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        fontSize: 11,
+        fontWeight: isWinner ? 700 : 400,
+        color: isWinner ? color : 'var(--ink)',
+        marginBottom: 3
+      }
+    }, /*#__PURE__*/React.createElement("span", null, icon, " ", label), /*#__PURE__*/React.createElement("span", null, count, " (", pct, "%)")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 8,
+        borderRadius: 4,
+        background: 'var(--cream2)',
+        overflow: 'hidden'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: '100%',
+        borderRadius: 4,
+        background: isWinner ? color : 'var(--line)',
+        width: `${pct}%`,
+        transition: 'width 0.8s cubic-bezier(.4,0,.2,1)'
+      }
+    })));
+  };
+  if (totalMatches === 0) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 40,
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 48,
+      marginBottom: 12
+    }
+  }, "⚽"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 18,
+      marginBottom: 8
+    }
+  }, "No results yet"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'var(--ink-soft)',
+      fontSize: 14
+    }
+  }, "Crowd stats will appear once match results are entered."));
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'linear-gradient(135deg,#1a2a3a 0%,#0d3b2e 50%,#1a2a3a 100%)',
+      borderRadius: 12,
+      padding: '24px 20px',
+      marginBottom: 20,
+      position: 'relative',
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      opacity: .07,
+      backgroundImage: 'radial-gradient(circle at 20% 50%,white 1px,transparent 1px),radial-gradient(circle at 80% 50%,white 1px,transparent 1px)',
+      backgroundSize: '40px 40px'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'relative',
+      zIndex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: '.15em',
+      textTransform: 'uppercase',
+      color: '#FFD700',
+      marginBottom: 6
+    }
+  }, "📊 Crowd Intelligence"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 26,
+      fontWeight: 800,
+      color: 'white',
+      marginBottom: 4,
+      fontFamily: 'Georgia,serif'
+    }
+  }, "Heat Meter"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,.6)',
+      marginBottom: 20
+    }
+  }, "How the crowd predicted vs what actually happened"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 16,
+      flexWrap: 'wrap'
+    }
+  }, [{
+    label: 'Matches Played',
+    val: totalMatches,
+    icon: '⚽',
+    col: '#FFD700'
+  }, {
+    label: 'Avg Crowd Accuracy',
+    val: `${avgAccuracy}%`,
+    icon: '🎯',
+    col: '#4ECDC4'
+  }, {
+    label: 'Upset Calls',
+    val: totalUpsets,
+    icon: '😱',
+    col: '#FF6B6B'
+  }, {
+    label: 'Participants',
+    val: total,
+    icon: '👥',
+    col: '#DDA0DD'
+  }].map(({
+    label,
+    val,
+    icon,
+    col
+  }) => /*#__PURE__*/React.createElement("div", {
+    key: label,
+    style: {
+      background: 'rgba(255,255,255,.08)',
+      borderRadius: 8,
+      padding: '10px 16px',
+      minWidth: 100,
+      backdropFilter: 'blur(4px)',
+      border: '1px solid rgba(255,255,255,.1)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      marginBottom: 2
+    }
+  }, icon), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      fontWeight: 800,
+      color: col,
+      fontFamily: 'monospace'
+    }
+  }, val), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: 'rgba(255,255,255,.5)',
+      textTransform: 'uppercase',
+      letterSpacing: '.05em'
+    }
+  }, label)))))), bestMatch && worstMatch && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 10,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'linear-gradient(135deg,rgba(46,204,113,.12),rgba(46,204,113,.04))',
+      border: '1px solid rgba(46,204,113,.3)',
+      borderRadius: 10,
+      padding: '12px 14px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: '.1em',
+      color: '#27ae60',
+      textTransform: 'uppercase',
+      marginBottom: 6
+    }
+  }, "🏆 Best Crowd Call"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13
+    }
+  }, teamShort(bestMatch.m.home), " vs ", teamShort(bestMatch.m.away)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)'
+    }
+  }, "Group ", bestMatch.m.group, " · MD", bestMatch.m.matchday), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 800,
+      color: '#27ae60',
+      marginTop: 4
+    }
+  }, bestMatch.crowdRight, "% correct")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'linear-gradient(135deg,rgba(231,76,60,.12),rgba(231,76,60,.04))',
+      border: '1px solid rgba(231,76,60,.3)',
+      borderRadius: 10,
+      padding: '12px 14px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: '.1em',
+      color: '#e74c3c',
+      textTransform: 'uppercase',
+      marginBottom: 6
+    }
+  }, "😱 Biggest Upset"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13
+    }
+  }, teamShort(worstMatch.m.home), " vs ", teamShort(worstMatch.m.away)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)'
+    }
+  }, "Group ", worstMatch.m.group, " · MD", worstMatch.m.matchday), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 800,
+      color: '#e74c3c',
+      marginTop: 4
+    }
+  }, worstMatch.crowdRight, "% correct"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 16
+    }
+  }, groups.map(g => /*#__PURE__*/React.createElement("button", {
+    key: g,
+    onClick: () => setSelectedGroup(g),
+    style: {
+      padding: '5px 12px',
+      borderRadius: 20,
+      border: `1px solid ${selectedGroup === g ? 'var(--ink)' : 'var(--line)'}`,
+      background: selectedGroup === g ? 'var(--ink)' : 'transparent',
+      color: selectedGroup === g ? 'var(--cream)' : 'var(--ink)',
+      fontSize: 12,
+      fontWeight: 600,
+      cursor: 'pointer',
+      transition: 'all .2s'
+    }
+  }, g === 'ALL' ? 'All Groups' : `Group ${g}`))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10
+    },
+    key: animKey
+  }, filtered.map(({
+    m,
+    actual,
+    ah,
+    aa,
+    aResult,
+    hWin,
+    draw,
+    aWin,
+    predicted,
+    topScores,
+    heat,
+    heatLabel,
+    heatColor,
+    correctResult,
+    exactScore,
+    crowdRight,
+    crowdExact,
+    isUpset
+  }) => {
+    const isExpanded = expandedMatch === m.id;
+    const hWinner = aResult === 'H',
+      dWinner = aResult === 'D',
+      aWinner = aResult === 'A';
+    const myPred = (allPredictions[currentUser] || {}).group?.[m.id];
+    const myPh = myPred ? parseInt(myPred.h) : null,
+      myPa = myPred ? parseInt(myPred.a) : null;
+    const myResult = myPh != null && myPa != null ? myPh > myPa ? 'H' : myPa > myPh ? 'A' : 'D' : null;
+    const myCorrect = myResult === aResult,
+      myExact = myPh === ah && myPa === aa;
+    return /*#__PURE__*/React.createElement("div", {
+      key: m.id,
+      className: "card",
+      style: {
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'box-shadow .2s',
+        boxShadow: isExpanded ? '0 4px 20px rgba(0,0,0,.12)' : 'none'
+      },
+      onClick: () => setExpandedMatch(isExpanded ? null : m.id)
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 180
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4
+      }
+    }, /*#__PURE__*/React.createElement(Flag, {
+      team: m.home,
+      size: 14
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontSize: 13
+      }
+    }, teamShort(m.home)), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: 'monospace',
+        fontWeight: 800,
+        fontSize: 16,
+        background: 'var(--ink)',
+        color: 'var(--cream)',
+        padding: '2px 8px',
+        borderRadius: 6
+      }
+    }, ah, "–", aa), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontSize: 13
+      }
+    }, teamShort(m.away)), /*#__PURE__*/React.createElement(Flag, {
+      team: m.away,
+      size: 14
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)'
+      }
+    }, "Group ", m.group, " · MD", m.matchday, " · ", predicted, "/", total, " predicted")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flex: 'none',
+        alignItems: 'center',
+        gap: 6
+      }
+    }, isUpset && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        fontWeight: 700,
+        background: 'rgba(231,76,60,.15)',
+        color: '#e74c3c',
+        padding: '2px 7px',
+        borderRadius: 20,
+        border: '1px solid rgba(231,76,60,.3)'
+      }
+    }, "UPSET"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: 'center',
+        background: `${heatColor}18`,
+        border: `1px solid ${heatColor}50`,
+        borderRadius: 8,
+        padding: '5px 10px'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 18,
+        lineHeight: 1
+      }
+    }, heat), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        fontWeight: 700,
+        color: heatColor,
+        letterSpacing: '.05em'
+      }
+    }, heatLabel)), myResult && /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: 'center',
+        background: myExact ? 'rgba(39,174,96,.15)' : myCorrect ? 'rgba(39,174,96,.08)' : 'rgba(231,76,60,.08)',
+        border: `1px solid ${myExact ? 'rgba(39,174,96,.4)' : myCorrect ? 'rgba(39,174,96,.25)' : 'rgba(231,76,60,.25)'}`,
+        borderRadius: 8,
+        padding: '5px 10px'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 800,
+        color: myExact ? '#27ae60' : myCorrect ? '#27ae60' : '#e74c3c',
+        fontFamily: 'monospace'
+      }
+    }, myPh, "–", myPa), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        fontWeight: 700,
+        color: myExact ? '#27ae60' : myCorrect ? '#27ae60' : '#e74c3c'
+      }
+    }, myExact ? 'EXACT!' : myCorrect ? '✓ ME' : currentUser === '__guest__' ? '' : myResult ? '✗ ME' : '')), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: 'var(--ink-soft)',
+        fontSize: 12,
+        transition: 'transform .2s',
+        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+      }
+    }, "▼")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: '100%',
+        height: 6,
+        borderRadius: 3,
+        overflow: 'hidden',
+        display: 'flex',
+        gap: 1,
+        marginTop: 4
+      }
+    }, predicted > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: hWin,
+        background: hWinner ? '#27ae60' : 'rgba(39,174,96,.3)',
+        transition: 'flex .8s cubic-bezier(.4,0,.2,1)'
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: draw,
+        background: dWinner ? '#f39c12' : 'rgba(243,156,18,.3)',
+        transition: 'flex .8s cubic-bezier(.4,0,.2,1)'
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: aWin,
+        background: aWinner ? '#3498db' : 'rgba(52,152,219,.3)',
+        transition: 'flex .8s cubic-bezier(.4,0,.2,1)'
+      }
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 2
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 10,
+        fontSize: 11,
+        color: 'var(--ink-soft)'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: hWinner ? '#27ae60' : undefined,
+        fontWeight: hWinner ? 700 : 400
+      }
+    }, "🟢 ", hWin, " Home"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: dWinner ? '#f39c12' : undefined,
+        fontWeight: dWinner ? 700 : 400
+      }
+    }, "🟡 ", draw, " Draw"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: aWinner ? '#3498db' : undefined,
+        fontWeight: aWinner ? 700 : 400
+      }
+    }, "🔵 ", aWin, " Away")), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: crowdRight >= 60 ? '#27ae60' : crowdRight >= 40 ? '#f39c12' : '#e74c3c'
+      }
+    }, "🎯 ", crowdRight, "% right"))), isExpanded && /*#__PURE__*/React.createElement("div", {
+      className: "fadein",
+      style: {
+        borderTop: '1px solid var(--line)',
+        padding: '14px 16px',
+        background: 'var(--cream2)',
+        position: 'relative'
+      }
+    }, crowdExact >= 20 && /*#__PURE__*/React.createElement("canvas", {
+      ref: fireRef,
+      style: {
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none'
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 16,
+        position: 'relative',
+        zIndex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--ink-soft)',
+        textTransform: 'uppercase',
+        letterSpacing: '.08em',
+        marginBottom: 10
+      }
+    }, "Vote Split"), /*#__PURE__*/React.createElement(HeatBar, {
+      label: `${teamShort(m.home)} Win`,
+      count: hWin,
+      total: predicted,
+      color: "#27ae60",
+      icon: "🟢",
+      isWinner: hWinner
+    }), /*#__PURE__*/React.createElement(HeatBar, {
+      label: "Draw",
+      count: draw,
+      total: predicted,
+      color: "#f39c12",
+      icon: "🟡",
+      isWinner: dWinner
+    }), /*#__PURE__*/React.createElement(HeatBar, {
+      label: `${teamShort(m.away)} Win`,
+      count: aWin,
+      total: predicted,
+      color: "#3498db",
+      icon: "🔵",
+      isWinner: aWinner
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--ink-soft)',
+        textTransform: 'uppercase',
+        letterSpacing: '.08em',
+        marginBottom: 10
+      }
+    }, "Top Score Picks"), topScores.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: 'var(--ink-soft)',
+        fontStyle: 'italic'
+      }
+    }, "No predictions yet"), topScores.map(([score, cnt], i) => {
+      const isExact = score === `${ah}–${aa}`;
+      return /*#__PURE__*/React.createElement("div", {
+        key: score,
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 7
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 16,
+          minWidth: 20
+        }
+      }, ['🥇', '🥈', '🥉'][i]), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontFamily: 'monospace',
+          fontWeight: 800,
+          fontSize: 14,
+          color: isExact ? '#27ae60' : 'var(--ink)',
+          background: isExact ? 'rgba(39,174,96,.12)' : 'transparent',
+          padding: '1px 6px',
+          borderRadius: 4,
+          border: isExact ? '1px solid rgba(39,174,96,.3)' : 'none'
+        }
+      }, score), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 12,
+          color: 'var(--ink-soft)'
+        }
+      }, cnt, " ", cnt === 1 ? 'pick' : 'picks', isExact ? ' ✓ exact!' : ''));
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 12,
+        paddingTop: 10,
+        borderTop: '1px solid var(--line-soft)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        marginBottom: 4
+      }
+    }, "Crowd accuracy"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 18,
+        fontWeight: 800,
+        color: crowdRight >= 60 ? '#27ae60' : crowdRight >= 40 ? '#f39c12' : '#e74c3c'
+      }
+    }, crowdRight, "%"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)'
+      }
+    }, "Got result")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 18,
+        fontWeight: 800,
+        color: crowdExact >= 30 ? '#27ae60' : crowdExact >= 10 ? '#f39c12' : 'var(--ink-soft)'
+      }
+    }, crowdExact, "%"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)'
+      }
+    }, "Exact score")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 18,
+        fontWeight: 800,
+        color: 'var(--ink)'
+      }
+    }, predicted), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)'
+      }
+    }, "Predicted"))))))));
+  })), filtered.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: 32,
+      color: 'var(--ink-soft)',
+      fontSize: 14,
+      fontStyle: 'italic'
+    }
+  }, "No played matches in Group ", selectedGroup, " yet."));
+});
+
 // ── SCORE HISTORY VIEW ───────────────────────────────────────────
 const ScoreHistoryView = React.memo(({
   participants,
@@ -12707,6 +13502,11 @@ const Header = ({
   I: TrendingUp,
   mobileHide: true
 }, {
+  k: 'crowd',
+  l: '🔥 Heat Meter',
+  I: BarChart,
+  mobileHide: false
+}, {
   k: 'browse',
   l: 'Browse Picks',
   I: Users2,
@@ -15041,6 +15841,18 @@ function App() {
     currentUser: currentUser,
     isAdmin: adminRole === 'superadmin' || adminRole === 'subadmin',
     isGuest: isGuest
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'crowd'
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+    label: "Heat Meter"
+  }, /*#__PURE__*/React.createElement(CrowdView, {
+    participants: participants,
+    allPredictions: isGuest ? allPredictions : {
+      ...allPredictions,
+      [currentUser]: predictions
+    },
+    results: results,
+    currentUser: currentUser
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'browse'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
