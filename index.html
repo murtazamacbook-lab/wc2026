@@ -8313,7 +8313,7 @@ const AdminView = ({
       marginTop: 16,
       flexWrap: 'wrap'
     }
-  }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.values(onlineUsers).filter(v => {
+  }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['jokers', '🃏 Joker Picks', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.values(onlineUsers).filter(v => {
     const ts = typeof v === 'object' ? v.ts : v;
     return ts && Date.now() - ts < 3 * 60 * 1000;
   }).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
@@ -8892,7 +8892,179 @@ const AdminView = ({
       color: 'var(--forest)',
       marginTop: 4
     }
-  }, "✅ Valid — ", parseTiebreakTime(results.bonus.tiebreak), "s into the match")))), section === 'sync' && /*#__PURE__*/React.createElement("div", {
+  }, "✅ Valid — ", parseTiebreakTime(results.bonus.tiebreak), "s into the match")))), section === 'jokers' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '12px 16px',
+      background: 'var(--cream2)',
+      borderBottom: '1px solid var(--line)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      fontSize: 14
+    }
+  }, "🃏 Joker Picks — All Participants"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)'
+    }
+  }, participants.length, " participants")), /*#__PURE__*/React.createElement("div", null, [...participants].sort((a, b) => a.localeCompare(b)).map((p, i) => {
+    const preds = allPredictions[p] || {};
+    const joker = preds.joker || {};
+    const history = preds.jokerHistory || [];
+    // Joker per matchday
+    const jokerMD = {};
+    [2, 3].forEach(md => {
+      const cutoff = MATCHDAY_CUTOFFS[md];
+      if (!cutoff) return;
+      const relevant = history.filter(e => e.setAt <= cutoff);
+      jokerMD[md] = relevant.length ? relevant[relevant.length - 1] : {
+        team: null,
+        group: null
+      };
+    });
+    const hasJoker = joker.team || joker.group;
+    return /*#__PURE__*/React.createElement("div", {
+      key: p,
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 16px',
+        borderBottom: '1px solid var(--line-soft)',
+        background: i % 2 ? 'var(--cream2)' : '',
+        flexWrap: 'wrap'
+      }
+    }, /*#__PURE__*/React.createElement(Avatar, {
+      name: p,
+      size: 28
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600,
+        fontSize: 13,
+        minWidth: 140
+      }
+    }, p), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 12,
+        flex: 1,
+        flexWrap: 'wrap'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 6,
+        alignItems: 'center'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)',
+        textTransform: 'uppercase',
+        letterSpacing: '.05em',
+        minWidth: 48
+      }
+    }, "Current"), hasJoker ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 600
+      }
+    }, joker.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[joker.team] || '⚽', " ", joker.team), joker.team && joker.group && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--ink-soft)'
+      }
+    }, " · "), joker.group && /*#__PURE__*/React.createElement("span", null, "Group ", joker.group), joker.team && joker.group && GROUP_KEYS.find(g => GROUPS[g].includes(joker.team)) === joker.group && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 5,
+        fontSize: 10,
+        fontWeight: 700,
+        color: 'var(--burgundy)',
+        background: 'rgba(159,27,27,.1)',
+        padding: '1px 5px',
+        borderRadius: 3
+      }
+    }, "3×"), (joker.team || joker.group) && !(joker.team && joker.group && GROUP_KEYS.find(g => GROUPS[g].includes(joker.team)) === joker.group) && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 5,
+        fontSize: 10,
+        fontWeight: 700,
+        color: 'var(--amber)',
+        background: 'rgba(214,137,42,.1)',
+        padding: '1px 5px',
+        borderRadius: 3
+      }
+    }, "2×")) : /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: 'var(--ink-soft)',
+        fontStyle: 'italic'
+      }
+    }, "Not set")), [2, 3].map(md => {
+      const ej = jokerMD[md];
+      const locked = ej && (ej.team || ej.group);
+      const isTriple = ej?.team && ej?.group && GROUP_KEYS.find(g => GROUPS[g].includes(ej.team)) === ej.group;
+      return /*#__PURE__*/React.createElement("div", {
+        key: md,
+        style: {
+          display: 'flex',
+          gap: 6,
+          alignItems: 'center'
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: 'var(--ink-soft)',
+          textTransform: 'uppercase',
+          letterSpacing: '.05em',
+          minWidth: 28
+        }
+      }, "MD", md), locked ? /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 12
+        }
+      }, ej.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[ej.team] || '⚽', " ", ej.team), ej.team && ej.group && /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: 'var(--ink-soft)'
+        }
+      }, " · "), ej.group && /*#__PURE__*/React.createElement("span", null, "Group ", ej.group), /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 5,
+          fontSize: 10,
+          fontWeight: 700,
+          color: isTriple ? 'var(--burgundy)' : 'var(--amber)',
+          background: isTriple ? 'rgba(159,27,27,.1)' : 'rgba(214,137,42,.1)',
+          padding: '1px 5px',
+          borderRadius: 3
+        }
+      }, isTriple ? '3×' : '2×')) : /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 12,
+          color: 'var(--ink-soft)',
+          fontStyle: 'italic'
+        }
+      }, "—"));
+    })));
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8,
+      fontSize: 11,
+      color: 'var(--ink-soft)',
+      padding: '0 4px'
+    }
+  }, "MD2 = locked at Jun 19 19:00 UTC · MD3 = locked at Jun 26 18:00 UTC · 3× = team+group match · 2× = team or group only")), section === 'sync' && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 16,
       maxWidth: 640
