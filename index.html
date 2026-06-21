@@ -6478,10 +6478,15 @@ const LiveDataView = React.memo(({
   adminRoleRef.current = adminRole;
   const syncKeyRef = useRef(syncKey);
   syncKeyRef.current = syncKey;
+  const liveTimerRef = useRef(null);
+  const refreshLiveRef = useRef(null); // exposed so tab-open can trigger immediate refresh
+  const [liveNextDelay, setLiveNextDelay] = useState(60000); // ms until next refresh
   useEffect(() => {
+    const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'PEN'];
     const refreshLive = async () => {
       const role = adminRoleRef.current;
       const key = syncKeyRef.current;
+      let nextDelay = 3600000; // default: 1 hour when no games
       try {
         if ((role === 'superadmin' || role === 'subadmin') && (key.trim() || FUNC_BASE)) {
           // Admin: fetch fresh from API and save to cache
@@ -6512,6 +6517,7 @@ const LiveDataView = React.memo(({
               updatedAt: cEntry.updatedAt
             }
           }));
+          nextDelay = 60000; // admins always refresh every 60s
         } else {
           // Non-admin: fetch ESPN directly — free, no key, always current
           const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
@@ -6554,17 +6560,35 @@ const LiveDataView = React.memo(({
             ...prev,
             live: espnArr
           }));
+          // Smart interval: 60s if live, 5min if kickoff within 2h, else 1h
+          const hasLive = espnArr.some(m => LIVE_STATUSES.includes(m.status));
+          const nowMs = Date.now();
+          const soonKickoff = espnArr.some(m => m.status === 'scheduled' && m.kickoff && new Date(m.kickoff).getTime() - nowMs > 0 && new Date(m.kickoff).getTime() - nowMs < 2 * 3600000);
+          if (hasLive) nextDelay = 60000;else if (soonKickoff) nextDelay = 300000; // 5 min
+          else nextDelay = 3600000; // 1 hour
         }
         setLiveAutoTs(new Date().toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit'
         }));
+        setLiveNextDelay(nextDelay);
       } catch (e) {}
+      // Schedule next refresh with smart delay
+      if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+      liveTimerRef.current = setTimeout(refreshLive, nextDelay);
     };
-    refreshLive(); // fetch immediately on mount — don't wait 60s
-    const t = setInterval(refreshLive, 60000); // then every 60 seconds
-    return () => clearInterval(t);
+    refreshLiveRef.current = refreshLive; // expose for tab-open trigger
+    refreshLive(); // fetch immediately on mount
+    // Also refresh immediately when user returns to this browser tab
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshLiveRef.current?.();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
   const loadFromCache = async key => {
     setCacheLoading(key);
@@ -7593,7 +7617,7 @@ const LiveDataView = React.memo(({
         background: '#c0392b',
         animation: 'liveBlink 1.2s ease-in-out infinite'
       }
-    }), /*#__PURE__*/React.createElement("span", null, "Auto-refreshing every 60 s", liveAutoTs ? ` — last updated ${liveAutoTs}` : '')), arr.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    }), /*#__PURE__*/React.createElement("span", null, "Auto-refreshing every ", liveNextDelay >= 3600000 ? '60 min' : liveNextDelay >= 300000 ? '5 min' : '60 s', liveAutoTs ? ` — last updated ${liveAutoTs}` : '')), arr.length === 0 ? /*#__PURE__*/React.createElement("div", {
       style: {
         padding: 16,
         textAlign: 'center',
