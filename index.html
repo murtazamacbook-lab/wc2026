@@ -13757,7 +13757,7 @@ const LiveMatchBanner = ({
   if (!matches || matches.length === 0) return null;
   const live = matches.filter(m => {
     const s = (m.status || m.matchStatus || m.state || '').toLowerCase();
-    return s.includes('live') || s.includes('1h') || s.includes('2h') || s.includes('ht') || s.includes('in progress') || m.minute != null && m.elapsed != null;
+    return s === '1h' || s === '2h' || s === 'ht' || s === 'et' || s === 'pen' || s.includes('live') || s.includes('in progress') || s.includes('in_progress');
   });
   // Filter upcoming: only show matches not yet started and not more than 30 min past kickoff
   const now = Date.now();
@@ -15403,7 +15403,7 @@ function App() {
       const st = comp.status?.type || {};
       const min = parseInt(comp.status?.displayClock) || 0;
       let status = 'scheduled';
-      if (st.name === 'STATUS_FIRST_HALF') status = '1H';else if (st.name === 'STATUS_SECOND_HALF') status = '2H';else if (st.name === 'STATUS_HALFTIME') status = 'HT';else if (st.name === 'STATUS_EXTRA_TIME') status = 'ET';else if (st.name === 'STATUS_PENALTY') status = 'PEN';else if (st.name === 'STATUS_IN_PROGRESS') status = min > 45 ? '2H' : '1H';else if (st.name === 'STATUS_FULL_TIME' || st.completed) status = 'FT';
+      if (st.name === 'STATUS_FIRST_HALF') status = '1H';else if (st.name === 'STATUS_SECOND_HALF') status = '2H';else if (st.name === 'STATUS_HALFTIME' || st.name === 'STATUS_HALFTIME_BREAK') status = 'HT';else if (st.name === 'STATUS_EXTRA_TIME') status = 'ET';else if (st.name === 'STATUS_PENALTY') status = 'PEN';else if (st.name === 'STATUS_IN_PROGRESS' || st.name === 'STATUS_ACTIVE') status = min > 45 ? '2H' : '1H';else if (st.name === 'STATUS_FULL_TIME' || st.name === 'STATUS_FINAL' || st.completed) status = 'FT';
       return {
         home: normTeam(hC.team?.displayName || ''),
         away: normTeam(aC.team?.displayName || ''),
