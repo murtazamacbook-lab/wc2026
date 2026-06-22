@@ -7195,8 +7195,10 @@ const LiveDataView = React.memo(({
           ...prev,
           [panelKey]: payload
         }));
+        // Unwrap ESPN payload: payload may be {_espn,data:{...}} — store only the inner data
+        const innerData = payload && payload._espn && payload.data ? payload.data : payload;
         const cEntry = {
-          data: payload,
+          data: innerData,
           updatedAt: new Date().toISOString()
         };
         await storage.setJSON(`live-cache-${panelKey}`, cEntry, true);
