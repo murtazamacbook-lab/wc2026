@@ -1299,10 +1299,10 @@ const CSS = `
   @keyframes excitePulse{0%,100%{box-shadow:0 4px 20px rgba(231,76,60,.45)}50%{box-shadow:0 4px 28px rgba(231,76,60,.85),0 0 0 6px rgba(231,76,60,.18)}}
   @keyframes meterShimmer{0%{background-position:200% center}100%{background-position:-200% center}}
   .fadein{animation:fadein .25s ease}
-  .main-shell{display:flex;align-items:flex-start;gap:16px}
+  .main-shell{display:flex;align-items:flex-start;gap:20px}
   .main-primary{flex:1;min-width:0}
-  .support-wall{width:320px;max-height:calc(100vh - 140px);position:sticky;top:84px;display:flex;flex-direction:column;overflow:hidden}
-  .spotlight-panel{width:260px;max-height:calc(100vh - 140px);position:sticky;top:84px;display:flex;flex-direction:column;overflow:hidden;order:-1}
+  .support-wall{width:290px;max-height:calc(100vh - 140px);position:sticky;top:84px;display:flex;flex-direction:column;overflow:hidden}
+  .spotlight-panel{width:290px;max-height:calc(100vh - 140px);position:sticky;top:84px;display:flex;flex-direction:column;overflow:hidden;order:-1}
   .support-list{padding:10px;overflow:auto}
   .support-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--line-soft)}
   .support-row:last-child{border-bottom:none}
@@ -6655,21 +6655,23 @@ const LiveDataView = React.memo(({
             });
           }
           const d = await r.json();
-          setLiveData(prev => ({
-            ...prev,
-            live: d
-          }));
-          const cEntry = {
-            data: d,
-            updatedAt: new Date().toISOString()
-          };
-          await storage.setJSON('live-cache-live', cEntry, true);
-          setCacheInfo(prev => ({
-            ...prev,
-            live: {
-              updatedAt: cEntry.updatedAt
-            }
-          }));
+          if (d != null) {
+            setLiveData(prev => ({
+              ...prev,
+              live: d
+            }));
+            const cEntry = {
+              data: d,
+              updatedAt: new Date().toISOString()
+            };
+            await storage.setJSON('live-cache-live', cEntry, true);
+            setCacheInfo(prev => ({
+              ...prev,
+              live: {
+                updatedAt: cEntry.updatedAt
+              }
+            }));
+          }
           nextDelay = 60000; // admins always refresh every 60s
         } else {
           // Non-admin: fetch ESPN directly — free, no key, always current
@@ -6709,10 +6711,17 @@ const LiveDataView = React.memo(({
               group: gm?.group ?? '–'
             };
           }).filter(Boolean);
-          if (espnArr.length > 0) setLiveData(prev => ({
-            ...prev,
-            live: espnArr
-          }));
+          if (espnArr.length > 0) {
+            setLiveData(prev => ({
+              ...prev,
+              live: espnArr
+            }));
+            // Also save to local cache so it survives next mount
+            lsSet('live-cache-live', {
+              data: espnArr,
+              updatedAt: new Date().toISOString()
+            });
+          }
           // Smart interval: 60s if live, 5min if kickoff within 2h, else 1h
           const hasLive = espnArr.some(m => LIVE_STATUSES.includes(m.status));
           const nowMs = Date.now();
@@ -14046,9 +14055,9 @@ const Header = ({
   }
 }, /*#__PURE__*/React.createElement("div", {
   style: {
-    maxWidth: 1100,
+    maxWidth: 1420,
     margin: '0 auto',
-    padding: '12px 16px',
+    padding: '12px 24px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between'
@@ -14136,9 +14145,9 @@ const Header = ({
 })))), /*#__PURE__*/React.createElement("nav", {
   className: "scrollbar",
   style: {
-    maxWidth: 1100,
+    maxWidth: 1420,
     margin: '0 auto',
-    padding: '0 8px',
+    padding: '0 16px',
     display: 'flex',
     gap: 0,
     overflowX: 'auto',
@@ -14167,7 +14176,7 @@ const Header = ({
   I: BarChart
 }, {
   k: 'crowd',
-  l: 'FP',
+  l: 'Fan Picks',
   I: null,
   emoji: '👥',
   mobileHide: false
@@ -15172,14 +15181,13 @@ function App() {
       const kt = kickoffTimesRef.current;
       const sevenDaysAgo = Date.now() - 7 * 86400000;
       const matches = GROUP_MATCHES.filter(m => {
-        if (m.matchday < COMP_START_MATCHDAY || EARLY_MD2_IDS.has(m.id)) return false;
         const r = groupResults[m.id];
         return r && r.h !== '' && r.h != null;
       }).map(m => {
         const r = groupResults[m.id];
         const kickoffMs = kt instanceof Map ? kt.get(m.id) : null;
-        const kickoff = kickoffMs ? new Date(kickoffMs).toISOString() : null;
         if (kickoffMs && kickoffMs < sevenDaysAgo) return null;
+        const kickoff = new Date(kickoffMs || Date.now()).toISOString();
         return {
           home: m.home,
           away: m.away,
@@ -16858,7 +16866,7 @@ function App() {
     style: {
       maxWidth: 1420,
       margin: '0 auto',
-      padding: '24px 16px 80px'
+      padding: '24px 24px 80px'
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "main-shell"
