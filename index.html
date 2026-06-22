@@ -14458,10 +14458,30 @@ function KickoffCountdownOverlay({
 
 // ── PREDICTION SPOTLIGHT PANEL (persistent aside, like SupportWall) ──
 const SpotlightPanel = React.memo(({
-  spotlights,
-  hasTodayMatches
+  spotlights
 }) => {
-  if (!hasTodayMatches || !spotlights || spotlights.length === 0) return null;
+  if (!spotlights || spotlights.length === 0) return null;
+  // Group by dateKey (YYYY-MM-DD), most recent first
+  const byDate = {};
+  spotlights.forEach(s => {
+    const dk = s.dateKey || 'unknown';
+    if (!byDate[dk]) byDate[dk] = [];
+    byDate[dk].push(s);
+  });
+  const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+  const localToday = new Date();
+  const localYest = new Date(localToday);
+  localYest.setDate(localYest.getDate() - 1);
+  const fmt = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const todayKey = fmt(localToday);
+  const yesterdayKey = fmt(localYest);
+  const dayLabel = dk => {
+    if (dk === 'unknown') return 'Matches';
+    if (dk === todayKey) return "Today's Matches";
+    if (dk === yesterdayKey) return "Yesterday";
+    const [y, mo, d] = dk.split('-');
+    return `${d} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(mo) - 1]}`;
+  };
   return /*#__PURE__*/React.createElement("aside", {
     className: "card spotlight-panel",
     style: {
@@ -14475,7 +14495,7 @@ const SpotlightPanel = React.memo(({
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "micro-caps"
-  }, "Today's Matches"), /*#__PURE__*/React.createElement("div", {
+  }, "Last 3 Days"), /*#__PURE__*/React.createElement("div", {
     className: "display",
     style: {
       fontSize: 18,
@@ -14491,10 +14511,26 @@ const SpotlightPanel = React.memo(({
   }, "Who called it right")), /*#__PURE__*/React.createElement("div", {
     className: "scrollbar",
     style: {
-      maxHeight: 480,
+      flex: 1,
       overflowY: 'auto'
     }
-  }, spotlights.map((s, i) => /*#__PURE__*/React.createElement("div", {
+  }, sortedDates.map(dk => /*#__PURE__*/React.createElement("div", {
+    key: dk
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '6px 14px',
+      background: 'var(--cream2)',
+      borderBottom: '1px solid var(--line-soft)',
+      fontSize: 9,
+      fontWeight: 700,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: 'var(--ink-soft)',
+      position: 'sticky',
+      top: 0,
+      zIndex: 1
+    }
+  }, dayLabel(dk)), byDate[dk].map((s, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
       padding: '10px 14px',
@@ -14505,7 +14541,7 @@ const SpotlightPanel = React.memo(({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 8
+      marginBottom: 6
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -14516,7 +14552,7 @@ const SpotlightPanel = React.memo(({
   }, s.home, " ", /*#__PURE__*/React.createElement("span", {
     style: {
       fontFamily: 'monospace',
-      color: s.isFT ? 'var(--forest)' : 'var(--amber)',
+      color: 'var(--forest)',
       fontWeight: 800
     }
   }, s.score), " ", s.away), /*#__PURE__*/React.createElement("span", {
@@ -14527,12 +14563,12 @@ const SpotlightPanel = React.memo(({
       textTransform: 'uppercase',
       padding: '2px 6px',
       borderRadius: 3,
-      background: s.isFT ? 'rgba(27,94,63,.12)' : 'rgba(214,137,42,.12)',
-      color: s.isFT ? 'var(--forest)' : 'var(--amber)'
+      background: 'rgba(27,94,63,.12)',
+      color: 'var(--forest)'
     }
-  }, s.isFT ? 'FT' : 'LIVE')), s.exact.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "FT")), s.exact.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
-      marginBottom: 5
+      marginBottom: 4
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -14550,7 +14586,7 @@ const SpotlightPanel = React.memo(({
     }
   }, s.exact.join(', '))), s.resultRight.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
-      marginBottom: 5
+      marginBottom: 4
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -14565,13 +14601,17 @@ const SpotlightPanel = React.memo(({
       fontSize: 11,
       color: 'var(--ink)'
     }
-  }, s.resultRight.join(', '))), s.exact.length === 0 && s.resultRight.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }, s.resultRight.join(', '))), s.exact.length === 0 && s.resultRight.length === 0 && s.total > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)',
       fontStyle: 'italic'
     }
-  }, "Nobody got the result"), s.jokers.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+  }, "Nobody got the result"), s.jokers.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 2
+    }
+  }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 9,
       fontWeight: 700,
@@ -14584,7 +14624,7 @@ const SpotlightPanel = React.memo(({
       fontSize: 11,
       color: 'var(--ink)'
     }
-  }, s.jokers.map(j => `${j.name} (${j.mult}×)`).join(', ')))))));
+  }, s.jokers.map(j => `${j.name} (${j.mult}×)`).join(', ')))))))));
 });
 
 // ── FIREWORKS OVERLAY ─────────────────────────────────────────────
@@ -14888,7 +14928,7 @@ function App() {
   const [winnerNotif, setWinnerNotif] = useState(null);
   const [balloonNotif, setBalloonNotif] = useState(null);
   const [goalNotif, setGoalNotif] = useState(null);
-  const [todaySpotlights, setTodaySpotlights] = useState([]);
+  const computedSpotlightsRef = useRef([]);
   const [kickoffCountdown, setKickoffCountdown] = useState(null); // {matchLabel,secsLeft} for last-15s overlay
   const kickoffShownRef = useRef(new Set()); // track which match IDs have already shown overlay
   const lastEspnSnapshotRef = useRef(0); // ts of last fresh espn-cache push received via onSnapshot
@@ -15030,7 +15070,7 @@ function App() {
       const DONE_RE = /^(ft|aet|pen|finished|completed|full.?time)$/i;
       const isFT = DONE_RE.test(m.status || '');
       if (old && prev.size > 0) {
-        const scored = hs > old.hs || as_ > old.as_ || isFT;
+        const scored = hs > old.hs || as_ > old.as_;
         if (scored) {
           if (hs > old.hs) setGoalNotif({
             team: h,
@@ -15041,71 +15081,6 @@ function App() {
             flag: TEAM_FLAGS[a] || '⚽',
             score: `${hs}–${as_}`
           });
-          // Compute prediction spotlight
-          const gm = GROUP_MATCHES.find(x => x.home === h && x.away === a || x.home === a && x.away === h);
-          if (gm) {
-            const swap = gm.home === a;
-            const rH = swap ? as_ : hs,
-              rA = swap ? hs : as_;
-            const aRes = rH > rA ? 'H' : rA > rH ? 'A' : 'D';
-            const exact = [],
-              resultRight = [],
-              jokers = [];
-            Object.entries(allPredictions).forEach(([name, preds]) => {
-              const pred = preds.group?.[gm.id];
-              if (!pred || pred.h === '' || pred.h == null) return;
-              const pH = parseInt(pred.h),
-                pA = parseInt(pred.a);
-              if (isNaN(pH) || isNaN(pA)) return;
-              const pRes = pH > pA ? 'H' : pA > pH ? 'A' : 'D';
-              if (pH === rH && pA === rA) exact.push(name);else if (pRes === aRes) resultRight.push(name);
-              // Check joker
-              const jh = preds.jokerHistory || [];
-              const kt = kickoffTimesRef.current;
-              const kickoffMs = kt instanceof Map ? kt.get(gm.id) : null;
-              const cutoffMs = kickoffMs || MATCHDAY_CUTOFFS[gm.matchday];
-              const fallback = preds.joker || {};
-              const relevant = jh.filter(e => e.setAt <= cutoffMs);
-              const ej = relevant.length ? relevant[relevant.length - 1] : fallback;
-              const mult = getJokerMultiplier(gm, ej.team, ej.group);
-              if (mult > 1) jokers.push({
-                name,
-                mult
-              });
-            });
-            const spotlight = {
-              home: gm.home,
-              away: gm.away,
-              score: `${rH}–${rA}`,
-              exact,
-              resultRight,
-              jokers,
-              total: Object.keys(allPredictions).length,
-              isFT,
-              ts: Date.now()
-            };
-            const todayKey = new Date().toLocaleDateString('sv');
-            const todayStart = new Date(todayKey + 'T00:00:00').getTime();
-            // Merge into today's array — replace existing entry for same match, else append
-            setTodaySpotlights(prev => {
-              const filtered = prev.filter(s => !(s.home === gm.home && s.away === gm.away));
-              return [...filtered, spotlight];
-            });
-            if (FB_ON) {
-              db.collection('wc26').doc('prediction-spotlight').get().then(snap => {
-                const stored = snap.exists ? JSON.parse(snap.data().value || '{}') : {};
-                // Only keep today's entries with ts >= todayStart
-                const todayArr = (stored[todayKey] || []).filter(s => s.ts && s.ts >= todayStart && !(s.home === gm.home && s.away === gm.away));
-                todayArr.push(spotlight);
-                stored[todayKey] = todayArr;
-                const keys = Object.keys(stored).sort();
-                if (keys.length > 3) delete stored[keys[0]];
-                db.collection('wc26').doc('prediction-spotlight').set({
-                  value: JSON.stringify(stored)
-                }).catch(() => {});
-              }).catch(() => {});
-            }
-          }
         }
       }
       prev.set(key, {
@@ -16646,23 +16621,6 @@ function App() {
     }, () => {});
     return () => unsub();
   }, [currentUser]);
-
-  // ── PREDICTION SPOTLIGHT LISTENER: receive spotlight pushed by goal-detecting client ──
-  const spotlightSessionStart = useRef(Date.now());
-  useEffect(() => {
-    if (!FB_ON) return;
-    const unsub = db.collection('wc26').doc('prediction-spotlight').onSnapshot(snap => {
-      try {
-        if (!snap.exists) return;
-        const stored = JSON.parse(snap.data().value || '{}');
-        const todayKey = new Date().toLocaleDateString('sv'); // "YYYY-MM-DD" local
-        const todayStart = new Date(todayKey + 'T00:00:00').getTime();
-        const todayArr = (stored[todayKey] || []).filter(s => s.ts && s.ts >= todayStart);
-        setTodaySpotlights(todayArr);
-      } catch (_e) {}
-    }, () => {});
-    return () => unsub();
-  }, []);
   const handleLogout = useCallback(async () => {
     try {
       sessionStorage.removeItem('wc26_cu');
@@ -16704,6 +16662,71 @@ function App() {
     setAdminPws(newPws);
     await storage.setJSON('admin-pws', newPws, true);
   }, []);
+
+  // ── COMPUTED SPOTLIGHT (before early returns — hook rules) ─────
+  // Derived from results + allPredictions, last 3 days. Always computed,
+  // stored in a ref so early-return renders keep the last good value.
+  {
+    const cutoff = Date.now() - 3 * 86400000;
+    const allPreds = {
+      ...allPredictions,
+      ...(currentUser && currentUser !== '__guest__' ? {
+        [currentUser]: predictions
+      } : {})
+    };
+    const spots = GROUP_MATCHES.filter(m => {
+      const r = results.group?.[m.id];
+      if (!r || r.h === '' || r.h == null) return false;
+      const koMs = kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : null;
+      if (koMs) return koMs >= cutoff;
+      return true;
+    }).map(m => {
+      const r = results.group[m.id];
+      const rH = parseInt(r.h),
+        rA = parseInt(r.a);
+      const aRes = rH > rA ? 'H' : rA > rH ? 'A' : 'D';
+      const exact = [],
+        resultRight = [],
+        jokers = [];
+      Object.entries(allPreds).forEach(([name, preds]) => {
+        const pred = preds.group?.[m.id];
+        if (!pred || pred.h === '' || pred.h == null) return;
+        const pH = parseInt(pred.h),
+          pA = parseInt(pred.a);
+        if (isNaN(pH) || isNaN(pA)) return;
+        const pRes = pH > pA ? 'H' : pA > pH ? 'A' : 'D';
+        if (pH === rH && pA === rA) exact.push(name);else if (pRes === aRes) resultRight.push(name);
+        const jh = preds.jokerHistory || [];
+        const koMs = kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : null;
+        const cutoffMs = koMs || MATCHDAY_CUTOFFS[m.matchday];
+        const fallback = preds.joker || {};
+        const relevant = jh.filter(e => e.setAt <= cutoffMs);
+        const ej = relevant.length ? relevant[relevant.length - 1] : fallback;
+        const mult = getJokerMultiplier(m, ej.team, ej.group);
+        if (mult > 1) jokers.push({
+          name,
+          mult
+        });
+      });
+      const koMs = kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : null;
+      const totalPreds = Object.values(allPreds).filter(p => p.group?.[m.id]?.h != null && p.group[m.id].h !== '').length;
+      return {
+        home: m.home,
+        away: m.away,
+        score: `${rH}–${rA}`,
+        exact,
+        resultRight,
+        jokers,
+        total: totalPreds,
+        isFT: true,
+        ts: koMs || 0,
+        matchday: m.matchday,
+        dateKey: koMs ? new Date(koMs).toLocaleDateString('sv') : null
+      };
+    }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    if (spots.length > 0) computedSpotlightsRef.current = spots;
+  }
+  const computedSpotlights = computedSpotlightsRef.current;
   if (loading) return /*#__PURE__*/React.createElement("div", {
     className: "app",
     style: {
@@ -17001,16 +17024,8 @@ function App() {
     currentSupportTeam: currentSupportTeam,
     onToggle: onToggleSupport
   }), (() => {
-    const todayStr = new Date().toLocaleDateString('sv');
-    const todayMatchIds = new Set(GROUP_MATCHES.filter(m => {
-      const kt = kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : null;
-      if (kt) return new Date(kt).toLocaleDateString('sv') === todayStr;
-      return false;
-    }).map(m => m.id));
-    const hasTodayMatches = todayMatchIds.size > 0 || todaySpotlights.length > 0 || mergedLiveMatches.length > 0;
     return view !== 'admin' && /*#__PURE__*/React.createElement(SpotlightPanel, {
-      spotlights: todaySpotlights,
-      hasTodayMatches: hasTodayMatches
+      spotlights: computedSpotlights
     });
   })())), /*#__PURE__*/React.createElement("footer", {
     style: {
