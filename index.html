@@ -1112,7 +1112,7 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
       breakdown
     } = scoreMatch(pred, actual, m.home, m.away, true);
     // Per-match joker cutoff: use this match's kickoff if available, else fall back to matchday cutoff
-    const matchKickoffMs = kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : kickoffTimes?.[m.id];
+    const matchKickoffMs = (kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : kickoffTimes?.[m.id]) || (actual?.kickoff ? new Date(actual.kickoff).getTime() : null);
     const jokerCutoffMs = matchKickoffMs || MATCHDAY_CUTOFFS[m.matchday];
     const ej = getJokerForTimestamp(jokerHistory, jokerCutoffMs, joker);
     const mult = getJokerMultiplier(m, ej.team, ej.group);
@@ -2012,8 +2012,13 @@ const GroupCard = ({
   const isJG = jokerGroup === groupKey,
     jTIG = jokerTeam && teams.includes(jokerTeam);
   // Returns the effective joker for a specific match, accounting for historical changes
+  // Uses per-match kickoff time (same logic as computeUserScore) so jokers set after
+  // the first match of a matchday are still credited for later matches that day.
   const getMatchMult = m => {
-    const ej = getJokerForMatchday(jokerHistory, m.matchday, {
+    const actual = actualResults?.[m.id];
+    const matchKickoffMs = (kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : kickoffTimes?.[m.id]) || (actual?.kickoff ? new Date(actual.kickoff).getTime() : null);
+    const cutoffMs = matchKickoffMs || MATCHDAY_CUTOFFS[m.matchday];
+    const ej = getJokerForTimestamp(jokerHistory, cutoffMs, {
       team: jokerTeam,
       group: jokerGroup
     });
@@ -15527,10 +15532,13 @@ function App() {
                     const nh = String(swap ? fm.awayScore : fm.homeScore);
                     const na = String(swap ? fm.homeScore : fm.awayScore);
                     const ex = newGR[gm.id];
-                    if (!ex || ex.h !== nh || ex.a !== na) {
+                    if (!ex || ex.h !== nh || ex.a !== na || !ex.kickoff) {
                       newGR[gm.id] = {
                         h: nh,
-                        a: na
+                        a: na,
+                        ...(fm.kickoff ? {
+                          kickoff: fm.kickoff
+                        } : {})
                       };
                       changed++;
                     }
@@ -15771,10 +15779,13 @@ function App() {
                     const nh = String(swap ? fm.awayScore : fm.homeScore);
                     const na = String(swap ? fm.homeScore : fm.awayScore);
                     const ex = newGR[gm.id];
-                    if (!ex || ex.h !== nh || ex.a !== na) {
+                    if (!ex || ex.h !== nh || ex.a !== na || !ex.kickoff) {
                       newGR[gm.id] = {
                         h: nh,
-                        a: na
+                        a: na,
+                        ...(fm.kickoff ? {
+                          kickoff: fm.kickoff
+                        } : {})
                       };
                       changed++;
                     }
