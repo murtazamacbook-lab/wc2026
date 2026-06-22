@@ -16678,8 +16678,8 @@ function App() {
       const r = results.group?.[m.id];
       if (!r || r.h === '' || r.h == null) return false;
       const koMs = kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : null;
-      if (koMs) return koMs >= cutoff;
-      return true;
+      if (!koMs) return false; // no kickoff time — can't verify recency, exclude
+      return koMs >= cutoff;
     }).map(m => {
       const r = results.group[m.id];
       const rH = parseInt(r.h),
@@ -16724,7 +16724,7 @@ function App() {
         dateKey: koMs ? new Date(koMs).toLocaleDateString('sv') : null
       };
     }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    if (spots.length > 0) computedSpotlightsRef.current = spots;
+    computedSpotlightsRef.current = spots; // always update, even if empty
   }
   const computedSpotlights = computedSpotlightsRef.current;
   if (loading) return /*#__PURE__*/React.createElement("div", {
