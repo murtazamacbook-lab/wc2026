@@ -15779,13 +15779,20 @@ function App() {
                     const nh = String(swap ? fm.awayScore : fm.homeScore);
                     const na = String(swap ? fm.homeScore : fm.awayScore);
                     const ex = newGR[gm.id];
-                    if (!ex || ex.h !== nh || ex.a !== na || !ex.kickoff) {
+                    const hasResult = ex && ex.h !== '' && ex.h != null && ex.a !== '' && ex.a != null;
+                    if (!hasResult) {
                       newGR[gm.id] = {
                         h: nh,
                         a: na,
                         ...(fm.kickoff ? {
                           kickoff: fm.kickoff
                         } : {})
+                      };
+                      changed++;
+                    } else if (!ex.kickoff && fm.kickoff) {
+                      newGR[gm.id] = {
+                        ...ex,
+                        kickoff: fm.kickoff
                       };
                       changed++;
                     }
@@ -15796,12 +15803,13 @@ function App() {
                     return s && s.home && s.away && (s.home === fm.home && s.away === fm.away || s.home === fm.away && s.away === fm.home);
                   });
                   if (!koId) return;
-                  const swap = bracket[koId].home === fm.away;
-                  const nh = String(swap ? fm.awayScore : fm.homeScore);
-                  const na = String(swap ? fm.homeScore : fm.awayScore);
-                  const pkWinner = fm.status === 'PEN' ? swap ? fm.away : fm.home : undefined;
-                  const ex = newKO[koId];
-                  if (!ex || ex.h !== nh || ex.a !== na || ex.pkWinner !== pkWinner) {
+                  const exKO = newKO[koId];
+                  const hasKOResult = exKO && exKO.h !== '' && exKO.h != null && exKO.a !== '' && exKO.a != null;
+                  if (!hasKOResult) {
+                    const swap = bracket[koId].home === fm.away;
+                    const nh = String(swap ? fm.awayScore : fm.homeScore);
+                    const na = String(swap ? fm.homeScore : fm.awayScore);
+                    const pkWinner = fm.status === 'PEN' ? swap ? fm.away : fm.home : undefined;
                     newKO[koId] = {
                       h: nh,
                       a: na,
@@ -16838,6 +16846,7 @@ function App() {
   const phase = config.phase || (config.locked ? 'complete' : 'group');
   const groupLocked = phase === 'ko' || phase === 'complete';
   const koLocked = phase === 'group' || phase === 'complete';
+  const bonusLocked = phase === 'complete'; // Bonus Picks open in all phases except complete
   const locked = phase === 'complete'; // used for login screen + hard-lock banner
   const isGuest = currentUser === '__guest__';
 
@@ -16996,7 +17005,7 @@ function App() {
     predictions: predictions,
     onSave: savePredictions,
     results: results,
-    locked: koLocked
+    locked: bonusLocked
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'leaderboard'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
