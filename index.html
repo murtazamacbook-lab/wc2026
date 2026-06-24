@@ -82,6 +82,22 @@ const COMP_NAME = window.__COMP_NAME || 'WC26 Predictions Pool';
 const NS = window.__COMP_ID || 'wc26';
 const DEFAULT_SUPER_PW = window.__ADMIN_PW || 'admin2026';
 const DEFAULT_SUB_PW = window.__SUBADMIN_PW || 'subadmin2026';
+
+// ── PASSWORD HASHING (SHA-256 + site salt — one-way, never stored as plaintext) ──
+const PW_SALT = 'wc2026-' + (window.__COMP_ID || 'wc26');
+const hashPw = async pw => {
+  if (!pw) return '';
+  // SHA-256 is always available — detects plaintext (< 64 chars) vs hash (= 64 hex chars)
+  if (pw.length === 64 && /^[0-9a-f]{64}$/.test(pw)) return pw; // already hashed
+  try {
+    const enc = new TextEncoder();
+    const buf = await crypto.subtle.digest('SHA-256', enc.encode(pw + PW_SALT));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (_e) {
+    return pw; // crypto unavailable — graceful degradation
+  }
+};
+const isHash = s => typeof s === 'string' && s.length === 64 && /^[0-9a-f]{64}$/.test(s);
 const PERMANENT_SUPERADMIN = 'Murtaza'; // always gets superadmin — no password needed
 const FUNC_BASE = window.__FUNC_BASE || ''; // e.g. https://<project>.cloudfunctions.net
 
@@ -14054,6 +14070,7 @@ const LoginScreen = ({
   onLogin,
   onGuest,
   participants,
+  pendingUsers,
   locked,
   loginSuspended: loginSuspendedProp
 }) => {
@@ -14079,7 +14096,9 @@ const LoginScreen = ({
     return () => unsub();
   }, []);
   const trimmed = name.trim();
-  const isExisting = participants.includes(trimmed);
+  // Case-insensitive match — 'parth' and 'Parth' are the same person
+  const isExisting = participants.some(p => p.toLowerCase() === trimmed.toLowerCase());
+  const canonicalName = isExisting ? participants.find(p => p.toLowerCase() === trimmed.toLowerCase()) : trimmed;
   const inputStyle = {
     width: '100%',
     padding: '11px 14px',
@@ -14096,14 +14115,24 @@ const LoginScreen = ({
       setError('Please enter your name.');
       return;
     }
-    if (isExisting) setStep('pin');else setStep('register');
+    if (isExisting) {
+      setStep('pin');
+      return;
+    }
+    // Block if name is already pending approval by someone else
+    const pendingEntry = Object.values(pendingUsers || {}).find(p => p.name?.toLowerCase() === trimmed.toLowerCase() && p.status === 'pending');
+    if (pendingEntry) {
+      setError('That name is already awaiting approval. Choose a different name or contact the admin.');
+      return;
+    }
+    setStep('register');
   };
   const handleSubmit = () => {
     if (!trimmed) {
       setError('Please enter your name.');
       return;
     }
-    onLogin(trimmed, pin);
+    onLogin(canonicalName, pin);
   };
   return /*#__PURE__*/React.createElement("div", {
     className: "app",
@@ -14810,6 +14839,376 @@ const LiveMatchBanner = ({
 };
 
 // ── HEADER ───────────────────────────────────────────────────────
+const CreditsView = ({
+  credits,
+  adminRole,
+  onSave
+}) => {
+  const isSA = adminRole === 'superadmin';
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const EMPTY = {
+    title: 'WC2026 Prediction Pool',
+    tagline: 'Built from scratch. Shipped under pressure. Still running.',
+    entries: [{
+      role: 'Vision & Design',
+      name: 'The Commissioner',
+      detail: 'Conceived, directed and drove every feature'
+    }, {
+      role: 'Engineering',
+      name: 'The Commissioner + GitHub Copilot',
+      detail: 'Every line debated, tested and deployed together'
+    }, {
+      role: 'Joker Rules Architect',
+      name: 'The Commissioner',
+      detail: 'The most complained-about scoring mechanic — and it works'
+    }, {
+      role: 'QA & Bug Reports',
+      name: '80 ruthless players',
+      detail: 'Found every edge case imaginable'
+    }, {
+      role: 'AI Pair Programmer',
+      name: 'GitHub Copilot (Claude)',
+      detail: 'Wrote the code. Never once said "that\'s too much work"'
+    }, {
+      role: 'Hosting',
+      name: 'Vercel + Firebase',
+      detail: 'Zero downtime across 80 concurrent users'
+    }],
+    message: 'This site was built entirely in a VS Code chat window — no team, no budget, no runway. Just an idea, a lot of patience, and an AI that kept saying "Done. Build succeeded." Thanks for playing. May the best predictor win. 🏆'
+  };
+  const data = credits || EMPTY;
+  const startEdit = () => {
+    setDraft(JSON.parse(JSON.stringify(data)));
+    setEditing(true);
+  };
+  const addEntry = () => setDraft(d => ({
+    ...d,
+    entries: [...d.entries, {
+      role: '',
+      name: '',
+      detail: ''
+    }]
+  }));
+  const removeEntry = i => setDraft(d => ({
+    ...d,
+    entries: d.entries.filter((_, j) => j !== i)
+  }));
+  const setEntry = (i, k, v) => setDraft(d => ({
+    ...d,
+    entries: d.entries.map((e, j) => j === i ? {
+      ...e,
+      [k]: v
+    } : e)
+  }));
+  const saveCredits = async () => {
+    setSaving(true);
+    await onSave(draft);
+    setSaving(false);
+    setEditing(false);
+  };
+  if (editing && isSA) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 620
+    }
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    kicker: "Edit Mode",
+    title: "Credits"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 20,
+      marginTop: 14,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "micro-caps",
+    style: {
+      marginBottom: 4
+    }
+  }, "Site Title"), /*#__PURE__*/React.createElement("input", {
+    value: draft.title,
+    onChange: e => setDraft(d => ({
+      ...d,
+      title: e.target.value
+    })),
+    placeholder: "e.g. WC2026 Prediction Pool",
+    style: {
+      width: '100%',
+      padding: '8px 10px',
+      fontSize: 13,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit',
+      boxSizing: 'border-box'
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "micro-caps",
+    style: {
+      marginBottom: 4
+    }
+  }, "Tagline"), /*#__PURE__*/React.createElement("input", {
+    value: draft.tagline,
+    onChange: e => setDraft(d => ({
+      ...d,
+      tagline: e.target.value
+    })),
+    placeholder: "e.g. Built with love for the team",
+    style: {
+      width: '100%',
+      padding: '8px 10px',
+      fontSize: 13,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit',
+      boxSizing: 'border-box'
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "micro-caps",
+    style: {
+      marginBottom: 6
+    }
+  }, "People"), draft.entries.map((e, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr 1fr auto',
+      gap: 6,
+      marginBottom: 6,
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: e.role,
+    onChange: ev => setEntry(i, 'role', ev.target.value),
+    placeholder: "Role (e.g. Designer)",
+    style: {
+      padding: '7px 9px',
+      fontSize: 12,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit'
+    }
+  }), /*#__PURE__*/React.createElement("input", {
+    value: e.name,
+    onChange: ev => setEntry(i, 'name', ev.target.value),
+    placeholder: "Name",
+    style: {
+      padding: '7px 9px',
+      fontSize: 12,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit'
+    }
+  }), /*#__PURE__*/React.createElement("input", {
+    value: e.detail,
+    onChange: ev => setEntry(i, 'detail', ev.target.value),
+    placeholder: "Detail / note (optional)",
+    style: {
+      padding: '7px 9px',
+      fontSize: 12,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit'
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => removeEntry(i),
+    style: {
+      background: 'var(--burgundy)',
+      color: 'white',
+      border: 'none',
+      borderRadius: 4,
+      padding: '7px 10px',
+      cursor: 'pointer',
+      fontSize: 13
+    }
+  }, "x"))), /*#__PURE__*/React.createElement("button", {
+    onClick: addEntry,
+    style: {
+      padding: '6px 14px',
+      border: '1px dashed var(--line)',
+      borderRadius: 4,
+      background: 'transparent',
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      marginTop: 2
+    }
+  }, "+ Add Person")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "micro-caps",
+    style: {
+      marginBottom: 4
+    }
+  }, "Closing Message (optional)"), /*#__PURE__*/React.createElement("textarea", {
+    value: draft.message,
+    onChange: e => setDraft(d => ({
+      ...d,
+      message: e.target.value
+    })),
+    placeholder: "e.g. Thanks everyone for playing!",
+    rows: 3,
+    style: {
+      width: '100%',
+      padding: '8px 10px',
+      fontSize: 13,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit',
+      resize: 'vertical',
+      boxSizing: 'border-box'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: saveCredits,
+    disabled: saving,
+    style: {
+      padding: '8px 20px',
+      border: 'none',
+      borderRadius: 4,
+      background: 'var(--forest)',
+      color: 'white',
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, saving ? 'Saving...' : 'Save Credits'), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setEditing(false),
+    style: {
+      padding: '8px 16px',
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      background: 'transparent',
+      fontSize: 13,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, "Cancel"))));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 620
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    kicker: "About this site",
+    title: data.title || 'Credits'
+  }), isSA && /*#__PURE__*/React.createElement("button", {
+    onClick: startEdit,
+    style: {
+      marginTop: 18,
+      padding: '6px 14px',
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      background: 'white',
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      flexShrink: 0
+    }
+  }, "Edit")), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 28,
+      marginTop: 14,
+      background: 'linear-gradient(135deg,rgba(27,94,63,.04) 0%,var(--paper) 60%)',
+      borderColor: 'var(--forest)',
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 40,
+      marginBottom: 10
+    }
+  }, "🏆"), data.tagline && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 15,
+      color: 'var(--ink-soft)',
+      margin: '0 0 24px',
+      fontStyle: 'italic'
+    }
+  }, data.tagline), data.entries && data.entries.length > 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+      marginBottom: data.message ? 24 : 0
+    }
+  }, data.entries.map((e, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '12px 18px',
+      borderRadius: 8,
+      background: 'var(--cream2)',
+      border: '1px solid var(--line)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: 'var(--ink-soft)',
+      textTransform: 'uppercase',
+      letterSpacing: '.06em',
+      minWidth: 110,
+      textAlign: 'left'
+    }
+  }, e.role), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 800,
+      fontSize: 15,
+      color: 'var(--ink)',
+      flex: 1,
+      textAlign: 'center'
+    }
+  }, e.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)',
+      minWidth: 110,
+      textAlign: 'right',
+      fontStyle: 'italic'
+    }
+  }, e.detail)))) : !isSA && /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: 'var(--ink-soft)',
+      fontSize: 13,
+      fontStyle: 'italic'
+    }
+  }, "No credits have been added yet."), data.message && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: 'var(--ink-soft)',
+      margin: '0',
+      lineHeight: 1.7,
+      fontStyle: 'italic'
+    }
+  }, "\"", data.message, "\"")), isSA && (!data.entries || data.entries.length === 0) && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      padding: '10px 14px',
+      background: 'rgba(214,137,42,.07)',
+      border: '1px solid rgba(214,137,42,.3)',
+      borderRadius: 6,
+      fontSize: 12,
+      color: 'var(--amber)',
+      fontWeight: 600
+    }
+  }, "Superadmin: click Edit above to add credits — only you can edit this."));
+};
 const Header = ({
   user,
   onLogout,
@@ -14976,6 +15375,12 @@ const Header = ({
   k: 'admin',
   l: 'Admin',
   I: Settings2,
+  mobileHide: true
+}, {
+  k: 'credits',
+  l: 'Credits',
+  I: null,
+  emoji: '✨',
   mobileHide: true
 }].filter(t => !t.hide).map(({
   k,
@@ -15682,6 +16087,7 @@ function App() {
   const [config, setConfig] = useState({
     locked: false
   });
+  const [credits, setCredits] = useState(null);
   const [pendingUsers, setPendingUsers] = useState({}); // name → {name,pin,requestedAt,status,approvedBy?,rejectedBy?}
   const [pendingStatus, setPendingStatus] = useState(null); // null | 'waiting' | 'approved' | 'rejected'
   const [pendingName, setPendingName] = useState(null);
@@ -16997,10 +17403,13 @@ function App() {
         }
       } catch (_e) {}
     }
-    const existing = liveParticipants.includes(name);
+    // Case-insensitive match — resolve to the canonical stored name
+    const existingName = liveParticipants.find(p => p.toLowerCase() === name.toLowerCase());
+    const existing = !!existingName;
+    const resolvedName = existingName || name; // use stored capitalisation for existing users
     let finalParts = liveParticipants;
     if (existing) {
-      const storedPin = userPins[name];
+      const storedPin = userPins[resolvedName] || userPins[name];
       if (storedPin && storedPin !== pin) {
         alert('Incorrect PIN. Try again.');
         return;
@@ -17012,10 +17421,10 @@ function App() {
       }
       // ── Approval gate ──────────────────────────────────────────────
       if (config.requireApproval && FB_ON) {
-        // Check if already in pending
-        const existingEntry = pendingUsers[name];
+        // Check if already in pending (case-insensitive)
+        const existingEntry = Object.values(pendingUsers).find(p => p.name?.toLowerCase() === resolvedName.toLowerCase());
         if (existingEntry?.status === 'pending') {
-          setPendingName(name);
+          setPendingName(existingEntry.name);
           setPendingPin(pin);
           setPendingStatus('waiting');
           return;
@@ -17024,11 +17433,17 @@ function App() {
           alert('❌ Your access request was declined by the admin.');
           return;
         }
+        // Block if name clashes with an existing participant (case-insensitive, caught late)
+        const clashes = liveParticipants.some(p => p.toLowerCase() === resolvedName.toLowerCase());
+        if (clashes) {
+          alert('That name is already taken. Please use a different name.');
+          return;
+        }
         // Submit new pending request
         const updated = {
           ...pendingUsers,
-          [name]: {
-            name,
+          [resolvedName]: {
+            name: resolvedName,
             pin,
             requestedAt: Date.now(),
             status: 'pending'
@@ -17099,6 +17514,10 @@ function App() {
   // ── LIVE DATA LISTENERS (participants, pins, results, config) ──
   // These replace the 1-hour poll — all users see changes instantly
   const lastLocalWriteRef = useRef(0); // track our own writes so we don't loop
+  const adminLoginAttemptsRef = useRef({
+    count: 0,
+    lockedUntil: 0
+  }); // brute-force lockout
 
   useEffect(() => {
     if (!FB_ON) return;
@@ -17182,11 +17601,20 @@ function App() {
         }
       } catch (_e) {}
     }, () => {});
+    const unsubCredits = db.collection('wc26').doc('credits').onSnapshot(snap => {
+      try {
+        if (snap.exists) {
+          const v = JSON.parse(snap.data().value || 'null');
+          if (v) setCredits(v);
+        }
+      } catch (_e) {}
+    }, () => {});
     return () => {
       unsubParts();
       unsubPins();
       unsubResults();
       unsubConfig();
+      unsubCredits();
     };
   }, []);
 
@@ -17423,17 +17851,50 @@ function App() {
     }
   }, [isMobile, view]); // eslint-disable-line
 
-  const handleAdminLogin = useCallback(pw => {
+  const handleAdminLogin = useCallback(async pw => {
     if (!pw) return;
-    if (pw === adminPws.super) {
+    const now = Date.now();
+    const att = adminLoginAttemptsRef.current;
+    if (att.lockedUntil > now) {
+      const mins = Math.ceil((att.lockedUntil - now) / 60000);
+      alert(`Admin login locked. Try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
+      return;
+    }
+    const hashed = await hashPw(pw);
+    // Support both legacy plaintext and new hashes during migration
+    const superMatch = isHash(adminPws.super) ? hashed === adminPws.super : pw === adminPws.super;
+    const subMatch = isHash(adminPws.sub) ? hashed === adminPws.sub : pw === adminPws.sub;
+    if (superMatch) {
+      att.count = 0;
+      att.lockedUntil = 0;
+      // Auto-migrate plaintext → hash on successful login
+      if (!isHash(adminPws.super)) storage.setJSON('admin-pws', {
+        super: hashed,
+        sub: adminPws.sub
+      }, true).catch(() => {});
       setAdminAuthed(true);
       setAdminRole('superadmin');
       setView('admin');
-    } else if (pw === adminPws.sub) {
+    } else if (subMatch) {
+      att.count = 0;
+      att.lockedUntil = 0;
+      if (!isHash(adminPws.sub)) storage.setJSON('admin-pws', {
+        super: adminPws.super,
+        sub: hashed
+      }, true).catch(() => {});
       setAdminAuthed(true);
       setAdminRole('subadmin');
       setView('admin');
-    } else alert('Incorrect admin password.');
+    } else {
+      att.count++;
+      if (att.count >= 5) {
+        att.lockedUntil = now + 15 * 60 * 1000;
+        att.count = 0;
+        alert('Too many failed attempts. Admin login locked for 15 minutes.');
+      } else {
+        alert(`Incorrect password. ${5 - att.count} attempt${5 - att.count !== 1 ? 's' : ''} left before lockout.`);
+      }
+    }
   }, [adminPws]);
 
   // Auto-grant superadmin for the permanent superadmin user
@@ -17444,8 +17905,13 @@ function App() {
     }
   }, [currentUser]);
   const saveAdminPws = useCallback(async newPws => {
-    setAdminPws(newPws);
-    await storage.setJSON('admin-pws', newPws, true);
+    // Always hash before storing — plaintext never touches Firestore
+    const hashed = {
+      super: await hashPw(newPws.super || ''),
+      sub: await hashPw(newPws.sub || '')
+    };
+    setAdminPws(hashed);
+    await storage.setJSON('admin-pws', hashed, true);
   }, []);
 
   // ── COMPUTED SPOTLIGHT (before early returns — hook rules) ─────
@@ -17551,6 +18017,7 @@ function App() {
       setView('leaderboard');
     },
     participants: participants,
+    pendingUsers: pendingUsers || {},
     locked: config.phase === 'complete' || config.phase == null && !!config.locked,
     loginSuspended: !!config.loginSuspended
   });
@@ -17780,7 +18247,18 @@ function App() {
     active: view === 'rules'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Rules"
-  }, /*#__PURE__*/React.createElement(RulesView, null))), view === 'admin' && adminAuthed && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+  }, /*#__PURE__*/React.createElement(RulesView, null))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'credits'
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+    label: "Credits"
+  }, /*#__PURE__*/React.createElement(CreditsView, {
+    credits: credits,
+    adminRole: adminRole,
+    onSave: async d => {
+      await storage.setJSON('credits', d, true);
+      setCredits(d);
+    }
+  }))), view === 'admin' && adminAuthed && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Admin"
   }, /*#__PURE__*/React.createElement(AdminView, {
     results: results,
