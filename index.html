@@ -2492,6 +2492,16 @@ const PredictionsView = ({
       joker: newJoker,
       jokerHistory: newHist
     });
+    // Backup joker history to a separate Firestore doc so it survives any prediction overwrites
+    if (FB_ON && window.__db) {
+      window.__db.collection('wc26-joker-backup').doc(currentUser).set({
+        joker: newJoker,
+        jokerHistory: newHist,
+        updatedAt: Date.now()
+      }, {
+        merge: false
+      }).catch(() => {});
+    }
   };
   const submitJokerForToday = () => {
     if (!joker.team && !joker.group) {
@@ -8936,6 +8946,85 @@ const AdminView = ({
   const [clearPreview, setClearPreview] = useState(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState(null); // {name, pin, score}
   const [deleteStatus, setDeleteStatus] = useState(null); // {ok:bool, msg:string}
+  // ── Audit log ──
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const auditLog = async (action, target, details = {}) => {
+    if (!FB_ON) return;
+    try {
+      await db.collection('wc26-audit').add({
+        action,
+        target,
+        by: currentUser,
+        ts: Date.now(),
+        ...details
+      });
+    } catch (_e) {}
+  };
+  // ── Joker Restore ──
+  const [jokerRestoreUser, setJokerRestoreUser] = useState('');
+  const [jokerRestoreTeam, setJokerRestoreTeam] = useState('');
+  const [jokerRestoreGroup, setJokerRestoreGroup] = useState('');
+  const [jokerRestoreDate, setJokerRestoreDate] = useState('');
+  const [jokerRestoreTime, setJokerRestoreTime] = useState('');
+  const [jokerRestoreStatus, setJokerRestoreStatus] = useState(null);
+  // ── Joker Copy ──
+  const [jokerCopyFrom, setJokerCopyFrom] = useState('');
+  const [jokerCopyTo, setJokerCopyTo] = useState('');
+  const [jokerCopyStatus, setJokerCopyStatus] = useState(null);
+  const handleJokerCopy = async () => {
+    if (!jokerCopyFrom || !jokerCopyTo) {
+      setJokerCopyStatus({
+        ok: false,
+        msg: 'Select both users.'
+      });
+      return;
+    }
+    if (jokerCopyFrom === jokerCopyTo) {
+      setJokerCopyStatus({
+        ok: false,
+        msg: 'Source and target must differ.'
+      });
+      return;
+    }
+    const srcPreds = allPredictions[jokerCopyFrom];
+    if (!srcPreds?.jokerHistory?.length) {
+      setJokerCopyStatus({
+        ok: false,
+        msg: `${jokerCopyFrom} has no joker history to copy.`
+      });
+      return;
+    }
+    if (!window.confirm(`Copy ${jokerCopyFrom}'s joker history (${srcPreds.jokerHistory.length} entries) to ${jokerCopyTo}?\n\nThis will REPLACE ${jokerCopyTo}'s current joker and jokerHistory.`)) return;
+    const tgtPreds = allPredictions[jokerCopyTo] || {};
+    const updated = {
+      ...tgtPreds,
+      joker: {
+        ...srcPreds.joker
+      },
+      jokerHistory: [...srcPreds.jokerHistory]
+    };
+    try {
+      await storage.setJSON(`pred-${jokerCopyTo}`, updated, true);
+      setAllPredictions(prev => ({
+        ...prev,
+        [jokerCopyTo]: updated
+      }));
+      auditLog('JOKER_COPY', jokerCopyTo, {
+        copiedFrom: jokerCopyFrom,
+        entries: srcPreds.jokerHistory.length
+      });
+      setJokerCopyStatus({
+        ok: true,
+        msg: `✅ Copied ${srcPreds.jokerHistory.length} joker entries from "${jokerCopyFrom}" to "${jokerCopyTo}".`
+      });
+    } catch (e) {
+      setJokerCopyStatus({
+        ok: false,
+        msg: `❌ Failed: ${e.message}`
+      });
+    }
+  };
   const handleRecoverApproved = async () => {
     if (!FB_ON) {
       setRecoverLog('Firebase not available.');
@@ -9458,6 +9547,9 @@ const AdminView = ({
         value: JSON.stringify(npins)
       }), db.collection('wc26').doc(`pred-${name}`).delete().catch(() => {}), cleanPending()]);
       console.log('[DELETE] Firestore writes done ✅');
+      auditLog('DELETE_USER', name, {
+        score: scores.find(s => s.name === name)?.total || 0
+      });
       setDeleteStatus({
         ok: true,
         msg: `✅ "${name}" permanently deleted from Firestore.`
@@ -9541,27 +9633,103 @@ const AdminView = ({
   };
   const handleResetPredictions = async name => {
     const hasPreds = !!allPredictions[name];
-    const msg = hasPreds ? `Reset ALL predictions for "${name}"?\n\nThis will clear:\n• All group stage score predictions\n• All KO round predictions\n• Bonus picks\n• Joker assignment\n\nTheir score will become 0. This cannot be undone.` : `"${name}" has no predictions to reset.`;
+    const msg = hasPreds ? `Reset predictions for "${name}"?\n\nThis will clear:\n• All group stage score predictions\n• All KO round predictions\n• Bonus picks\n\nJoker history is PRESERVED.\nTheir score will become 0. This cannot be undone.` : `"${name}" has no predictions to reset.`;
     if (!hasPreds) {
       alert(msg);
       return;
     }
     if (!window.confirm(msg)) return;
+    // Preserve joker history so it can never be accidentally wiped by a reset
+    const existing = allPredictions[name] || {};
     const empty = {
       group: {},
       ko: {},
       bonus: {},
-      joker: {},
-      jokerHistory: [],
-      jokerLockedDate: null
+      joker: existing.joker || {},
+      jokerHistory: existing.jokerHistory || [],
+      jokerLockedDate: existing.jokerLockedDate || null
     };
     await storage.setJSON(`pred-${name}`, empty, true);
+    auditLog('RESET_PICKS', name, {
+      prevTotal: scores.find(s => s.name === name)?.total || 0
+    });
     const na = {
       ...allPredictions,
       [name]: empty
     };
     setAllPredictions(na);
-    alert(`✅ Predictions reset for "${name}". Their score is now 0.`);
+    alert(`✅ Predictions reset for "${name}". Score is now 0. Joker history preserved.`);
+  };
+  const handleJokerRestore = async () => {
+    if (!jokerRestoreUser) {
+      setJokerRestoreStatus({
+        ok: false,
+        msg: 'Select a user.'
+      });
+      return;
+    }
+    if (!jokerRestoreDate || !jokerRestoreTime) {
+      setJokerRestoreStatus({
+        ok: false,
+        msg: 'Enter date and time.'
+      });
+      return;
+    }
+    if (!jokerRestoreTeam && !jokerRestoreGroup) {
+      setJokerRestoreStatus({
+        ok: false,
+        msg: 'Enter at least a team or group.'
+      });
+      return;
+    }
+    const tsMs = new Date(`${jokerRestoreDate}T${jokerRestoreTime}:00`).getTime();
+    if (isNaN(tsMs)) {
+      setJokerRestoreStatus({
+        ok: false,
+        msg: 'Invalid date/time.'
+      });
+      return;
+    }
+    const preds = allPredictions[jokerRestoreUser] || {};
+    const existingHist = preds.jokerHistory || [];
+    const newEntry = {
+      team: jokerRestoreTeam || null,
+      group: jokerRestoreGroup || null,
+      setAt: tsMs
+    };
+    const newHist = [...existingHist, newEntry].sort((a, b) => a.setAt - b.setAt);
+    const newJoker = {
+      team: newHist[newHist.length - 1].team,
+      group: newHist[newHist.length - 1].group
+    };
+    const updated = {
+      ...preds,
+      joker: newJoker,
+      jokerHistory: newHist
+    };
+    try {
+      await storage.setJSON(`pred-${jokerRestoreUser}`, updated, true);
+      setAllPredictions(prev => ({
+        ...prev,
+        [jokerRestoreUser]: updated
+      }));
+      auditLog('JOKER_RESTORE', jokerRestoreUser, {
+        team: jokerRestoreTeam || null,
+        group: jokerRestoreGroup || null,
+        setAt: tsMs
+      });
+      setJokerRestoreStatus({
+        ok: true,
+        msg: `✅ Joker entry added for "${jokerRestoreUser}" at ${jokerRestoreDate} ${jokerRestoreTime}.`
+      });
+      setJokerRestoreTeam('');
+      setJokerRestoreGroup('');
+    } catch (e) {
+      setJokerRestoreStatus({
+        ok: false,
+        msg: `❌ Failed: ${e.message}`
+      });
+    }
   };
   const scores = useMemo(() => participants.map(p => {
     const s = computeUserScore(allPredictions[p] || {}, results.group || {}, results.ko || {}, results.bonus || {}, kickoffTimes);
@@ -9806,7 +9974,7 @@ const AdminView = ({
   }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['jokers', '🃏 Joker Picks', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.values(onlineUsers).filter(v => {
     const ts = typeof v === 'object' ? v.ts : v;
     return ts && Date.now() - ts < 3 * 60 * 1000;
-  }).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+  }).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true], ['audit', '📋 Audit Log', isSuperAdmin]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
     key: k,
     className: "tab-btn",
     style: {
@@ -12495,7 +12663,432 @@ const AdminView = ({
         minute: '2-digit'
       })));
     })()));
-  }))), section === 'online' && /*#__PURE__*/React.createElement(OnlinePanel, {
+  }))), section === 'users' && isSuperAdmin && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 16,
+      marginTop: 12,
+      borderLeft: '3px solid var(--amber)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 14,
+      color: 'var(--amber)',
+      marginBottom: 10
+    }
+  }, "🃏 Restore Joker Entry — Superadmin Only"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      marginBottom: 12
+    }
+  }, "Use this to add a joker history entry for a user (e.g. to recover a lost joker pick). The entry will be inserted at the timestamp you specify. All existing history is preserved."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))',
+      gap: 8,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--ink-soft)',
+      marginBottom: 3
+    }
+  }, "User *"), /*#__PURE__*/React.createElement("select", {
+    value: jokerRestoreUser,
+    onChange: e => setJokerRestoreUser(e.target.value),
+    style: {
+      width: '100%',
+      padding: '6px 8px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      background: 'white'
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— select user —"), participants.sort().map(p => /*#__PURE__*/React.createElement("option", {
+    key: p,
+    value: p
+  }, p)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--ink-soft)',
+      marginBottom: 3
+    }
+  }, "Team (optional)"), /*#__PURE__*/React.createElement("input", {
+    value: jokerRestoreTeam,
+    onChange: e => setJokerRestoreTeam(e.target.value),
+    placeholder: "e.g. Spain",
+    style: {
+      width: '100%',
+      padding: '6px 8px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      boxSizing: 'border-box'
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--ink-soft)',
+      marginBottom: 3
+    }
+  }, "Group (optional)"), /*#__PURE__*/React.createElement("select", {
+    value: jokerRestoreGroup,
+    onChange: e => setJokerRestoreGroup(e.target.value),
+    style: {
+      width: '100%',
+      padding: '6px 8px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      background: 'white'
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— none —"), ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(g => /*#__PURE__*/React.createElement("option", {
+    key: g,
+    value: g
+  }, "Group ", g)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--ink-soft)',
+      marginBottom: 3
+    }
+  }, "Date * (UTC)"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: jokerRestoreDate,
+    onChange: e => setJokerRestoreDate(e.target.value),
+    min: "2026-06-01",
+    max: "2026-07-19",
+    style: {
+      width: '100%',
+      padding: '6px 8px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      boxSizing: 'border-box'
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--ink-soft)',
+      marginBottom: 3
+    }
+  }, "Time * (UTC, HH:MM)"), /*#__PURE__*/React.createElement("input", {
+    type: "time",
+    value: jokerRestoreTime,
+    onChange: e => setJokerRestoreTime(e.target.value),
+    style: {
+      width: '100%',
+      padding: '6px 8px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      boxSizing: 'border-box'
+    }
+  }))), jokerRestoreUser && allPredictions[jokerRestoreUser]?.jokerHistory && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 8,
+      padding: '8px 10px',
+      background: 'rgba(0,0,0,.04)',
+      borderRadius: 4,
+      fontSize: 11,
+      color: 'var(--ink-soft)'
+    }
+  }, /*#__PURE__*/React.createElement("strong", null, "Current history for ", jokerRestoreUser, ":"), allPredictions[jokerRestoreUser].jokerHistory.map((e, i) => /*#__PURE__*/React.createElement("span", {
+    key: i,
+    style: {
+      marginLeft: 6
+    }
+  }, new Date(e.setAt).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }), " → ", e.team || '', e.team && e.group ? ' + ' : '', e.group ? `Grp ${e.group}` : ''))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      alignItems: 'center',
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: handleJokerRestore,
+    style: {
+      padding: '7px 16px',
+      borderRadius: 4,
+      border: 'none',
+      background: 'var(--amber)',
+      color: 'white',
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, "Add Joker Entry"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setJokerRestoreUser('');
+      setJokerRestoreTeam('');
+      setJokerRestoreGroup('');
+      setJokerRestoreDate('');
+      setJokerRestoreTime('');
+      setJokerRestoreStatus(null);
+    },
+    style: {
+      padding: '7px 14px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      background: 'transparent',
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, "Clear"), jokerRestoreStatus && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: jokerRestoreStatus.ok ? 'var(--forest)' : 'var(--burgundy)',
+      fontWeight: 600
+    }
+  }, jokerRestoreStatus.msg)), /*#__PURE__*/React.createElement("hr", {
+    style: {
+      border: 'none',
+      borderTop: '1px solid var(--line)',
+      margin: '14px 0'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13,
+      color: 'var(--ink)',
+      marginBottom: 8
+    }
+  }, "☁️ Restore from Automatic Backup"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      marginBottom: 10
+    }
+  }, "Each time a user saves their joker, a backup is written to ", /*#__PURE__*/React.createElement("code", null, "wc26-joker-backup"), ". Use this to recover if their predictions doc was corrupted or overwritten."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      alignItems: 'center',
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("select", {
+    value: jokerRestoreUser,
+    onChange: e => {
+      setJokerRestoreUser(e.target.value);
+      setJokerRestoreStatus(null);
+    },
+    style: {
+      padding: '6px 8px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      background: 'white'
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— select user —"), participants.sort().map(p => /*#__PURE__*/React.createElement("option", {
+    key: p,
+    value: p
+  }, p))), /*#__PURE__*/React.createElement("button", {
+    onClick: async () => {
+      if (!jokerRestoreUser) {
+        setJokerRestoreStatus({
+          ok: false,
+          msg: 'Select a user first.'
+        });
+        return;
+      }
+      try {
+        const snap = await db.collection('wc26-joker-backup').doc(jokerRestoreUser).get();
+        if (!snap.exists) {
+          setJokerRestoreStatus({
+            ok: false,
+            msg: `No backup found for "${jokerRestoreUser}".`
+          });
+          return;
+        }
+        const bk = snap.data();
+        if (!window.confirm(`Restore joker backup for "${jokerRestoreUser}"?\n\nBackup has ${(bk.jokerHistory || []).length} history entries.\nLast updated: ${bk.updatedAt ? new Date(bk.updatedAt).toLocaleString() : '-'}\n\nThis will REPLACE their current joker data.`)) return;
+        const preds = allPredictions[jokerRestoreUser] || {};
+        const updated = {
+          ...preds,
+          joker: bk.joker || {},
+          jokerHistory: bk.jokerHistory || []
+        };
+        await storage.setJSON(`pred-${jokerRestoreUser}`, updated, true);
+        setAllPredictions(prev => ({
+          ...prev,
+          [jokerRestoreUser]: updated
+        }));
+        auditLog('JOKER_BACKUP_RESTORE', jokerRestoreUser, {
+          entries: (bk.jokerHistory || []).length
+        });
+        setJokerRestoreStatus({
+          ok: true,
+          msg: `✅ Backup restored for "${jokerRestoreUser}" (${(bk.jokerHistory || []).length} entries).`
+        });
+      } catch (e) {
+        setJokerRestoreStatus({
+          ok: false,
+          msg: `❌ ${e.message}`
+        });
+      }
+    },
+    style: {
+      padding: '7px 14px',
+      borderRadius: 4,
+      border: 'none',
+      background: '#2980b9',
+      color: 'white',
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, "☁️ Restore from Backup"), jokerRestoreStatus && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: jokerRestoreStatus.ok ? 'var(--forest)' : 'var(--burgundy)',
+      fontWeight: 600
+    }
+  }, jokerRestoreStatus.msg)), /*#__PURE__*/React.createElement("hr", {
+    style: {
+      border: 'none',
+      borderTop: '1px solid var(--line)',
+      margin: '14px 0'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13,
+      color: 'var(--ink)',
+      marginBottom: 8
+    }
+  }, "📋 Copy Joker History from Another User"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      marginBottom: 10
+    }
+  }, "Copies the full ", /*#__PURE__*/React.createElement("code", null, "jokerHistory"), " and current joker pick from one user to another. Replaces the target user's existing joker data."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      alignItems: 'center',
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--ink-soft)',
+      marginBottom: 3
+    }
+  }, "Copy FROM"), /*#__PURE__*/React.createElement("select", {
+    value: jokerCopyFrom,
+    onChange: e => setJokerCopyFrom(e.target.value),
+    style: {
+      padding: '6px 8px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      background: 'white'
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— source —"), participants.sort().map(p => /*#__PURE__*/React.createElement("option", {
+    key: p,
+    value: p
+  }, p)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 18,
+      fontWeight: 700,
+      paddingTop: 16
+    }
+  }, "→"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--ink-soft)',
+      marginBottom: 3
+    }
+  }, "Copy TO"), /*#__PURE__*/React.createElement("select", {
+    value: jokerCopyTo,
+    onChange: e => setJokerCopyTo(e.target.value),
+    style: {
+      padding: '6px 8px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      background: 'white'
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— target —"), participants.sort().map(p => /*#__PURE__*/React.createElement("option", {
+    key: p,
+    value: p
+  }, p)))), /*#__PURE__*/React.createElement("button", {
+    onClick: handleJokerCopy,
+    style: {
+      padding: '7px 16px',
+      borderRadius: 4,
+      border: 'none',
+      background: 'var(--forest)',
+      color: 'white',
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      marginTop: 16
+    }
+  }, "Copy History"), jokerCopyStatus && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: jokerCopyStatus.ok ? 'var(--forest)' : 'var(--burgundy)',
+      fontWeight: 600,
+      marginTop: 16
+    }
+  }, jokerCopyStatus.msg)), jokerCopyFrom && allPredictions[jokerCopyFrom]?.jokerHistory && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8,
+      padding: '8px 10px',
+      background: 'rgba(0,0,0,.04)',
+      borderRadius: 4,
+      fontSize: 11,
+      color: 'var(--ink-soft)'
+    }
+  }, /*#__PURE__*/React.createElement("strong", null, jokerCopyFrom, "'s history (", allPredictions[jokerCopyFrom].jokerHistory.length, " entries):"), allPredictions[jokerCopyFrom].jokerHistory.map((e, i) => /*#__PURE__*/React.createElement("span", {
+    key: i,
+    style: {
+      marginLeft: 6
+    }
+  }, new Date(e.setAt).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }), " → ", e.team || '', e.team && e.group ? ' + ' : '', e.group ? `Grp ${e.group}` : '')))), section === 'online' && /*#__PURE__*/React.createElement(OnlinePanel, {
     onlineUsers: onlineUsers,
     currentUser: currentUser,
     adminRole: adminRole
@@ -13249,7 +13842,130 @@ const AdminView = ({
       lineHeight: 1.7,
       margin: '8px 0 2px 18px'
     }
-  }, a)))))));
+  }, a)))))), section === 'audit' && isSuperAdmin && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16,
+      maxWidth: 720
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 20,
+      marginBottom: 14,
+      background: 'linear-gradient(135deg,rgba(30,80,160,.04) 0%,var(--paper) 60%)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "display",
+    style: {
+      fontSize: 18,
+      fontWeight: 700,
+      margin: 0
+    }
+  }, "📋 Admin Audit Log"), /*#__PURE__*/React.createElement("button", {
+    onClick: async () => {
+      setAuditLoading(true);
+      try {
+        const snap = await db.collection('wc26-audit').orderBy('ts', 'desc').limit(100).get();
+        setAuditLogs(snap.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        })));
+      } catch (e) {
+        console.error(e);
+      }
+      setAuditLoading(false);
+    },
+    style: {
+      padding: '6px 14px',
+      borderRadius: 4,
+      border: '1px solid var(--line)',
+      background: 'white',
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, auditLoading ? 'Loading…' : '🔄 Refresh')), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: 'var(--ink-soft)',
+      margin: 0
+    }
+  }, "Last 100 admin actions — Reset Picks, Delete User, Add Joker Entry.")), auditLogs.length === 0 && !auditLoading && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: '32px 0',
+      color: 'var(--ink-soft)',
+      fontSize: 13
+    }
+  }, "No audit records yet. Click Refresh to load."), auditLogs.map(log => {
+    const d = new Date(log.ts);
+    const actionColors = {
+      RESET_PICKS: '#e67e22',
+      DELETE_USER: 'var(--burgundy)',
+      JOKER_RESTORE: 'var(--amber)',
+      ADD_USER: 'var(--forest)'
+    };
+    const col = actionColors[log.action] || 'var(--ink)';
+    return /*#__PURE__*/React.createElement("div", {
+      key: log.id,
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '120px 120px 1fr 1fr',
+        gap: 8,
+        alignItems: 'start',
+        padding: '10px 14px',
+        borderRadius: 6,
+        background: 'var(--paper)',
+        border: '1px solid var(--line)',
+        marginBottom: 6,
+        fontSize: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: 'var(--ink-soft)',
+        lineHeight: 1.4
+      }
+    }, /*#__PURE__*/React.createElement("div", null, d.toLocaleDateString([], {
+      day: '2-digit',
+      month: 'short'
+    })), /*#__PURE__*/React.createElement("div", null, d.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 800,
+        color: col,
+        wordBreak: 'break-word'
+      }
+    }, log.action), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700
+      }
+    }, log.target), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: 'var(--ink-soft)',
+        fontSize: 11
+      }
+    }, "by ", log.by)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: 'var(--ink-soft)',
+        wordBreak: 'break-word'
+      }
+    }, log.action === 'RESET_PICKS' && `Was ${log.prevTotal || 0} pts`, log.action === 'DELETE_USER' && `Score was ${log.score || 0} pts`, log.action === 'JOKER_RESTORE' && `${log.team || ''}${log.team && log.group ? ' + ' : ''}${log.group ? `Grp ${log.group}` : ''} @ ${new Date(log.setAt || 0).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`));
+  })));
 };
 // ── PENDING APPROVAL SCREEN ──────────────────────────────────────────────
 const PendingScreen = ({
