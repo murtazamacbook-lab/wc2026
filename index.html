@@ -14308,18 +14308,7 @@ const LoginScreen = ({
   useEffect(() => {
     setLoginSuspended(loginSuspendedProp);
   }, [loginSuspendedProp]);
-  useEffect(() => {
-    const db = window.__db;
-    if (!db) return;
-    const unsub = db.collection('wc26').doc('config').onSnapshot(snap => {
-      if (!snap.exists) return;
-      try {
-        const cfg = JSON.parse(snap.data().value || '{}');
-        setLoginSuspended(!!cfg.loginSuspended);
-      } catch (_e) {}
-    }, () => {});
-    return () => unsub();
-  }, []);
+  // loginSuspended propagates via loginSuspendedProp from parent's config listener — no duplicate needed
   const trimmed = name.trim();
   // Case-insensitive match — 'parth' and 'Parth' are the same person
   const isExisting = participants.some(p => p.toLowerCase() === trimmed.toLowerCase());
@@ -18161,9 +18150,10 @@ function App() {
     // Signal all other clients that this user's predictions changed
     if (FB_ON) db.collection('wc26').doc('predictions-meta').set({
       by: currentUser,
-      ts: Date.now()
+      ts: Date.now(),
+      d: toWrite
     }, {
-      merge: true
+      merge: false
     }).catch(() => {});
     setSaveStatus('saved');
     setTimeout(() => setSaveStatus(''), 2000);
@@ -18605,20 +18595,30 @@ function App() {
         if (!snap.exists) return;
         const {
           by,
-          ts
+          ts,
+          d
         } = snap.data() || {};
         if (!by || !ts || ts === lastMetaTs) return;
         lastMetaTs = ts;
         if (by === currentUser) return; // we already have our own data
-        // Fetch the updated participant's predictions from Firestore
+        // Use embedded prediction data if available — eliminates extra .get() read
+        if (d && typeof d === 'object') {
+          lsSet(`pred-${by}`, d);
+          setAllPredictions(prev => ({
+            ...prev,
+            [by]: d
+          }));
+          return;
+        }
+        // Fallback: fetch from Firestore for older format (no embedded data)
         fbTimeout(db.collection('wc26').doc(`pred-${by}`).get()).then(pSnap => {
           if (pSnap?.exists) {
             try {
-              const d = JSON.parse(pSnap.data().value || '{}');
-              lsSet(`pred-${by}`, d);
+              const data = JSON.parse(pSnap.data().value || '{}');
+              lsSet(`pred-${by}`, data);
               setAllPredictions(prev => ({
                 ...prev,
-                [by]: d
+                [by]: data
               }));
             } catch (_e) {}
           }
@@ -18735,7 +18735,7 @@ function App() {
       }).catch(() => {});
     };
     beat();
-    const t = setInterval(beat, 30000); // every 30s for fresher data
+    const t = setInterval(beat, 120000); // every 2 min — reduces writes ~75%
     // No null-write on cleanup — entries expire naturally via 3-min filter in the panel
     return () => {
       clearInterval(t);
@@ -19464,17 +19464,7 @@ const ChatWidget = ({
   useEffect(() => {
     setChatEnabled(chatEnabledProp);
   }, [chatEnabledProp]);
-  useEffect(() => {
-    if (!db) return;
-    const unsub = db.collection('wc26').doc('config').onSnapshot(snap => {
-      if (!snap.exists) return;
-      try {
-        const cfg = JSON.parse(snap.data().value || '{}');
-        setChatEnabled(cfg.chatEnabled !== false);
-      } catch (_e) {}
-    }, () => {});
-    return () => unsub();
-  }, [db]);
+  // chatEnabled propagates via chatEnabledProp from parent's config listener — no duplicate needed
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState('');
