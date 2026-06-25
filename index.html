@@ -18522,16 +18522,51 @@ function App() {
       sessionStorage.setItem('wc26_cu', name);
     } catch {}
     // For brand-new users: clear any stale prediction cache that may exist under this name
-    // from a previous device session — prevents another user's data polluting a fresh account.
     if (!existing) {
       lsSet(`pred-${name}`, null);
     }
-    const p = (await storage.getJSON(`pred-${name}`, true)) || {
+    // For existing users: always fetch canonical predictions from Firestore on login.
+    // This prevents stale localStorage data (e.g. from a shared/mobile device that cached
+    // another session) from being treated as the user's real predictions and pushed to Firestore.
+    let p = {
       group: {},
       ko: {},
       bonus: {},
       joker: {}
     };
+    if (existing && FB_ON) {
+      try {
+        const freshSnap = await fbTimeout(db.collection('wc26').doc(`pred-${resolvedName}`).get());
+        if (freshSnap?.exists) {
+          p = JSON.parse(freshSnap.data().value || '{}');
+          lsSet(`pred-${resolvedName}`, p); // overwrite any stale local cache with canonical data
+        } else {
+          // no Firestore doc yet — fall back to localStorage but only if it passes a basic sanity check
+          const cached = lsGet(`pred-${resolvedName}`);
+          p = cached || {
+            group: {},
+            ko: {},
+            bonus: {},
+            joker: {}
+          };
+        }
+      } catch (_e) {
+        // network error — fall back to localStorage
+        p = (await storage.getJSON(`pred-${resolvedName}`, true)) || {
+          group: {},
+          ko: {},
+          bonus: {},
+          joker: {}
+        };
+      }
+    } else if (!existing) {
+      p = (await storage.getJSON(`pred-${name}`, true)) || {
+        group: {},
+        ko: {},
+        bonus: {},
+        joker: {}
+      };
+    }
     setPredictions(p);
     setView('predictions');
     // Broadcast presence event to all other active users via Firestore
