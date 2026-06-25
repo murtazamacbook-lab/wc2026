@@ -13289,6 +13289,72 @@ const AdminView = ({
   }, config.requireApproval ? '✓ Approval required — new users wait in queue (Admin → Users)' : '○ Open registration — anyone with the link can join immediately')), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
+      padding: 20,
+      borderLeft: '3px solid var(--amber)'
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "display",
+    style: {
+      fontSize: 17,
+      fontWeight: 700,
+      margin: '0 0 4px'
+    }
+  }, "📣 Message of the Day"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      margin: '0 0 12px'
+    }
+  }, "Shown to all players as a dismissible banner. Leave blank to show auto-rotating daily tips instead."), /*#__PURE__*/React.createElement("textarea", {
+    value: config.motd || '',
+    onChange: e => setConfig({
+      ...config,
+      motd: e.target.value
+    }),
+    placeholder: "e.g. 🎉 MD3 starts today — last chance to set your joker! Good luck everyone!",
+    rows: 3,
+    style: {
+      width: '100%',
+      padding: '9px 12px',
+      fontSize: 13,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit',
+      resize: 'vertical',
+      boxSizing: 'border-box',
+      marginBottom: 8
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => saveConfig({
+      ...config,
+      motd: config.motd || ''
+    }),
+    className: "btn btn-green",
+    style: {
+      fontSize: 12
+    }
+  }, "📣 Publish Message"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => saveConfig({
+      ...config,
+      motd: ''
+    }),
+    style: {
+      padding: '7px 14px',
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      background: 'transparent',
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, "Clear (show tips)"))), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
       padding: 20
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -15213,6 +15279,69 @@ const CreditsView = ({
       fontWeight: 600
     }
   }, "Superadmin: click Edit above to add credits — only you can edit this."));
+};
+const DAILY_TIPS = ["⭐ Exact scores earn 3 pts — always worth a bold prediction!", "🃏 Joker tip: pick a match where you're most confident — it doubles or triples your points.", "🔥 You're in the top half already? One good matchday can change everything.", "💡 Check the Leaderboard — see who's breathing down your neck.", "🎯 Correct result = 1 pt, correct margin = 2 pts, exact score = 3 pts. Go big!", "🏆 The Bonus picks (Winner, Golden Boot) are worth 10 pts each — don't sleep on them.", "👀 Browse Picks tab — see what everyone else is predicting before you finalise.", "🧠 Upset pickers get rewarded — low-ranked teams can hand you a ton of points.", "⚡ Joker locked for today? Make sure you set tomorrow's before the first kickoff.", "🌍 86 players, one champion. Every point counts — even a 1-pt correct result matters.", "📊 Fan Picks shows you what the crowd predicted — great for spotting consensus vs contrarian plays.", "🎉 Having fun? Tell a friend — the bigger the pool, the more glory in winning it!", "⏰ Predictions lock at kickoff — don't forget to save before the match starts!", "🔄 Scores update automatically — no need to refresh, just keep the tab open.", "💪 Even if you're behind, the Knockout stage is worth loads of points. Never give up!"];
+const MotdBanner = ({
+  motd,
+  currentUser
+}) => {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const storageKey = `wc26_motd_dismissed_${todayKey}`;
+  const [visible, setVisible] = React.useState(() => {
+    try {
+      return !localStorage.getItem(storageKey);
+    } catch (_e) {
+      return true;
+    }
+  });
+  const dismiss = () => {
+    try {
+      localStorage.setItem(storageKey, '1');
+    } catch (_e) {}
+    setVisible(false);
+  };
+  if (!visible) return null;
+  // Auto tip: pick based on day-of-year so it rotates daily, same for everyone
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  const tip = motd && motd.trim() ? motd.trim() : DAILY_TIPS[dayOfYear % DAILY_TIPS.length];
+  const isAdmin = motd && motd.trim();
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: isAdmin ? 'linear-gradient(90deg,#1a3a5c,#1e5799)' : 'linear-gradient(90deg,#3d1a5c,#6b2fa0)',
+      color: 'white',
+      padding: '8px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      fontSize: 13,
+      position: 'relative'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 15,
+      flexShrink: 0
+    }
+  }, isAdmin ? '📣' : '💡'), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      lineHeight: 1.4
+    }
+  }, tip), /*#__PURE__*/React.createElement("button", {
+    onClick: dismiss,
+    title: "Dismiss for today",
+    style: {
+      background: 'rgba(255,255,255,.15)',
+      border: 'none',
+      borderRadius: 20,
+      color: 'white',
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: 'pointer',
+      padding: '2px 10px',
+      flexShrink: 0,
+      whiteSpace: 'nowrap'
+    }
+  }, "✕ Got it"));
 };
 const Header = ({
   user,
@@ -18242,6 +18371,9 @@ function App() {
     matches: mergedLiveMatches,
     loading: liveLoading,
     onTeamClick: handleBannerTeamClick
+  }), view !== 'admin' && /*#__PURE__*/React.createElement(MotdBanner, {
+    motd: config.motd,
+    currentUser: currentUser
   }), phase === 'ko' && view !== 'admin' && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'linear-gradient(90deg,#1a6b3c,#1e8449)',
