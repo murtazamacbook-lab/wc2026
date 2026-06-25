@@ -3309,7 +3309,8 @@ const BracketView = ({
     ids: [101, 102]
   }, {
     title: '3rd Place Play-off',
-    ids: [103]
+    ids: [103],
+    isThirdPlace: true
   }, {
     title: 'Final',
     ids: [104],
@@ -3382,7 +3383,8 @@ const BracketView = ({
   }, mode === 'list' ? rounds.map(({
     title,
     ids,
-    isFinal
+    isFinal,
+    isThirdPlace
   }) => {
     const ms = ids.map(id => bracket[id]).filter(m => m?.home || m?.away);
     if (!ms.length) return null;
