@@ -17097,8 +17097,61 @@ function App() {
       });
       console.groupEnd();
     };
+    window.debugScore = username => {
+      const {
+        allPredictions: _ap,
+        kickoffTimes: _kt,
+        results: _res
+      } = _debugRef.current;
+      if (!_ap) {
+        console.warn('App not fully loaded yet');
+        return;
+      }
+      const preds = _ap[username];
+      if (!preds) {
+        console.warn(`No predictions found for "${username}"`);
+        return;
+      }
+      const jh = preds.jokerHistory || [];
+      let total = 0;
+      console.group(`📊 Score breakdown for ${username}`);
+      console.log('%cMatch ID | Match | Pred | Result | Base | Mult | Pts | Excluded', 'font-weight:bold');
+      GROUP_MATCHES.forEach(m => {
+        const skipped = m.matchday < COMP_START_MATCHDAY || EARLY_MD2_IDS.has(m.id);
+        const actual = _res?.group?.[m.id];
+        const hasResult = actual && actual.h !== '' && actual.h != null && actual.a !== '' && actual.a != null;
+        if (!hasResult) {
+          console.log(`  ${m.id} (MD${m.matchday}) ${m.home} v ${m.away} | NO RESULT YET${skipped ? ' [EXCLUDED]' : ''}`);
+          return;
+        }
+        const pred = preds.group?.[m.id];
+        if (!pred || pred.h === '' || pred.h == null) {
+          console.log(`  ${m.id} (MD${m.matchday}) ${m.home} v ${m.away} | Result: ${actual.h}-${actual.a} | NO PREDICTION${skipped ? ' [EXCLUDED]' : ''}`);
+          return;
+        }
+        const {
+          total: base
+        } = scoreMatch(pred, actual, m.home, m.away, true);
+        const kickoffMs = _kt instanceof Map ? _kt.get(m.id) : null;
+        const cutoffMs = kickoffMs || MATCHDAY_CUTOFFS[m.matchday];
+        const relevant = jh.filter(e => e.setAt <= cutoffMs);
+        const ej = relevant.length ? relevant[relevant.length - 1] : {
+          team: null,
+          group: null
+        };
+        const mult = getJokerMultiplier(m, ej.team, ej.group);
+        const pts = skipped ? 0 : base * mult;
+        if (!skipped) total += pts;
+        console.log(`  ${m.id} (MD${m.matchday}) ${m.home} v ${m.away} | pred:${pred.h}-${pred.a} | result:${actual.h}-${actual.a} | base:${base} × ${mult} = ${pts}${skipped ? ' [EXCLUDED]' : ''}`);
+      });
+      console.log(`\n▶ TOTAL GROUP POINTS: ${total}`);
+      const fullScore = computeUserScore(preds, _res?.group || {}, _res?.ko || {}, _res?.bonus || {}, _kt);
+      console.log(`▶ computeUserScore total: ${fullScore.total} (group:${fullScore.groupPoints} ko:${fullScore.koPoints} bonus:${fullScore.bonusPoints})`);
+      console.groupEnd();
+    };
     return () => {
       delete window.debugJoker;
+      delete window.debugScore;
     };
   }, []); // eslint-disable-line
 
