@@ -3543,19 +3543,19 @@ const BracketView = ({
       }
     }, "Result: ", results.ko[m.id].homeTeam ? teamShort(results.ko[m.id].homeTeam) : '?', " ", results.ko[m.id].h, "–", results.ko[m.id].a, " ", results.ko[m.id].awayTeam ? teamShort(results.ko[m.id].awayTeam) : '?')))));
   }) : /*#__PURE__*/React.createElement("div", {
-    className: "scrollbar",
     style: {
+      width: '100vw',
+      marginLeft: 'calc(50% - 50vw)',
       overflowX: 'auto',
-      margin: '0 -16px',
-      padding: '8px 16px 12px'
+      padding: '8px 24px 12px'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: '170px 156px 148px 148px 178px 148px 148px 156px 170px',
+      gridTemplateColumns: '155px 140px 132px 132px 160px 132px 132px 140px 155px',
       gridTemplateRows: '28px repeat(17,minmax(38px,1fr))',
-      columnGap: 16,
-      minWidth: 1400,
+      columnGap: 12,
+      minWidth: 1380,
       minHeight: 700
     }
   }, ['R32', 'R16', 'QF', 'SF', 'FINAL', 'SF', 'QF', 'R16', 'R32'].map((l, i) => /*#__PURE__*/React.createElement("div", {
