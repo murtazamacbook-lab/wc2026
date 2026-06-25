@@ -3169,7 +3169,7 @@ const BRACKET_POS = {
   },
   101: {
     col: 4,
-    row: '2/18'
+    row: '6/14'
   },
   104: {
     col: 5,
@@ -3177,7 +3177,7 @@ const BRACKET_POS = {
   },
   102: {
     col: 6,
-    row: '2/18'
+    row: '6/14'
   },
   // Right side
   79: {
@@ -3386,7 +3386,7 @@ const BracketView = ({
     isFinal,
     isThirdPlace
   }) => {
-    const ms = ids.map(id => bracket[id]).filter(m => m?.home || m?.away);
+    const ms = ids.map(id => bracket[id]).filter(Boolean);
     if (!ms.length) return null;
     return /*#__PURE__*/React.createElement("div", {
       key: title,
