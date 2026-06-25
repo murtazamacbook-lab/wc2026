@@ -3169,14 +3169,14 @@ const BRACKET_POS = {
   },
   101: {
     col: 4,
-    row: '2/10'
-  },
-  102: {
-    col: 4,
-    row: '10/18'
+    row: '2/18'
   },
   104: {
     col: 5,
+    row: '2/18'
+  },
+  102: {
+    col: 6,
     row: '2/18'
   },
   // Right side
@@ -3585,7 +3585,8 @@ const BracketView = ({
       gridColumn: pos.col,
       gridRow: pos.row,
       side: pos.col <= 5 ? 'left' : 'right',
-      isFinal: parseInt(mid) === 104
+      isFinal: parseInt(mid) === 104,
+      isThirdPlace: parseInt(mid) === 103
     });
   })))));
 };
