@@ -15281,6 +15281,178 @@ const CreditsView = ({
   }, "Superadmin: click Edit above to add credits — only you can edit this."));
 };
 const DAILY_TIPS = ["⭐ Exact scores earn 3 pts — always worth a bold prediction!", "🃏 Joker tip: pick a match where you're most confident — it doubles or triples your points.", "🔥 You're in the top half already? One good matchday can change everything.", "💡 Check the Leaderboard — see who's breathing down your neck.", "🎯 Correct result = 1 pt, correct margin = 2 pts, exact score = 3 pts. Go big!", "🏆 The Bonus picks (Winner, Golden Boot) are worth 10 pts each — don't sleep on them.", "👀 Browse Picks tab — see what everyone else is predicting before you finalise.", "🧠 Upset pickers get rewarded — low-ranked teams can hand you a ton of points.", "⚡ Joker locked for today? Make sure you set tomorrow's before the first kickoff.", "🌍 86 players, one champion. Every point counts — even a 1-pt correct result matters.", "📊 Fan Picks shows you what the crowd predicted — great for spotting consensus vs contrarian plays.", "🎉 Having fun? Tell a friend — the bigger the pool, the more glory in winning it!", "⏰ Predictions lock at kickoff — don't forget to save before the match starts!", "🔄 Scores update automatically — no need to refresh, just keep the tab open.", "💪 Even if you're behind, the Knockout stage is worth loads of points. Never give up!"];
+const ShoutoutPopup = ({
+  notif,
+  onClose
+}) => {
+  const [visible, setVisible] = React.useState(false);
+  const [progress, setProgress] = React.useState(100);
+  const DURATION = 120000; // 2 minutes
+  React.useEffect(() => {
+    if (!notif) return;
+    setVisible(true);
+    setProgress(100);
+    const start = Date.now();
+    const iv = setInterval(() => {
+      const pct = Math.max(0, 100 - (Date.now() - start) / DURATION * 100);
+      setProgress(pct);
+      if (pct === 0) {
+        clearInterval(iv);
+        setVisible(false);
+        setTimeout(onClose, 400);
+      }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [notif]);
+  if (!notif || !visible) return null;
+  const {
+    home,
+    away,
+    score,
+    exactPlayers,
+    matchLabel
+  } = notif;
+  const EMOJIS = ['🌟', '⭐', '🎯', '🏆', '💥', '🔥', '✨', '👑'];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      top: 72,
+      right: 16,
+      zIndex: 9998,
+      maxWidth: 300,
+      width: 'calc(100vw - 32px)',
+      background: 'linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%)',
+      border: '2px solid #f9ca24',
+      borderRadius: 16,
+      boxShadow: '0 8px 40px rgba(0,0,0,.5), 0 0 30px rgba(249,202,36,.2)',
+      overflow: 'hidden',
+      animation: 'presenceSlide .5s cubic-bezier(.34,1.56,.64,1)',
+      pointerEvents: 'auto'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 3,
+      background: 'rgba(255,255,255,.1)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: '100%',
+      background: 'linear-gradient(90deg,#f9ca24,#f0932b)',
+      width: `${progress}%`,
+      transition: 'width .5s linear',
+      borderRadius: 3
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '12px 14px 8px',
+      borderBottom: '1px solid rgba(255,255,255,.1)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: .12,
+      textTransform: 'uppercase',
+      color: '#f9ca24'
+    }
+  }, "⭐ Exact Score Shoutout!"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setVisible(false);
+      setTimeout(onClose, 300);
+    },
+    style: {
+      background: 'rgba(255,255,255,.1)',
+      border: 'none',
+      borderRadius: 20,
+      color: 'rgba(255,255,255,.6)',
+      fontSize: 11,
+      cursor: 'pointer',
+      padding: '2px 8px'
+    }
+  }, "✕")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 5,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement(Flag, {
+    team: home,
+    size: 15
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 800,
+      fontSize: 14,
+      color: 'white'
+    }
+  }, teamShort(home)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: 'monospace',
+      background: '#f9ca24',
+      color: '#1a1a2e',
+      borderRadius: 6,
+      padding: '1px 8px',
+      fontWeight: 900,
+      fontSize: 14
+    }
+  }, score), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 800,
+      fontSize: 14,
+      color: 'white'
+    }
+  }, teamShort(away)), /*#__PURE__*/React.createElement(Flag, {
+    team: away,
+    size: 15
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '10px 14px 14px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: 'rgba(255,255,255,.5)',
+      marginBottom: 7,
+      fontWeight: 600
+    }
+  }, exactPlayers.length === 1 ? '1 player called it exactly:' : `${exactPlayers.length} players called it exactly:`), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 5
+    }
+  }, exactPlayers.map((name, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 5,
+      background: 'rgba(249,202,36,.12)',
+      border: '1px solid rgba(249,202,36,.3)',
+      borderRadius: 20,
+      padding: '4px 10px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13
+    }
+  }, EMOJIS[i % EMOJIS.length]), /*#__PURE__*/React.createElement(Avatar, {
+    name: name,
+    size: 18
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: '#f9ca24'
+    }
+  }, name))))));
+};
 const MotdBanner = ({
   motd,
   currentUser
@@ -16352,6 +16524,8 @@ function App() {
     sub: DEFAULT_SUB_PW
   });
   const [winnerNotif, setWinnerNotif] = useState(null);
+  const [shoutoutNotif, setShoutoutNotif] = useState(null);
+  const shoutoutSeenRef = useRef(new Set()); // track which shoutout IDs we've already shown
   const [balloonNotif, setBalloonNotif] = useState(null);
   const [goalNotif, setGoalNotif] = useState(null);
   const computedSpotlightsRef = useRef([]);
@@ -17533,12 +17707,47 @@ function App() {
   }, [currentUser]);
   const saveResults = useCallback(async newRes => {
     lastLocalWriteRef.current = Date.now();
+    // Detect newly-entered results that have exact score predictors → fire shoutout
+    if (FB_ON) {
+      try {
+        const oldGR = results.group || {};
+        const newGR = newRes.group || {};
+        for (const mId of Object.keys(newGR)) {
+          const nr = newGR[mId];
+          const or = oldGR[mId];
+          // Only trigger if this result is newly entered (wasn't there before)
+          if (!nr || nr.h === '' || nr.h == null || nr.a === '' || nr.a == null) continue;
+          if (or && or.h !== '' && or.h != null && or.a !== '' && or.a != null) continue; // already existed
+          const m = GROUP_MATCHES.find(x => x.id === mId);
+          if (!m) continue;
+          const exactPlayers = participants.filter(p => {
+            const pred = (allPredictions[p] || {}).group?.[mId];
+            if (!pred || pred.h === '' || pred.h == null) return false;
+            return String(pred.h) === String(nr.h) && String(pred.a) === String(nr.a);
+          });
+          if (exactPlayers.length > 0) {
+            const shoutout = {
+              id: `${mId}-${Date.now()}`,
+              matchLabel: `${m.home} vs ${m.away}`,
+              home: m.home,
+              away: m.away,
+              score: `${nr.h}–${nr.a}`,
+              exactPlayers,
+              ts: Date.now()
+            };
+            db.collection('wc26').doc('shoutout').set({
+              value: JSON.stringify(shoutout)
+            }).catch(() => {});
+          }
+        }
+      } catch (_e) {}
+    }
     setResults(newRes);
     await storage.setJSON('results', newRes, true);
     pushComputedStandings(newRes.group || {});
     pushComputedResults(newRes.group || {});
     autoFetchScorers();
-  }, [pushComputedStandings, pushComputedResults, autoFetchScorers]);
+  }, [results, participants, allPredictions, pushComputedStandings, pushComputedResults, autoFetchScorers]);
   const saveConfig = useCallback(async newCfg => {
     lastLocalWriteRef.current = Date.now();
     setConfig(newCfg);
@@ -17889,6 +18098,24 @@ function App() {
     }, () => {});
     return () => unsub();
   }, [FB_ON, pendingName]);
+
+  // ── SHOUTOUT LISTENER — show exact score popup to all users when result saved ──
+  useEffect(() => {
+    if (!FB_ON) return;
+    const unsub = db.collection('wc26').doc('shoutout').onSnapshot(snap => {
+      try {
+        if (!snap.exists) return;
+        const data = JSON.parse(snap.data().value || '{}');
+        if (!data.id || shoutoutSeenRef.current.has(data.id)) return;
+        if (!data.exactPlayers || data.exactPlayers.length === 0) return;
+        // Only show if shoutout was written in last 10 minutes (avoid stale on page load)
+        if (Date.now() - data.ts > 10 * 60 * 1000) return;
+        shoutoutSeenRef.current.add(data.id);
+        setShoutoutNotif(data);
+      } catch (_e) {}
+    }, () => {});
+    return () => unsub();
+  }, []);
 
   // ── PREDICTIONS SYNC: when any participant saves, fetch their updated predictions ──
   // predictions-meta gets a tiny write on every save; all clients receive an onSnapshot push
@@ -18572,6 +18799,9 @@ function App() {
   }), /*#__PURE__*/React.createElement(WinnerPopup, {
     notif: balloonNotif ? null : winnerNotif,
     onClose: () => setWinnerNotif(null)
+  }), /*#__PURE__*/React.createElement(ShoutoutPopup, {
+    notif: shoutoutNotif,
+    onClose: () => setShoutoutNotif(null)
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
