@@ -1809,6 +1809,7 @@ const MatchCells = ({
   matchLocked = false,
   kickoffMs = null
 }) => {
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const hasResult = actual && actual.h !== '' && actual.h != null && actual.a !== '' && actual.a != null;
   const resultLocked = hasResult;
   // Time-based lock: once a matchday's cutoff has passed, all its matches are permanently locked
@@ -1816,7 +1817,6 @@ const MatchCells = ({
   const matchdayCutoffMs = MATCHDAY_CUTOFFS[match.matchday];
   const timeLocked = matchdayCutoffMs ? nowMs > matchdayCutoffMs : false;
   const isLocked = resultLocked || compLocked || matchLocked || timeLocked;
-  const [nowMs, setNowMs] = useState(() => Date.now());
   const minsUntilKickoff = kickoffMs && !resultLocked && !matchLocked ? (kickoffMs - nowMs) / 60000 : null;
   const showCountdown = minsUntilKickoff !== null && minsUntilKickoff > 0 && minsUntilKickoff <= 45; // countdown shows from 45 min
   const secsUntilKickoff = kickoffMs ? Math.max(0, kickoffMs - nowMs) / 1000 : null;
