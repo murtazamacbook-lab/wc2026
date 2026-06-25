@@ -8949,7 +8949,9 @@ const AdminView = ({
   saveCommentary,
   onlineUsers = {},
   currentUser,
-  kickoffTimes = new Map()
+  kickoffTimes = new Map(),
+  qaItems = [],
+  setQaItems
 }) => {
   const isSuperAdmin = adminRole === 'superadmin';
   const isSubAdmin = adminRole === 'subadmin';
@@ -10002,7 +10004,7 @@ const AdminView = ({
   }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['jokers', '🃏 Joker Picks', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.values(onlineUsers).filter(v => {
     const ts = typeof v === 'object' ? v.ts : v;
     return ts && Date.now() - ts < 3 * 60 * 1000;
-  }).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true], ['audit', '📋 Audit Log', isSuperAdmin || adminRole === 'subadmin']].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+  }).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true], ['audit', '📋 Audit Log', isSuperAdmin || adminRole === 'subadmin'], ['qa', `❓ Q&A${(qaItems || []).filter(q => !q.answer).length > 0 ? ' (' + (qaItems || []).filter(q => !q.answer).length + ')' : ''}`, true]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
     key: k,
     className: "tab-btn",
     style: {
@@ -14059,7 +14061,152 @@ const AdminView = ({
       hour: '2-digit',
       minute: '2-digit'
     })}`));
-  })));
+  })), section === 'qa' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16,
+      maxWidth: 680
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 20,
+      marginBottom: 14,
+      background: 'linear-gradient(135deg,rgba(30,120,80,.04) 0%,var(--paper) 60%)',
+      borderColor: 'var(--forest)'
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "display",
+    style: {
+      fontSize: 18,
+      fontWeight: 700,
+      margin: '0 0 4px'
+    }
+  }, "❓ Player Q&A"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: 'var(--ink-soft)',
+      margin: 0
+    }
+  }, "Questions from players. Click any question to answer it — your reply goes live instantly.")), (qaItems || []).length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: '32px 0',
+      color: 'var(--ink-soft)',
+      fontSize: 13
+    }
+  }, "No questions yet."), (qaItems || []).sort((a, b) => {
+    const ao = !a.answer ? 0 : 1,
+      bo = !b.answer ? 0 : 1;
+    return ao - bo || b.ts - a.ts;
+  }).map(q => /*#__PURE__*/React.createElement("div", {
+    key: q.id,
+    className: "card",
+    style: {
+      padding: 16,
+      marginBottom: 10,
+      borderLeft: `3px solid ${q.answer ? 'var(--forest)' : 'var(--amber)'}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 8,
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 3
+    }
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: q.author,
+    size: 18
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      fontSize: 12
+    }
+  }, q.author), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: 'var(--ink-soft)'
+    }
+  }, new Date(q.ts).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })), !q.answer && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      background: 'rgba(214,137,42,.15)',
+      color: 'var(--amber)',
+      padding: '1px 6px',
+      borderRadius: 10
+    }
+  }, "OPEN"), q.answer && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      background: 'rgba(27,94,63,.12)',
+      color: 'var(--forest)',
+      padding: '1px 6px',
+      borderRadius: 10
+    }
+  }, "ANSWERED")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: 'var(--ink)'
+    }
+  }, q.question)), /*#__PURE__*/React.createElement("button", {
+    onClick: async () => {
+      if (!window.confirm('Delete this question?')) return;
+      try {
+        await db.collection('wc26-qa').doc(q.id).delete();
+        setQaItems(prev => prev.filter(x => x.id !== q.id));
+      } catch (_e) {}
+    },
+    style: {
+      flexShrink: 0,
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      fontSize: 13,
+      color: 'var(--ink-soft)',
+      padding: 4
+    }
+  }, "🗑")), q.answer && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 6,
+      padding: '8px 12px',
+      background: 'rgba(27,94,63,.06)',
+      borderRadius: 6,
+      fontSize: 12,
+      borderLeft: '2px solid var(--forest)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 10,
+      color: 'var(--forest)',
+      marginBottom: 2
+    }
+  }, "✅ ", q.answeredBy || 'Admin', " replied:"), /*#__PURE__*/React.createElement("div", null, q.answer)), /*#__PURE__*/React.createElement(QAReplyBox, {
+    qId: q.id,
+    existing: q.answer || '',
+    answeredBy: q.answeredBy || '',
+    onSaved: ans => setQaItems(prev => prev.map(x => x.id === q.id ? {
+      ...x,
+      answer: ans,
+      answeredBy: currentUser,
+      answeredAt: Date.now()
+    } : x))
+  })))));
 };
 // ── PENDING APPROVAL SCREEN ──────────────────────────────────────────────
 const PendingScreen = ({
@@ -14917,6 +15064,308 @@ const LiveMatchBanner = ({
 };
 
 // ── HEADER ───────────────────────────────────────────────────────
+const QAReplyBox = ({
+  qId,
+  existing,
+  answeredBy,
+  onSaved
+}) => {
+  const [open, setOpen] = React.useState(false);
+  const [text, setText] = React.useState(existing || '');
+  const [saving, setSaving] = React.useState(false);
+  if (!open) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setText(existing || '');
+      setOpen(true);
+    },
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      padding: '4px 10px',
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      background: 'transparent',
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      color: 'var(--ink-soft)'
+    }
+  }, existing ? '✏️ Edit Reply' : '💬 Reply'));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement("textarea", {
+    value: text,
+    onChange: e => setText(e.target.value),
+    rows: 2,
+    placeholder: "Type your answer…",
+    style: {
+      width: '100%',
+      padding: '7px 10px',
+      fontSize: 12,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit',
+      resize: 'vertical',
+      boxSizing: 'border-box'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    disabled: saving || !text.trim(),
+    onClick: async () => {
+      setSaving(true);
+      try {
+        await window.__db.collection('wc26-qa').doc(qId).update({
+          answer: text.trim(),
+          answeredBy: answeredBy || 'Admin',
+          answeredAt: Date.now()
+        });
+        onSaved(text.trim());
+        setOpen(false);
+      } catch (_e) {}
+      setSaving(false);
+    },
+    style: {
+      padding: '5px 14px',
+      border: 'none',
+      borderRadius: 4,
+      background: 'var(--forest)',
+      color: 'white',
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      opacity: saving ? 0.6 : 1
+    }
+  }, saving ? 'Saving…' : 'Publish Answer'), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setOpen(false),
+    style: {
+      padding: '5px 12px',
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      background: 'transparent',
+      fontSize: 12,
+      cursor: 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, "Cancel")));
+};
+const QAView = ({
+  currentUser,
+  qaItems,
+  onSubmit,
+  isGuest
+}) => {
+  const [question, setQuestion] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [status, setStatus] = React.useState(null);
+  const submit = async () => {
+    if (!question.trim()) {
+      setStatus({
+        ok: false,
+        msg: 'Please enter a question.'
+      });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit(question.trim());
+      setQuestion('');
+      setStatus({
+        ok: true,
+        msg: '✅ Question submitted! The admin will reply soon.'
+      });
+      setTimeout(() => setStatus(null), 5000);
+    } catch (_e) {
+      setStatus({
+        ok: false,
+        msg: 'Failed to submit. Try again.'
+      });
+    }
+    setSubmitting(false);
+  };
+  const answered = (qaItems || []).filter(q => q.answer);
+  const mine = (qaItems || []).filter(q => !q.answer && q.author === currentUser);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 640
+    }
+  }, /*#__PURE__*/React.createElement(SectionHeader, {
+    kicker: "Community",
+    title: "❓ Ask the Admin"
+  }), !isGuest && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 20,
+      marginTop: 14,
+      borderLeft: '3px solid var(--amber)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 15,
+      marginBottom: 8
+    }
+  }, "Got a question?"), /*#__PURE__*/React.createElement("textarea", {
+    value: question,
+    onChange: e => setQuestion(e.target.value),
+    rows: 3,
+    placeholder: "e.g. How does the joker multiplier work for today's match?",
+    style: {
+      width: '100%',
+      padding: '9px 12px',
+      fontSize: 13,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      fontFamily: 'inherit',
+      resize: 'vertical',
+      boxSizing: 'border-box',
+      marginBottom: 8
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: submit,
+    disabled: submitting || !question.trim(),
+    style: {
+      padding: '8px 20px',
+      border: 'none',
+      borderRadius: 4,
+      background: 'var(--amber)',
+      color: 'white',
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      opacity: submitting ? 0.6 : 1
+    }
+  }, submitting ? 'Sending…' : 'Ask Question'), status && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: status.ok ? 'var(--forest)' : 'var(--burgundy)',
+      fontWeight: 600
+    }
+  }, status.msg))), mine.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      textTransform: 'uppercase',
+      letterSpacing: .06,
+      color: 'var(--amber)',
+      marginBottom: 8
+    }
+  }, "⏳ Your pending questions"), mine.map(q => /*#__PURE__*/React.createElement("div", {
+    key: q.id,
+    className: "card",
+    style: {
+      padding: 14,
+      marginBottom: 8,
+      borderLeft: '3px solid var(--amber)',
+      opacity: .85
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600
+    }
+  }, q.question), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)',
+      marginTop: 4
+    }
+  }, "Waiting for admin reply…")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      textTransform: 'uppercase',
+      letterSpacing: .06,
+      color: 'var(--forest)',
+      marginBottom: 8
+    }
+  }, "✅ Answered (", answered.length, ")"), answered.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: 'var(--ink-soft)',
+      fontStyle: 'italic',
+      padding: '16px 0'
+    }
+  }, "No answered questions yet."), answered.sort((a, b) => b.answeredAt - a.answeredAt).map(q => /*#__PURE__*/React.createElement("div", {
+    key: q.id,
+    className: "card",
+    style: {
+      padding: 16,
+      marginBottom: 10,
+      borderLeft: '3px solid var(--forest)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 5
+    }
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    name: q.author,
+    size: 16
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      fontSize: 12
+    }
+  }, q.author), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: 'var(--ink-soft)'
+    }
+  }, new Date(q.ts).toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric'
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: 'var(--ink)',
+      marginBottom: 8
+    }
+  }, "Q: ", q.question), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '9px 12px',
+      background: 'rgba(27,94,63,.06)',
+      borderRadius: 6,
+      fontSize: 13,
+      borderLeft: '2px solid var(--forest)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      color: 'var(--forest)',
+      marginBottom: 3
+    }
+  }, "✅ ", q.answeredBy || 'Admin', ":"), q.answer)))));
+};
 const CreditsView = ({
   credits,
   adminRole,
@@ -15694,6 +16143,12 @@ const Header = ({
   l: 'Credits',
   I: null,
   emoji: '✨',
+  mobileHide: true
+}, {
+  k: 'qa',
+  l: 'Q&A',
+  I: null,
+  emoji: '❓',
   mobileHide: true
 }].filter(t => !t.hide).map(({
   k,
@@ -16516,6 +16971,7 @@ function App() {
     locked: false
   });
   const [credits, setCredits] = useState(null);
+  const [qaItems, setQaItems] = useState([]);
   const [pendingUsers, setPendingUsers] = useState({}); // name → {name,pin,requestedAt,status,approvedBy?,rejectedBy?}
   const [pendingStatus, setPendingStatus] = useState(null); // null | 'waiting' | 'approved' | 'rejected'
   const [pendingName, setPendingName] = useState(null);
@@ -18085,6 +18541,20 @@ function App() {
     };
   }, []);
 
+  // ── Q&A LISTENER ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!FB_ON) return;
+    const unsub = db.collection('wc26-qa').orderBy('ts', 'desc').onSnapshot(snap => {
+      try {
+        setQaItems(snap.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        })));
+      } catch (_e) {}
+    }, () => {});
+    return () => unsub();
+  }, []);
+
   // ── PENDING USERS LISTENER ────────────────────────────────────
   useEffect(() => {
     if (!FB_ON) return;
@@ -18746,6 +19216,33 @@ function App() {
       await storage.setJSON('credits', d, true);
       setCredits(d);
     }
+  }))), /*#__PURE__*/React.createElement(LazyMount, {
+    active: view === 'qa'
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
+    label: "Q&A"
+  }, /*#__PURE__*/React.createElement(QAView, {
+    currentUser: currentUser,
+    qaItems: qaItems,
+    isGuest: isGuest,
+    onSubmit: async q => {
+      const ref = await db.collection('wc26-qa').add({
+        author: currentUser,
+        question: q,
+        ts: Date.now(),
+        answer: '',
+        answeredBy: '',
+        answeredAt: 0
+      });
+      setQaItems(prev => [{
+        id: ref.id,
+        author: currentUser,
+        question: q,
+        ts: Date.now(),
+        answer: '',
+        answeredBy: '',
+        answeredAt: 0
+      }, ...prev]);
+    }
   }))), view === 'admin' && adminAuthed && /*#__PURE__*/React.createElement(ViewErrorBoundary, {
     label: "Admin"
   }, /*#__PURE__*/React.createElement(AdminView, {
@@ -18770,7 +19267,9 @@ function App() {
     saveCommentary: saveCommentary,
     onlineUsers: onlineUsers,
     currentUser: currentUser,
-    kickoffTimes: kickoffTimes
+    kickoffTimes: kickoffTimes,
+    qaItems: qaItems,
+    setQaItems: setQaItems
   }))), view !== 'admin' && /*#__PURE__*/React.createElement(SupportWall, {
     supportByUser: supportByUser,
     currentSupportTeam: currentSupportTeam,
