@@ -9705,6 +9705,39 @@ const AdminView = ({
     setAllPredictions(na);
     alert(`✅ Predictions reset for "${name}". Score is now 0. Joker history preserved.`);
   };
+  const handlePartialReset = async name => {
+    // Clears only group predictions for matches whose matchday cutoff was BEFORE the user joined.
+    // Useful when stale localStorage data polluted a new user's account.
+    const joinDateStr = prompt(`Partial reset for "${name}".\n\nEnter the date they joined (YYYY-MM-DD).\nPredictions for matches that kicked off BEFORE this date will be cleared.\nPredictions on/after this date are kept.`);
+    if (!joinDateStr) return;
+    const joinMs = new Date(joinDateStr + 'T00:00:00Z').getTime();
+    if (isNaN(joinMs)) {
+      alert('Invalid date.');
+      return;
+    }
+    if (!window.confirm(`Clear predictions for "${name}" for all matches before ${joinDateStr}?\n\nPredictions on/after ${joinDateStr} are untouched.`)) return;
+    const existing = allPredictions[name] || {};
+    const newGroup = {
+      ...(existing.group || {})
+    };
+    GROUP_MATCHES.forEach(m => {
+      const kickoffMs = MATCHDAY_CUTOFFS[m.matchday]; // use cutoff as proxy for "when played"
+      if (kickoffMs && kickoffMs < joinMs) delete newGroup[m.id];
+    });
+    const updated = {
+      ...existing,
+      group: newGroup
+    };
+    await storage.setJSON(`pred-${name}`, updated, true);
+    auditLog('PARTIAL_RESET_PICKS', name, {
+      joinDate: joinDateStr
+    });
+    setAllPredictions(prev => ({
+      ...prev,
+      [name]: updated
+    }));
+    alert(`✅ Pre-${joinDateStr} predictions cleared for "${name}". Post-join predictions preserved.`);
+  };
   const handleJokerRestore = async () => {
     if (!jokerRestoreUser) {
       setJokerRestoreStatus({
@@ -12631,6 +12664,21 @@ const AdminView = ({
         whiteSpace: 'nowrap'
       }
     }, "🔄 Reset Picks"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => handlePartialReset(s.name),
+      title: "Clear only pre-join stale predictions — keeps legitimate picks",
+      style: {
+        background: '#8e44ad',
+        color: 'white',
+        border: 'none',
+        borderRadius: 3,
+        padding: '5px 8px',
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        whiteSpace: 'nowrap'
+      }
+    }, "✂️ Partial"), /*#__PURE__*/React.createElement("button", {
       onClick: () => handleDeleteUser(s.name),
       style: {
         background: 'var(--burgundy)',
@@ -18428,6 +18476,11 @@ function App() {
     try {
       sessionStorage.setItem('wc26_cu', name);
     } catch {}
+    // For brand-new users: clear any stale prediction cache that may exist under this name
+    // from a previous device session — prevents another user's data polluting a fresh account.
+    if (!existing) {
+      lsSet(`pred-${name}`, null);
+    }
     const p = (await storage.getJSON(`pred-${name}`, true)) || {
       group: {},
       ko: {},
