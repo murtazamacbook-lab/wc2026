@@ -1811,7 +1811,11 @@ const MatchCells = ({
 }) => {
   const hasResult = actual && actual.h !== '' && actual.h != null && actual.a !== '' && actual.a != null;
   const resultLocked = hasResult;
-  const isLocked = resultLocked || compLocked || matchLocked;
+  // Time-based lock: once a matchday's cutoff has passed, all its matches are permanently locked
+  // even if an admin temporarily clears a result for correction.
+  const matchdayCutoffMs = MATCHDAY_CUTOFFS[match.matchday];
+  const timeLocked = matchdayCutoffMs ? nowMs > matchdayCutoffMs : false;
+  const isLocked = resultLocked || compLocked || matchLocked || timeLocked;
   const [nowMs, setNowMs] = useState(() => Date.now());
   const minsUntilKickoff = kickoffMs && !resultLocked && !matchLocked ? (kickoffMs - nowMs) / 60000 : null;
   const showCountdown = minsUntilKickoff !== null && minsUntilKickoff > 0 && minsUntilKickoff <= 45; // countdown shows from 45 min
@@ -18119,6 +18123,24 @@ function App() {
   }, []);
   const savePredictions = useCallback(async newPreds => {
     if (!currentUser || currentUser === '__guest__') return;
+    // Server-side guard: strip any group prediction changes for matches whose matchday cutoff has passed.
+    // This prevents circumventing the UI lock (e.g. via DevTools or a briefly-unlocked result).
+    const nowTs = Date.now();
+    const sanitizeGroup = (incoming, existing = {}) => {
+      const out = {
+        ...incoming
+      };
+      GROUP_MATCHES.forEach(m => {
+        const cutoff = MATCHDAY_CUTOFFS[m.matchday];
+        if (!cutoff || nowTs <= cutoff) return; // not past cutoff — allow
+        if (EARLY_MD2_IDS.has(m.id)) return; // always locked — keep existing
+        // Past cutoff: only allow keeping existing value, not changing it
+        if (existing[m.id] !== undefined) {
+          out[m.id] = existing[m.id]; // preserve whatever was saved before cutoff
+        }
+      });
+      return out;
+    };
     setPredictions(newPreds);
     setSaveStatus('saving');
     // Merge with latest Firestore copy so a second tab/device can't clobber the other's changes.
@@ -18133,10 +18155,10 @@ function App() {
           toWrite = {
             ...remote,
             ...newPreds,
-            group: {
+            group: sanitizeGroup({
               ...(remote.group || {}),
               ...(newPreds.group || {})
-            },
+            }, remote.group || {}),
             ko: {
               ...(remote.ko || {}),
               ...(newPreds.ko || {})
