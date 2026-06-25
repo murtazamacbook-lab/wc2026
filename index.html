@@ -1318,6 +1318,8 @@ const CSS = `
   .fadein{animation:fadein .25s ease}
   .main-shell{display:flex;align-items:flex-start;gap:20px}
   .main-primary{flex:1;min-width:0}
+  .main-shell.bracket-visual .support-wall,.main-shell.bracket-visual .spotlight-panel{display:none!important}
+  .main-shell.bracket-visual .main-primary{overflow-x:auto;min-width:0;width:100%}
   .support-wall{width:290px;max-height:calc(100vh - 140px);position:sticky;top:84px;display:flex;flex-direction:column;overflow:hidden}
   .spotlight-panel{width:290px;max-height:calc(100vh - 140px);position:sticky;top:84px;display:flex;flex-direction:column;overflow:hidden;order:-1}
   .support-list{padding:10px;overflow:auto}
@@ -3244,6 +3246,13 @@ const BracketView = ({
   locked
 }) => {
   const [mode, setMode] = useState('list');
+  // Toggle bracket-visual class on main-shell so sidebars hide and full width is available
+  useEffect(() => {
+    const shell = document.querySelector('.main-shell');
+    if (!shell) return;
+    if (mode === 'bracket') shell.classList.add('bracket-visual');else shell.classList.remove('bracket-visual');
+    return () => shell.classList.remove('bracket-visual');
+  }, [mode]);
   // Bracket slots are always driven by actual results — not individual user predictions
   const {
     bracket,
@@ -3544,10 +3553,9 @@ const BracketView = ({
     }, "Result: ", results.ko[m.id].homeTeam ? teamShort(results.ko[m.id].homeTeam) : '?', " ", results.ko[m.id].h, "–", results.ko[m.id].a, " ", results.ko[m.id].awayTeam ? teamShort(results.ko[m.id].awayTeam) : '?')))));
   }) : /*#__PURE__*/React.createElement("div", {
     style: {
-      width: '100vw',
-      marginLeft: 'calc(50% - 50vw)',
       overflowX: 'auto',
-      padding: '8px 24px 12px'
+      width: '100%',
+      padding: '8px 0 12px'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
