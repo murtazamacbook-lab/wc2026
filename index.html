@@ -1437,30 +1437,21 @@ const TrendingUp = p => /*#__PURE__*/React.createElement(Ic, {
 });
 
 // ── FLAG COMPONENT ───────────────────────────────────────────────
+// Renders flag emoji natively — no CDN requests, no tracking-prevention warnings
 const Flag = ({
   team,
   size = 16
 }) => {
   const em = TEAM_FLAGS[team];
   if (!em) return null;
-  try {
-    const cp = [...em].map(c => c.codePointAt(0).toString(16)).join('-');
-    const url = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${cp}.svg`;
-    return /*#__PURE__*/React.createElement("img", {
-      src: url,
-      alt: em,
-      loading: "lazy",
-      decoding: "async",
-      style: {
-        width: size,
-        height: size,
-        verticalAlign: 'middle',
-        display: 'inline-block'
-      }
-    });
-  } catch {
-    return /*#__PURE__*/React.createElement("span", null, em);
-  }
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: size,
+      lineHeight: 1,
+      verticalAlign: 'middle',
+      display: 'inline-block'
+    }
+  }, em);
 };
 
 // ── AVATAR COMPONENT ─────────────────────────────────────────────
