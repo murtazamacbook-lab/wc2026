@@ -15641,8 +15641,8 @@ function KickoffCountdownOverlay({
 const SpotlightPanel = React.memo(({
   spotlights
 }) => {
+  const [expanded, setExpanded] = React.useState({});
   if (!spotlights || spotlights.length === 0) return null;
-  // Group by dateKey (YYYY-MM-DD), most recent first
   const byDate = {};
   spotlights.forEach(s => {
     const dk = s.dateKey || 'unknown';
@@ -15662,6 +15662,58 @@ const SpotlightPanel = React.memo(({
     if (dk === yesterdayKey) return "Yesterday";
     const [y, mo, d] = dk.split('-');
     return `${d} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(mo) - 1]}`;
+  };
+  const SHOW = 5;
+  const NameChips = ({
+    names,
+    color,
+    limit = SHOW,
+    id
+  }) => {
+    const isExp = expanded[id];
+    const show = isExp ? names : names.slice(0, limit);
+    const rest = names.length - limit;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '3px 4px',
+        marginTop: 3
+      }
+    }, show.map((n, i) => /*#__PURE__*/React.createElement("span", {
+      key: i,
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        background: color + '18',
+        border: `1px solid ${color}30`,
+        borderRadius: 20,
+        padding: '2px 7px',
+        fontSize: 10,
+        fontWeight: 600,
+        color,
+        lineHeight: 1.4
+      }
+    }, /*#__PURE__*/React.createElement(Avatar, {
+      name: n,
+      size: 13
+    }), n)), !isExp && rest > 0 && /*#__PURE__*/React.createElement("button", {
+      onClick: () => setExpanded(e => ({
+        ...e,
+        [id]: true
+      })),
+      style: {
+        background: 'var(--cream2)',
+        border: '1px solid var(--line)',
+        borderRadius: 20,
+        padding: '2px 8px',
+        fontSize: 10,
+        fontWeight: 700,
+        cursor: 'pointer',
+        color: 'var(--ink-soft)'
+      }
+    }, "+", rest, " more"));
   };
   return /*#__PURE__*/React.createElement("aside", {
     className: "card spotlight-panel",
@@ -15711,101 +15763,164 @@ const SpotlightPanel = React.memo(({
       top: 0,
       zIndex: 1
     }
-  }, dayLabel(dk)), byDate[dk].map((s, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      padding: '10px 14px',
-      borderBottom: '1px solid var(--line-soft)'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 6
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      fontWeight: 700,
-      color: 'var(--ink)'
-    }
-  }, s.home, " ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontFamily: 'monospace',
-      color: 'var(--forest)',
-      fontWeight: 800
-    }
-  }, s.score), " ", s.away), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9,
-      fontWeight: 700,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-      padding: '2px 6px',
-      borderRadius: 3,
-      background: 'rgba(27,94,63,.12)',
-      color: 'var(--forest)'
-    }
-  }, "FT")), s.exact.length > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 4
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9,
-      fontWeight: 700,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-      color: 'var(--forest)'
-    }
-  }, "⭐ Exact — "), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      fontWeight: 600,
-      color: 'var(--ink)'
-    }
-  }, s.exact.join(', '))), s.resultRight.length > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 4
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9,
-      fontWeight: 700,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-      color: 'var(--ink-soft)'
-    }
-  }, "✅ Result — "), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ink)'
-    }
-  }, s.resultRight.join(', '))), s.exact.length === 0 && s.resultRight.length === 0 && s.total > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ink-soft)',
-      fontStyle: 'italic'
-    }
-  }, "Nobody got the result"), s.jokers.length > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 2
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9,
-      fontWeight: 700,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-      color: 'var(--burgundy)'
-    }
-  }, "🃏 Joker — "), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ink)'
-    }
-  }, s.jokers.map(j => `${j.name} (${j.mult}×)`).join(', ')))))))));
+  }, dayLabel(dk)), byDate[dk].map((s, i) => {
+    const matchId = `${dk}-${i}`;
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        padding: '12px 14px',
+        borderBottom: '1px solid var(--line-soft)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 800,
+        color: 'var(--ink)',
+        lineHeight: 1.3
+      }
+    }, /*#__PURE__*/React.createElement(Flag, {
+      team: s.home,
+      size: 13
+    }), " ", teamShort(s.home), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: 'monospace',
+        background: 'var(--ink)',
+        color: 'var(--cream)',
+        borderRadius: 4,
+        padding: '1px 6px',
+        margin: '0 5px',
+        fontSize: 12,
+        fontWeight: 800
+      }
+    }, s.score), teamShort(s.away), " ", /*#__PURE__*/React.createElement(Flag, {
+      team: s.away,
+      size: 13
+    })), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        fontWeight: 700,
+        padding: '2px 6px',
+        borderRadius: 3,
+        background: 'rgba(27,94,63,.12)',
+        color: 'var(--forest)',
+        flexShrink: 0,
+        marginLeft: 6
+      }
+    }, "FT")), s.exact.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        fontWeight: 800,
+        letterSpacing: .08,
+        textTransform: 'uppercase',
+        color: '#d4a017',
+        marginBottom: 2
+      }
+    }, "⭐ Exact Score (", s.exact.length, ")"), /*#__PURE__*/React.createElement(NameChips, {
+      names: s.exact,
+      color: "#c8860a",
+      id: matchId + '-ex'
+    })), s.resultRight.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        fontWeight: 800,
+        letterSpacing: .08,
+        textTransform: 'uppercase',
+        color: 'var(--forest)',
+        marginBottom: 2
+      }
+    }, "✅ Correct Result (", s.resultRight.length, ")")), /*#__PURE__*/React.createElement(NameChips, {
+      names: s.resultRight,
+      color: "var(--forest)",
+      id: matchId + '-re'
+    })), s.exact.length === 0 && s.resultRight.length === 0 && s.total > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        fontStyle: 'italic',
+        marginBottom: 4
+      }
+    }, "Nobody got the result 😬"), s.jokers.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        fontWeight: 800,
+        letterSpacing: .08,
+        textTransform: 'uppercase',
+        color: 'var(--burgundy)',
+        marginBottom: 2
+      }
+    }, "🃏 Joker (", s.jokers.length, ")"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '3px 4px',
+        marginTop: 3
+      }
+    }, (expanded[matchId + '-jo'] ? s.jokers : s.jokers.slice(0, SHOW)).map((j, ji) => /*#__PURE__*/React.createElement("span", {
+      key: ji,
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        background: 'rgba(159,27,27,.08)',
+        border: '1px solid rgba(159,27,27,.2)',
+        borderRadius: 20,
+        padding: '2px 7px',
+        fontSize: 10,
+        fontWeight: 600,
+        color: 'var(--burgundy)',
+        lineHeight: 1.4
+      }
+    }, /*#__PURE__*/React.createElement(Avatar, {
+      name: j.name,
+      size: 13
+    }), j.name, /*#__PURE__*/React.createElement("span", {
+      style: {
+        background: 'var(--burgundy)',
+        color: 'white',
+        borderRadius: 10,
+        padding: '0 4px',
+        fontSize: 9,
+        fontWeight: 800,
+        marginLeft: 1
+      }
+    }, j.mult, "×"))), !expanded[matchId + '-jo'] && s.jokers.length > SHOW && /*#__PURE__*/React.createElement("button", {
+      onClick: () => setExpanded(e => ({
+        ...e,
+        [matchId + '-jo']: true
+      })),
+      style: {
+        background: 'var(--cream2)',
+        border: '1px solid var(--line)',
+        borderRadius: 20,
+        padding: '2px 8px',
+        fontSize: 10,
+        fontWeight: 700,
+        cursor: 'pointer',
+        color: 'var(--ink-soft)'
+      }
+    }, "+", s.jokers.length - SHOW, " more"))));
+  })))));
 });
 
 // ── FIREWORKS OVERLAY ─────────────────────────────────────────────
@@ -16433,6 +16548,8 @@ function App() {
       if (document.visibilityState === 'hidden') return; // skip while tab hidden
       const key = apiKey();
       if (!key && !FUNC_BASE) return;
+      // RapidAPI disabled — quota exhausted. Skip RapidAPI /results, ESPN handles result imports.
+      if (!FUNC_BASE) return;
       const hdrs = key ? {
         'X-RapidAPI-Key': key,
         'X-RapidAPI-Host': API_HOST
