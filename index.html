@@ -5094,14 +5094,21 @@ const CrowdView = React.memo(({
   const totalMatches = matchStats.length;
   const totalUpsets = matchStats.filter(s => s.isUpset).length;
   const avgAccuracy = totalMatches > 0 ? Math.round(matchStats.reduce((s, x) => s + x.crowdRight, 0) / totalMatches) : 0;
-  // Highlights: prefer most recently played matches (use kickoff stored in actual result, fallback to all-time)
+  // Highlights: prefer today's matches, fall back to yesterday, then all-time
   const now = Date.now();
-  const recentStats = matchStats.filter(s => {
+  const toLocalDateStr = ms => new Date(ms).toLocaleDateString('sv'); // YYYY-MM-DD in local time
+  const todayStr = toLocalDateStr(now);
+  const yesterdayStr = toLocalDateStr(now - 86400000);
+  const todayStats = matchStats.filter(s => {
     const ko = s.actual?.kickoff ? new Date(s.actual.kickoff).getTime() : null;
-    return ko && now - ko < 36 * 60 * 60 * 1000;
+    return ko && toLocalDateStr(ko) === todayStr;
   });
-  const highlightPool = recentStats.length > 0 ? recentStats : matchStats;
-  const highlightLabel = recentStats.length > 0 ? 'Today' : 'All Time';
+  const yesterdayStats = matchStats.filter(s => {
+    const ko = s.actual?.kickoff ? new Date(s.actual.kickoff).getTime() : null;
+    return ko && toLocalDateStr(ko) === yesterdayStr;
+  });
+  const highlightPool = todayStats.length > 0 ? todayStats : yesterdayStats.length > 0 ? yesterdayStats : matchStats;
+  const highlightLabel = todayStats.length > 0 ? 'Today' : yesterdayStats.length > 0 ? 'Yesterday' : 'All Time';
   const bestMatch = highlightPool.length ? highlightPool.reduce((best, s) => s.crowdRight > best.crowdRight ? s : best, highlightPool[0]) : null;
   const worstMatch = highlightPool.length ? highlightPool.reduce((worst, s) => s.crowdRight < worst.crowdRight ? s : worst, highlightPool[0]) : null;
 
