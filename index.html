@@ -5094,8 +5094,16 @@ const CrowdView = React.memo(({
   const totalMatches = matchStats.length;
   const totalUpsets = matchStats.filter(s => s.isUpset).length;
   const avgAccuracy = totalMatches > 0 ? Math.round(matchStats.reduce((s, x) => s + x.crowdRight, 0) / totalMatches) : 0;
-  const bestMatch = matchStats.length ? matchStats.reduce((best, s) => s.crowdRight > best.crowdRight ? s : best, matchStats[0]) : null;
-  const worstMatch = matchStats.length ? matchStats.reduce((worst, s) => s.crowdRight < worst.crowdRight ? s : worst, matchStats[0]) : null;
+  // Highlights: prefer most recently played matches (use kickoff stored in actual result, fallback to all-time)
+  const now = Date.now();
+  const recentStats = matchStats.filter(s => {
+    const ko = s.actual?.kickoff ? new Date(s.actual.kickoff).getTime() : null;
+    return ko && now - ko < 36 * 60 * 60 * 1000;
+  });
+  const highlightPool = recentStats.length > 0 ? recentStats : matchStats;
+  const highlightLabel = recentStats.length > 0 ? 'Today' : 'All Time';
+  const bestMatch = highlightPool.length ? highlightPool.reduce((best, s) => s.crowdRight > best.crowdRight ? s : best, highlightPool[0]) : null;
+  const worstMatch = highlightPool.length ? highlightPool.reduce((worst, s) => s.crowdRight < worst.crowdRight ? s : worst, highlightPool[0]) : null;
 
   // Fireworks canvas for exact score celebration
   const fireRef = useRef(null);
@@ -5531,7 +5539,7 @@ const CrowdView = React.memo(({
       color: 'rgba(255,255,255,.7)',
       marginBottom: 6
     }
-  }, "🏆 Best Crowd Call"), /*#__PURE__*/React.createElement("div", {
+  }, "🏆 ", highlightLabel, " Best Call"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 800,
       fontSize: 15,
@@ -5639,7 +5647,7 @@ const CrowdView = React.memo(({
       color: 'rgba(255,255,255,.7)',
       marginBottom: 6
     }
-  }, "😱 Biggest Upset"), /*#__PURE__*/React.createElement("div", {
+  }, "😱 ", highlightLabel, " Biggest Upset"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 800,
       fontSize: 15,
@@ -6675,17 +6683,14 @@ const LiveDataView = React.memo(({
       let nextDelay = 3600000; // default: 1 hour when no games
       try {
         if ((role === 'superadmin' || role === 'subadmin') && (key.trim() || FUNC_BASE)) {
-          // Admin: fetch fresh from API and save to cache
+          // RapidAPI disabled — quota exhausted. Skip live fetch, use ESPN cache only.
+          if (!FUNC_BASE) {
+            liveTimerRef.current = setTimeout(refreshLive, nextDelay);
+            return;
+          }
           let r;
           if (FUNC_BASE) {
             r = await fetch(`${FUNC_BASE}/proxy?ep=live`);
-          } else {
-            r = await fetch(`https://${API_HOST}/live`, {
-              headers: {
-                'X-RapidAPI-Key': key.trim(),
-                'X-RapidAPI-Host': API_HOST
-              }
-            });
           }
           const d = await r.json();
           if (d != null) {
