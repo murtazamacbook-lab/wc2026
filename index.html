@@ -1803,10 +1803,10 @@ const MatchCells = ({
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasResult = actual && actual.h !== '' && actual.h != null && actual.a !== '' && actual.a != null;
   const resultLocked = hasResult;
-  // Time-based lock: once a matchday's cutoff has passed, all its matches are permanently locked
-  // even if an admin temporarily clears a result for correction.
-  const matchdayCutoffMs = MATCHDAY_CUTOFFS[match.matchday];
-  const timeLocked = matchdayCutoffMs ? nowMs > matchdayCutoffMs : false;
+  // Time-based lock: once a match's own kickoff has passed, lock it permanently.
+  // Falls back to no lock if kickoff time is unknown (result-lock or live-lock handles those).
+  // NOTE: MATCHDAY_CUTOFFS is intentionally NOT used here — it's for joker snapshotting only.
+  const timeLocked = kickoffMs ? nowMs > kickoffMs : false;
   const isLocked = resultLocked || compLocked || matchLocked || timeLocked;
   const minsUntilKickoff = kickoffMs && !resultLocked && !matchLocked ? (kickoffMs - nowMs) / 60000 : null;
   const showCountdown = minsUntilKickoff !== null && minsUntilKickoff > 0 && minsUntilKickoff <= 45; // countdown shows from 45 min
@@ -18224,12 +18224,23 @@ function App() {
         ...incoming
       };
       GROUP_MATCHES.forEach(m => {
-        const cutoff = MATCHDAY_CUTOFFS[m.matchday];
-        if (!cutoff || nowTs <= cutoff) return; // not past cutoff — allow
-        if (EARLY_MD2_IDS.has(m.id)) return; // always locked — keep existing
-        // Past cutoff: only allow keeping existing value, not changing it
+        // Always lock EARLY_MD2_IDS (played before competition start)
+        if (EARLY_MD2_IDS.has(m.id)) {
+          if (existing[m.id] !== undefined) out[m.id] = existing[m.id];
+          return;
+        }
+        if (m.matchday < COMP_START_MATCHDAY) {
+          if (existing[m.id] !== undefined) out[m.id] = existing[m.id];
+          return;
+        }
+        // Use individual kickoff from results if available, else matchday cutoff as last resort
+        const resultKickoff = results?.group?.[m.id]?.kickoff;
+        const kickoffMs = resultKickoff ? new Date(resultKickoff).getTime() : null;
+        const lockMs = kickoffMs || null; // only lock if we have a known kickoff
+        if (!lockMs || nowTs <= lockMs) return; // unknown kickoff or not yet passed — allow
+        // Past kickoff: preserve whatever was legitimately saved
         if (existing[m.id] !== undefined) {
-          out[m.id] = existing[m.id]; // preserve whatever was saved before cutoff
+          out[m.id] = existing[m.id];
         }
       });
       return out;
