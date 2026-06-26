@@ -130,6 +130,16 @@ const lsSet = (key, val) => {
     localStorage.setItem(`wc26_${key}`, JSON.stringify(val));
   } catch {}
 };
+// PIN security: SHA-256 hash using built-in Web Crypto (no deps, works in all modern browsers)
+const hashPin = async pin => {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return String(pin);
+  }
+};
+const isHashed = s => typeof s === 'string' && s.length === 64 && /^[0-9a-f]+$/.test(s);
 const storage = {
   // Write: localStorage immediately, Firebase in background (fire-and-forget)
   async set(key, value, shared = false) {
@@ -9876,10 +9886,11 @@ const AdminView = ({
       alert('Enter at least a 3-character PIN.');
       return;
     }
+    const hashedNewPin = await hashPin(newPin);
     const np = [...participants, n],
       npins = {
         ...userPins,
-        [n]: newPin
+        [n]: hashedNewPin
       };
     setParticipants(np);
     setUserPins(npins);
@@ -9890,7 +9901,7 @@ const AdminView = ({
       ...pendingUsers,
       [n]: {
         name: n,
-        pin: newPin,
+        pin: hashedNewPin,
         requestedAt: Date.now(),
         status: 'approved',
         approvedBy: 'Admin (manual)',
@@ -9906,7 +9917,7 @@ const AdminView = ({
   };
   const handleDeleteUser = async name => {
     // Show confirmation modal with PIN + score data instead of browser confirm
-    const pin = userPins[name] || '(none)';
+    const pin = userPins[name] ? isHashed(userPins[name]) ? '(PIN set)' : userPins[name] : '(none)';
     const scoreData = scores.find(s => s.name === name);
     setDeleteConfirmUser({
       name,
@@ -9997,7 +10008,7 @@ const AdminView = ({
     }
     const npins = {
       ...userPins,
-      [name]: pin
+      [name]: await hashPin(pin)
     };
     setUserPins(npins);
     lsSet('pins', npins);
@@ -18611,7 +18622,7 @@ function App() {
     }
     (async () => {
       try {
-        const keys = ['participants', 'pins', 'results', 'config', 'admin-pws'];
+        const keys = ['participants', 'results', 'config', 'admin-pws'];
         const snaps = await Promise.all(keys.map(k => fbTimeout(db.collection('wc26').doc(k).get()).catch(() => null)));
         const vals = {};
         snaps.forEach((snap, i) => {
@@ -18623,7 +18634,6 @@ function App() {
           }
         });
         if (vals['participants']) setParticipants(vals['participants']);
-        if (vals['pins']) setUserPins(vals['pins']);
         if (vals['results']) setResults(vals['results']);
         if (vals['config']) setConfig(vals['config']);
         if (vals['admin-pws']) {
@@ -18632,6 +18642,30 @@ function App() {
             ...p,
             ...pws
           }));
+        }
+        // Pins: load separately with auto-migration from plaintext → SHA-256
+        try {
+          const pinsSnap = await fbTimeout(db.collection('wc26').doc('pins').get()).catch(() => null);
+          if (pinsSnap?.exists) {
+            const rawPins = JSON.parse(pinsSnap.data().value || '{}');
+            const needsMigration = Object.values(rawPins).some(p => !isHashed(p));
+            let finalPins = rawPins;
+            if (needsMigration) {
+              const migrated = {};
+              await Promise.all(Object.entries(rawPins).map(async ([k, v]) => {
+                migrated[k] = isHashed(v) ? v : await hashPin(v);
+              }));
+              finalPins = migrated;
+              db.collection('wc26').doc('pins').set({
+                value: JSON.stringify(migrated)
+              }).catch(() => {});
+              console.log('[pins] migrated', Object.keys(migrated).length, 'PINs to SHA-256');
+            }
+            setUserPins(finalPins);
+            lsSet('pins', finalPins);
+          }
+        } catch (_e) {
+          console.warn('pins load error:', _e);
         }
         // Always fetch ALL participants' predictions from Firestore in Phase 2.
         // Using localStorage-only causes stale scores when predictions changed on another device.
@@ -18808,9 +18842,10 @@ function App() {
     // Read fresh from Firebase to avoid stale-closure overwrite when approving multiple users quickly
     const [freshParts, freshPins] = await Promise.all([FB_ON ? fbTimeout(db.collection('wc26').doc('participants').get()).then(s => s.exists ? JSON.parse(s.data().value) : participants).catch(() => participants) : Promise.resolve(participants), FB_ON ? fbTimeout(db.collection('wc26').doc('pins').get()).then(s => s.exists ? JSON.parse(s.data().value) : userPins).catch(() => userPins) : Promise.resolve(userPins)]);
     const newParts = Array.isArray(freshParts) && !freshParts.includes(name) ? [...freshParts, name] : freshParts.includes?.(name) ? freshParts : [...freshParts, name];
+    const rawApprovePin = pendingUsers[name].pin;
     const newPins = {
       ...freshPins,
-      [name]: pendingUsers[name].pin
+      [name]: isHashed(rawApprovePin) ? rawApprovePin : await hashPin(rawApprovePin)
     };
     setParticipants(newParts);
     setUserPins(newPins);
@@ -18905,9 +18940,14 @@ function App() {
     let finalParts = liveParticipants;
     if (existing) {
       const storedPin = userPins[resolvedName] || userPins[name];
-      if (storedPin && storedPin !== pin) {
-        alert('Incorrect PIN. Try again.');
-        return;
+      if (storedPin) {
+        const enteredHash = await hashPin(pin);
+        // Support both hashed (new) and plaintext (legacy pre-migration) PINs
+        const valid = isHashed(storedPin) ? enteredHash === storedPin : pin === storedPin;
+        if (!valid) {
+          alert('Incorrect PIN. Try again.');
+          return;
+        }
       }
     } else {
       if (!pin || pin.length < 3) {
@@ -18919,8 +18959,9 @@ function App() {
         // Check if already in pending (case-insensitive)
         const existingEntry = Object.values(pendingUsers).find(p => p.name?.toLowerCase() === resolvedName.toLowerCase());
         if (existingEntry?.status === 'pending') {
+          // Use stored hashed PIN from pendingUsers (not raw entered pin)
           setPendingName(existingEntry.name);
-          setPendingPin(pin);
+          setPendingPin(existingEntry.pin || (await hashPin(pin)));
           setPendingStatus('waiting');
           return;
         }
@@ -18934,12 +18975,13 @@ function App() {
           alert('That name is already taken. Please use a different name.');
           return;
         }
-        // Submit new pending request
+        // Submit new pending request — store hashed PIN
+        const hashedPendingPin = await hashPin(pin);
         const updated = {
           ...pendingUsers,
           [resolvedName]: {
             name: resolvedName,
-            pin,
+            pin: hashedPendingPin,
             requestedAt: Date.now(),
             status: 'pending'
           }
@@ -18949,7 +18991,7 @@ function App() {
         }).catch(() => {});
         setPendingUsers(updated);
         setPendingName(name);
-        setPendingPin(pin);
+        setPendingPin(hashedPendingPin);
         setPendingStatus('waiting');
         return;
       }
@@ -18957,7 +18999,7 @@ function App() {
       finalParts = [...participants, name];
       const newPins = {
         ...userPins,
-        [name]: pin
+        [name]: await hashPin(pin)
       };
       setParticipants(finalParts);
       setUserPins(newPins);
@@ -19259,7 +19301,7 @@ function App() {
         const finalParts = [...participants, pendingName];
         const newPins = {
           ...userPins,
-          [pendingName]: pendingPin
+          [pendingName]: isHashed(pendingPin) ? pendingPin : await hashPin(pendingPin)
         };
         setParticipants(finalParts);
         setUserPins(newPins);
