@@ -717,6 +717,20 @@ const MATCHDAY_CUTOFFS = {
   // first MD2 kickoff (June 19 19:00 UTC)
   3: new Date('2026-06-24T18:00:00Z').getTime() // first MD3 kickoff (June 24 — Groups B/C start first)
 };
+// Option B: from this date onwards, joker must be locked daily to apply.
+// Group stage (before this) keeps old always-on behaviour so existing scores are unchanged.
+const JOKER_DAILY_CUTOFF_MS = new Date('2026-06-27T00:00:00Z').getTime();
+// Get joker locked for a specific calendar date (Option B — KO era)
+const getJokerForDate = (jokerLockHistory, matchDateStr) => {
+  if (!jokerLockHistory || !matchDateStr) return {
+    team: null,
+    group: null
+  };
+  return jokerLockHistory[matchDateStr] || {
+    team: null,
+    group: null
+  };
+};
 // Returns the joker active at a specific match kickoff timestamp.
 // Falls back to MATCHDAY_CUTOFFS[md] when kickoffMs not available.
 const getJokerForTimestamp = (history, cutoffMs, fallback) => {
@@ -1182,7 +1196,15 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
     // Per-match joker cutoff: use this match's kickoff if available, else fall back to matchday cutoff
     const matchKickoffMs = (kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : kickoffTimes?.[m.id]) || (actual?.kickoff ? new Date(actual.kickoff).getTime() : null);
     const jokerCutoffMs = matchKickoffMs || MATCHDAY_CUTOFFS[m.matchday];
-    const ej = getJokerForTimestamp(jokerHistory, jokerCutoffMs, joker);
+    let ej;
+    if (matchKickoffMs && matchKickoffMs >= JOKER_DAILY_CUTOFF_MS) {
+      // Option B: KO era — joker must be explicitly locked for this calendar day
+      const matchDateStr = new Date(matchKickoffMs).toLocaleDateString('sv');
+      ej = getJokerForDate(userPreds.jokerLockHistory, matchDateStr);
+    } else {
+      // Legacy group stage: use old always-on timestamp logic
+      ej = getJokerForTimestamp(jokerHistory, jokerCutoffMs, joker);
+    }
     const mult = getJokerMultiplier(m, ej.team, ej.group);
     const pts = total * mult;
     matchPts[m.id] = pts;
@@ -2879,7 +2901,15 @@ const PredictionsView = ({
     }
     onSave({
       ...predictions,
-      jokerLockedDate: todayDateStr
+      jokerLockedDate: todayDateStr,
+      jokerLockHistory: {
+        ...(predictions.jokerLockHistory || {}),
+        [todayDateStr]: {
+          team: joker.team || null,
+          group: joker.group || null,
+          lockedAt: Date.now()
+        }
+      }
     });
   };
   const groupProgress = useMemo(() => {
@@ -17736,11 +17766,17 @@ function App() {
         } = scoreMatch(pred, actual, m.home, m.away, true);
         const kickoffMs = _kt instanceof Map ? _kt.get(m.id) : null;
         const cutoffMs = kickoffMs || MATCHDAY_CUTOFFS[m.matchday];
-        const relevant = jh.filter(e => e.setAt <= cutoffMs);
-        const ej = relevant.length ? relevant[relevant.length - 1] : {
-          team: null,
-          group: null
-        };
+        let ej;
+        if (kickoffMs && kickoffMs >= JOKER_DAILY_CUTOFF_MS) {
+          const matchDateStr = new Date(kickoffMs).toLocaleDateString('sv');
+          ej = getJokerForDate(preds.jokerLockHistory, matchDateStr);
+        } else {
+          const relevant = jh.filter(e => e.setAt <= cutoffMs);
+          ej = relevant.length ? relevant[relevant.length - 1] : {
+            team: null,
+            group: null
+          };
+        }
         const mult = getJokerMultiplier(m, ej.team, ej.group);
         const pts = skipped ? 0 : base * mult;
         if (!skipped) total += pts;
