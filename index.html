@@ -17510,6 +17510,60 @@ function App() {
       console.log(`▶ computeUserScore total: ${fullScore.total} (group:${fullScore.groupPoints} ko:${fullScore.koPoints} bonus:${fullScore.bonusPoints})`);
       console.groupEnd();
     };
+    window.debugJoker = username => {
+      const {
+        allPredictions: _ap,
+        kickoffTimes: _kt,
+        results: _res
+      } = _debugRef.current;
+      if (!_ap) {
+        console.warn('App not fully loaded yet');
+        return;
+      }
+      const preds = _ap[username];
+      if (!preds) {
+        console.warn(`No predictions found for "${username}"`);
+        return;
+      }
+      const jh = preds.jokerHistory || [];
+      const joker = preds.joker || {};
+      console.group(`🃏 Joker history for ${username}`);
+      console.log('Current joker:', JSON.stringify(joker));
+      console.log('jokerLockedDate:', preds.jokerLockedDate || '(never locked)');
+      if (!jh.length) {
+        console.log('No jokerHistory entries found.');
+        console.groupEnd();
+        return;
+      }
+      jh.forEach((e, i) => {
+        const ts = e.setAt ? new Date(e.setAt).toISOString() : 'setAt=0 (original)';
+        console.log(`  [${i}] setAt: ${ts} | team: ${e.team || '(none)'} | group: ${e.group || '(none)'}`);
+      });
+      console.log('\n--- Effective joker per match ---');
+      const {
+        group: {}
+      } = _res || {
+        group: {}
+      };
+      GROUP_MATCHES.forEach(m => {
+        const skipped = m.matchday < COMP_START_MATCHDAY || EARLY_MD2_IDS.has(m.id);
+        if (skipped) return;
+        const actual = _res?.group?.[m.id];
+        const hasResult = actual && actual.h !== '' && actual.h != null;
+        if (!hasResult) return;
+        const kickoffMs = _kt instanceof Map ? _kt.get(m.id) : null;
+        const cutoffMs = kickoffMs || MATCHDAY_CUTOFFS[m.matchday];
+        const cutoffStr = new Date(cutoffMs).toISOString();
+        const relevant = jh.filter(e => e.setAt <= cutoffMs);
+        const ej = relevant.length ? relevant[relevant.length - 1] : {
+          team: null,
+          group: null
+        };
+        const mult = getJokerMultiplier(m, ej.team, ej.group);
+        if (mult > 1) console.log(`  ${m.id} ${m.home} v ${m.away} | cutoff:${cutoffStr} | joker at cutoff: team=${ej.team || 'none'} group=${ej.group || 'none'} → ×${mult}`);
+      });
+      console.groupEnd();
+    };
     return () => {
       delete window.debugJoker;
       delete window.debugScore;
