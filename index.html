@@ -16411,9 +16411,193 @@ const MotdBanner = ({
     }
   }, "✕ Got it"));
 };
+
+// ── CHANGE PIN MODAL ─────────────────────────────────────────────
+const ChangePinModal = ({
+  onClose,
+  onSave
+}) => {
+  const [oldPin, setOldPin] = useState('');
+  const [newPin1, setNewPin1] = useState('');
+  const [newPin2, setNewPin2] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const handleSubmit = async e => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    const err = await onSave(oldPin, newPin1, newPin2);
+    setSaving(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setSuccess(true);
+    setTimeout(() => onClose(), 1500);
+  };
+  const iStyle = {
+    width: '100%',
+    padding: '10px 12px',
+    fontSize: 14,
+    border: '1px solid var(--line)',
+    borderRadius: 6,
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+    marginTop: 4
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,.45)',
+      zIndex: 9999,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16
+    },
+    onClick: e => {
+      if (e.target === e.currentTarget) onClose();
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'var(--paper)',
+      borderRadius: 12,
+      padding: 24,
+      width: '100%',
+      maxWidth: 360,
+      boxShadow: '0 8px 40px rgba(0,0,0,.25)',
+      animation: 'fadein .2s ease'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 17
+    }
+  }, "🔑 Change PIN"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      background: 'none',
+      border: 'none',
+      fontSize: 20,
+      cursor: 'pointer',
+      color: 'var(--ink-soft)',
+      lineHeight: 1,
+      padding: 2
+    }
+  }, "×")), success ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: '20px 0'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 32,
+      marginBottom: 8
+    }
+  }, "✅"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 15
+    }
+  }, "PIN updated successfully!")) : /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSubmit
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--ink-soft)',
+      textTransform: 'uppercase',
+      letterSpacing: '.05em'
+    }
+  }, "Current PIN"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: oldPin,
+    onChange: e => setOldPin(e.target.value),
+    placeholder: "Enter current PIN",
+    style: iStyle,
+    autoFocus: true
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--ink-soft)',
+      textTransform: 'uppercase',
+      letterSpacing: '.05em'
+    }
+  }, "New PIN"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: newPin1,
+    onChange: e => setNewPin1(e.target.value),
+    placeholder: "Min 3 characters",
+    style: iStyle
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--ink-soft)',
+      textTransform: 'uppercase',
+      letterSpacing: '.05em'
+    }
+  }, "Confirm New PIN"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: newPin2,
+    onChange: e => setNewPin2(e.target.value),
+    placeholder: "Repeat new PIN",
+    style: iStyle,
+    onKeyDown: e => e.key === 'Enter' && handleSubmit(e)
+  })), error && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12,
+      padding: '8px 12px',
+      background: 'rgba(159,27,27,.08)',
+      border: '1px solid rgba(159,27,27,.25)',
+      borderRadius: 6,
+      fontSize: 12,
+      color: 'var(--burgundy)',
+      fontWeight: 600
+    }
+  }, "⚠️ ", error), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    disabled: saving || !oldPin || !newPin1 || !newPin2,
+    style: {
+      width: '100%',
+      padding: '11px 0',
+      borderRadius: 7,
+      border: 'none',
+      background: !oldPin || !newPin1 || !newPin2 ? 'var(--line)' : 'var(--forest)',
+      color: !oldPin || !newPin1 || !newPin2 ? 'var(--ink-soft)' : 'white',
+      fontWeight: 700,
+      fontSize: 14,
+      cursor: !oldPin || !newPin1 || !newPin2 ? 'not-allowed' : 'pointer',
+      fontFamily: 'inherit'
+    }
+  }, saving ? 'Saving…' : 'Update PIN'))));
+};
 const Header = ({
   user,
   onLogout,
+  onChangePin,
   view,
   setView,
   saveStatus,
@@ -16516,7 +16700,21 @@ const Header = ({
   title: "Sign out"
 }, /*#__PURE__*/React.createElement(LogOut, {
   size: 16
-})))), /*#__PURE__*/React.createElement("nav", {
+})), user && user !== '__guest__' && /*#__PURE__*/React.createElement("button", {
+  style: {
+    background: 'none',
+    border: 'none',
+    padding: '4px 8px',
+    color: 'var(--ink-soft)',
+    cursor: 'pointer',
+    fontSize: 11,
+    fontWeight: 600,
+    borderRadius: 4,
+    border: '1px solid var(--line)'
+  },
+  onClick: onChangePin,
+  title: "Change PIN"
+}, "🔑 PIN"))), /*#__PURE__*/React.createElement("nav", {
   className: "scrollbar",
   style: {
     maxWidth: 1420,
@@ -19460,6 +19658,32 @@ function App() {
     setCurrentUser(null);
     setView('predictions');
   }, []);
+  const [changePinOpen, setChangePinOpen] = useState(false);
+  const handleChangePin = useCallback(async (oldPin, newPin1, newPin2) => {
+    if (newPin1 !== newPin2) {
+      return 'New PINs do not match.';
+    }
+    if (!newPin1 || newPin1.trim().length < 3) {
+      return 'New PIN must be at least 3 characters.';
+    }
+    const stored = userPins[currentUser];
+    if (stored) {
+      const enteredHash = await hashPin(oldPin);
+      const valid = isHashed(stored) ? enteredHash === stored : oldPin === stored;
+      if (!valid) return 'Current PIN is incorrect.';
+    }
+    const newHash = await hashPin(newPin1.trim());
+    const npins = {
+      ...userPins,
+      [currentUser]: newHash
+    };
+    setUserPins(npins);
+    lsSet('pins', npins);
+    if (FB_ON) await db.collection('wc26').doc('pins').set({
+      value: JSON.stringify(npins)
+    }).catch(() => {});
+    return null; // success
+  }, [userPins, currentUser]);
 
   // On mobile, redirect away from views that are hidden in the nav
   const MOBILE_HIDDEN_VIEWS = ['bracket', 'bonus', 'browse', 'rules', 'admin'];
@@ -19724,6 +19948,7 @@ function App() {
   }, /*#__PURE__*/React.createElement("style", null, CSS), /*#__PURE__*/React.createElement(Header, {
     user: currentUser,
     onLogout: handleLogout,
+    onChangePin: () => setChangePinOpen(true),
     view: view,
     setView: v => {
       if (v === 'admin' && !adminAuthed && v !== view) {
@@ -19735,6 +19960,9 @@ function App() {
     saveStatus: saveStatus,
     locked: locked,
     supportTeam: currentSupportTeam
+  }), changePinOpen && /*#__PURE__*/React.createElement(ChangePinModal, {
+    onClose: () => setChangePinOpen(false),
+    onSave: handleChangePin
   }), /*#__PURE__*/React.createElement(LiveMatchBanner, {
     matches: mergedLiveMatches,
     loading: liveLoading,
