@@ -9882,7 +9882,7 @@ const AdminView = ({
       alert(n ? 'Name already exists.' : 'Enter a name.');
       return;
     }
-    if (!newPin || newPin.length < 3) {
+    if (!newPin || newPin.trim().length < 3) {
       alert('Enter at least a 3-character PIN.');
       return;
     }
@@ -10002,7 +10002,7 @@ const AdminView = ({
   };
   const handleResetPin = async name => {
     const pin = resetPins[name] || '';
-    if (!pin || pin.length < 3) {
+    if (!pin || pin.trim().length < 3) {
       alert('Enter a new PIN (min 3 chars).');
       return;
     }
@@ -18950,7 +18950,7 @@ function App() {
         }
       }
     } else {
-      if (!pin || pin.length < 3) {
+      if (!pin || pin.trim().length < 3) {
         alert('Please enter at least a 3-character PIN.');
         return;
       }
