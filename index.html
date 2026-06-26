@@ -4137,7 +4137,8 @@ const LeaderboardView = React.memo(({
   participants,
   allPredictions,
   results,
-  kickoffTimes = new Map()
+  kickoffTimes = new Map(),
+  predsReady = true
 }) => {
   const actualTiebreakSecs = parseTiebreakTime(results.bonus?.tiebreak);
   const scores = useMemo(() => {
@@ -4196,7 +4197,31 @@ const LeaderboardView = React.memo(({
     kicker: `${participants.length} participants`,
     title: "Leaderboard",
     subtitle: matchesDone === 0 ? 'No results entered yet — leaderboard populates as matches are played.' : `${matchesDone}/72 group matches resulted`
-  }), /*#__PURE__*/React.createElement("div", {
+  }), !predsReady && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '8px 14px',
+      marginBottom: 8,
+      background: 'rgba(214,137,42,.08)',
+      border: '1px solid rgba(214,137,42,.25)',
+      borderRadius: 6,
+      fontSize: 12,
+      color: 'var(--amber)',
+      fontWeight: 600
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 12,
+      height: 12,
+      border: '2px solid var(--amber)',
+      borderTopColor: 'transparent',
+      borderRadius: '50%',
+      animation: 'spin 0.8s linear infinite',
+      flexShrink: 0
+    }
+  }), "Syncing scores from server… standings may shift momentarily."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 20,
       display: 'flex',
@@ -19756,7 +19781,8 @@ function App() {
       [currentUser]: predictions
     },
     results: results,
-    kickoffTimes: kickoffTimes
+    kickoffTimes: kickoffTimes,
+    predsReady: predsReady
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'scores'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
