@@ -19432,10 +19432,7 @@ function App() {
     label: "Fan Predictions"
   }, /*#__PURE__*/React.createElement(CrowdView, {
     participants: participants,
-    allPredictions: isGuest ? allPredictions : {
-      ...allPredictions,
-      [currentUser]: predictions
-    },
+    allPredictions: allPredictions,
     results: results,
     currentUser: currentUser,
     predsReady: predsReady
