@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-005'; // bump this on every deploy
+const APP_VERSION = 'v20260627-006'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -2455,9 +2455,21 @@ const MobilePredictionsView = ({
   const joker = predictions.joker || {};
   const jokerLockedDate = predictions.jokerLockedDate || null;
   const jokerLockedToday = jokerLockedDate === todayStr;
-  // Always show empty picks until user locks today — forces fresh daily pick
+  // Local state for pending pick (clears each day, independent of stored joker)
   const isKoEra = Date.now() >= JOKER_DAILY_CUTOFF_MS;
-  const uiJoker = jokerLockedToday ? joker : {};
+  const [pendingJoker, setPendingJoker] = useState({});
+  // Reset pending when day rolls over or user just locked
+  const lastLockedDateRef = useRef(jokerLockedDate);
+  useEffect(() => {
+    if (jokerLockedToday) {
+      lastLockedDateRef.current = todayStr;
+      setPendingJoker({});
+    } else if (lastLockedDateRef.current !== todayStr) {
+      setPendingJoker({});
+      lastLockedDateRef.current = todayStr;
+    }
+  }, [jokerLockedToday, todayStr]);
+  const uiJoker = jokerLockedToday ? joker : pendingJoker;
   const jTeamGroup = uiJoker.team ? GROUP_KEYS.find(g => GROUPS[g].includes(uiJoker.team)) : null;
   const isTriple = uiJoker.team && uiJoker.group && jTeamGroup === uiJoker.group;
   const todayFirstKickoff = useMemo(() => {
@@ -2475,11 +2487,17 @@ const MobilePredictionsView = ({
   const jokerMinsLeft = todayFirstKickoff && !jokerCutoffPassed ? Math.round((todayFirstKickoff - nowTick) / 60000) : null;
   const setJoker = (k, v) => {
     if (locked || jokerLockedToday) return;
-    // In KO era, a fresh pick starts from uiJoker (empty) not the stale stored joker
-    const base = isKoEra ? uiJoker : joker;
-    const newJoker = {
-      ...base,
+    const newPending = {
+      ...pendingJoker,
       [k]: v
+    };
+    setPendingJoker(newPending);
+    const base = isKoEra ? newPending : {
+      ...joker,
+      ...newPending
+    };
+    const newJoker = {
+      ...base
     };
     const existingHist = predictions.jokerHistory || [];
     const baseHist = existingHist.length === 0 && (joker.team || joker.group) ? [{
@@ -2519,6 +2537,7 @@ const MobilePredictionsView = ({
     }
     onSave({
       ...predictions,
+      joker: uiJoker,
       jokerLockedDate: todayStr,
       jokerLockHistory: {
         ...(predictions.jokerLockHistory || {}),
@@ -2529,6 +2548,7 @@ const MobilePredictionsView = ({
         }
       }
     });
+    setPendingJoker({});
   };
   // For matches without a kickoffTime entry, fall back to matchday approximate date
   const mdFallbackStr = {
@@ -2962,10 +2982,17 @@ const PredictionsView = ({
   };
   const setJoker = (k, v) => {
     if (locked || jokerLockedToday) return;
-    const base = isKoEra ? uiJoker : joker;
-    const newJoker = {
-      ...base,
+    const newPending = {
+      ...pendingJoker,
       [k]: v
+    };
+    setPendingJoker(newPending);
+    const base = isKoEra ? newPending : {
+      ...joker,
+      ...newPending
+    };
+    const newJoker = {
+      ...base
     };
     const existingHist = predictions.jokerHistory || [];
     const baseHist = existingHist.length === 0 && (joker.team || joker.group) ? [{
@@ -2994,27 +3021,29 @@ const PredictionsView = ({
     }
   };
   const submitJokerForToday = () => {
-    if (!joker.team && !joker.group) {
+    if (!uiJoker.team && !uiJoker.group) {
       alert('Please select a Joker Team and/or Joker Group first.');
       return;
     }
     if (jokerCutoffPassed) {
       if (!window.confirm(`⚠️ The cutoff for today's matches has passed.\n\nYour joker will NOT count for matches that have already started.\n\nDo you still want to lock it for remaining matches today?`)) return;
     } else {
-      if (!window.confirm(`Lock your Joker for today (${todayDateStr})?\n\n• Joker Team: ${joker.team || '(none)'}\n• Joker Group: ${joker.group ? 'Group ' + joker.group : '(none)'}\n\nYou won't be able to change it until tomorrow.`)) return;
+      if (!window.confirm(`Lock your Joker for today (${todayDateStr})?\n\n• Joker Team: ${uiJoker.team || '(none)'}\n• Joker Group: ${uiJoker.group ? 'Group ' + uiJoker.group : '(none)'}\n\nYou won't be able to change it until tomorrow.`)) return;
     }
     onSave({
       ...predictions,
+      joker: uiJoker,
       jokerLockedDate: todayDateStr,
       jokerLockHistory: {
         ...(predictions.jokerLockHistory || {}),
         [todayDateStr]: {
-          team: joker.team || null,
-          group: joker.group || null,
+          team: uiJoker.team || null,
+          group: uiJoker.group || null,
           lockedAt: Date.now()
         }
       }
     });
+    setPendingJoker({});
   };
   const groupProgress = useMemo(() => {
     const p = {};
@@ -3035,7 +3064,18 @@ const PredictionsView = ({
   const standings = useMemo(() => computeAllStandings(predictions.group || {}), [predictions]);
   // Always show empty picks until user locks today — forces fresh daily pick
   const isKoEra = Date.now() >= JOKER_DAILY_CUTOFF_MS;
-  const uiJoker = jokerLockedToday ? joker : {};
+  const [pendingJoker, setPendingJoker] = useState({});
+  const lastLockedDateRef2 = useRef(jokerLockedDate);
+  useEffect(() => {
+    if (jokerLockedToday) {
+      lastLockedDateRef2.current = todayDateStr;
+      setPendingJoker({});
+    } else if (lastLockedDateRef2.current !== todayDateStr) {
+      setPendingJoker({});
+      lastLockedDateRef2.current = todayDateStr;
+    }
+  }, [jokerLockedToday, todayDateStr]);
+  const uiJoker = jokerLockedToday ? joker : pendingJoker;
   const uiJTeamGroup = uiJoker.team ? GROUP_KEYS.find(g => GROUPS[g].includes(uiJoker.team)) : null;
   const isTriple = uiJoker.team && uiJoker.group && uiJTeamGroup === uiJoker.group;
   const totalPredsMade = Object.values(predictions.group || {}).filter(p => p && p.h !== '' && p.a !== '' && p.h != null && p.a != null).length;
