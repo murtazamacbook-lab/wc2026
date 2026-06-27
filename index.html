@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-003'; // bump this on every deploy
+const APP_VERSION = 'v20260627-004'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -5404,19 +5404,34 @@ const BrowseView = React.memo(({
       fontStyle: 'italic'
     }
   }, "Not set")))), (() => {
+    const toDateSv = ms => new Date(ms).toLocaleDateString('sv');
     const selHist = (viewPreds.jokerHistory || []).map(e => ({
       ...e,
       kind: 'set'
-    }));
-    const lockHist = Object.entries(viewPreds.jokerLockHistory || {}).map(([dateStr, e]) => ({
-      team: e.team,
-      group: e.group,
-      setAt: e.lockedAt || 0,
-      kind: 'lock',
-      dateStr
-    }));
-    const merged = [...selHist, ...lockHist].sort((a, b) => a.setAt - b.setAt);
-    if (!merged.length) return null;
+    })).sort((a, b) => a.setAt - b.setAt);
+    if (!selHist.length) return null;
+    // Inject midnight reset markers between entries that span a date boundary
+    const withResets = [];
+    selHist.forEach((e, i) => {
+      withResets.push(e);
+      const next = selHist[i + 1];
+      if (next) {
+        const d1 = toDateSv(e.setAt),
+          d2 = toDateSv(next.setAt);
+        if (d1 !== d2) withResets.push({
+          kind: 'reset',
+          setAt: new Date(d2 + 'T00:00:00').getTime(),
+          dateStr: d2
+        });
+      }
+    });
+    // If last entry is from before today, also add today's midnight reset
+    const todayDateSv = new Date().toLocaleDateString('sv');
+    if (toDateSv(selHist[selHist.length - 1].setAt) < todayDateSv) withResets.push({
+      kind: 'reset',
+      setAt: new Date(todayDateSv + 'T00:00:00').getTime(),
+      dateStr: todayDateSv
+    });
     return /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 10,
@@ -5432,19 +5447,52 @@ const BrowseView = React.memo(({
         letterSpacing: '.05em',
         textTransform: 'uppercase'
       }
-    }, "Joker Selections"), merged.map((e, i) => {
-      const isCurrent = i === merged.length - 1;
-      const nextEntry = merged[i + 1];
-      const isLockEntry = e.kind === 'lock';
+    }, "Joker Selections"), withResets.map((e, i) => {
+      const isCurrent = i === withResets.length - 1 && e.kind !== 'reset';
+      const nextEntry = withResets[i + 1];
+      const isResetEntry = e.kind === 'reset';
       const dt = new Date(e.setAt);
-      const dateStr = dt.toLocaleDateString('en-GB', {
+      const dateStr = isResetEntry ? e.dateStr : dt.toLocaleDateString('en-GB', {
         day: 'numeric',
         month: 'short'
       });
-      const timeStr = dt.toLocaleTimeString('en-GB', {
+      const timeStr = isResetEntry ? '00:00' : dt.toLocaleTimeString('en-GB', {
         hour: '2-digit',
         minute: '2-digit'
       });
+      // Midnight reset row
+      if (isResetEntry) return /*#__PURE__*/React.createElement("div", {
+        key: `reset-${i}`,
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '4px 0',
+          borderBottom: '1px dashed var(--line-soft)',
+          opacity: 0.7
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: 'var(--ink-soft)',
+          width: 58,
+          flexShrink: 0
+        }
+      }, dateStr), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: 'var(--ink-soft)',
+          width: 40,
+          flexShrink: 0
+        }
+      }, timeStr), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: 'var(--ink-soft)',
+          fontStyle: 'italic',
+          flex: 1
+        }
+      }, "🔄 Midnight reset — joker cleared"));
       const isTripleH = e.team && e.group && GROUP_KEYS.find(g => GROUPS[g].includes(e.team)) === e.group;
       // Compute joker bonus earned while this entry was active
       let jokerBonus = 0,
@@ -5513,17 +5561,7 @@ const BrowseView = React.memo(({
           padding: '1px 5px',
           borderRadius: 3
         }
-      }, "3×"), isLockEntry && /*#__PURE__*/React.createElement("span", {
-        style: {
-          marginLeft: 6,
-          fontSize: 9,
-          fontWeight: 700,
-          color: 'white',
-          background: 'var(--burgundy)',
-          padding: '1px 5px',
-          borderRadius: 3
-        }
-      }, "🔒 LOCKED ", e.dateStr)) : /*#__PURE__*/React.createElement("span", {
+      }, "3×")) : /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 12,
           color: 'var(--ink-soft)',
@@ -5557,7 +5595,7 @@ const BrowseView = React.memo(({
           borderRadius: 3,
           flexShrink: 0
         }
-      }, isLockEntry ? 'today' : 'current') : null);
+      }, "current") : null);
     }));
   })()))));
 });
