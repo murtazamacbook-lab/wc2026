@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-008'; // bump this on every deploy
+const APP_VERSION = 'v20260627-009'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -18355,6 +18355,7 @@ function App() {
           return;
         } // nothing to save
         lastLocalWriteRef.current = Date.now();
+        lastWriteResultsRef.current = Date.now();
         await storage.setJSON('results', newResults, true);
         setResults(newResults);
         // No prediction re-read — leaderboard useMemo recomputes from existing allPredictions state
@@ -18541,6 +18542,7 @@ function App() {
                     ko: newKO
                   };
                   lastLocalWriteRef.current = Date.now();
+                  lastWriteResultsRef.current = Date.now();
                   db.collection('wc26').doc('results').set({
                     value: JSON.stringify(newResults)
                   }).catch(() => {});
@@ -18794,6 +18796,7 @@ function App() {
                     ko: newKO
                   };
                   lastLocalWriteRef.current = Date.now();
+                  lastWriteResultsRef.current = Date.now();
                   db.collection('wc26').doc('results').set({
                     value: JSON.stringify(newResults)
                   }).catch(() => {});
@@ -19234,6 +19237,7 @@ function App() {
   }, [currentUser]);
   const saveResults = useCallback(async newRes => {
     lastLocalWriteRef.current = Date.now();
+    lastWriteResultsRef.current = Date.now();
     // Detect newly-entered results that have exact score predictors → fire shoutout
     if (FB_ON) {
       try {
@@ -19277,6 +19281,7 @@ function App() {
   }, [results, participants, allPredictions, pushComputedStandings, pushComputedResults, autoFetchScorers]);
   const saveConfig = useCallback(async newCfg => {
     lastLocalWriteRef.current = Date.now();
+    lastWriteConfigRef.current = Date.now();
     setConfig(newCfg);
     await storage.setJSON('config', newCfg, true);
   }, []);
@@ -19308,6 +19313,7 @@ function App() {
     setParticipants(newParts);
     setUserPins(newPins);
     lastLocalWriteRef.current = Date.now();
+    lastWritePartsRef.current = Date.now();
     await storage.setJSON('participants', newParts, true);
     await storage.setJSON('pins', newPins, true);
     await savePendingUsers(updated);
@@ -19470,6 +19476,7 @@ function App() {
       setParticipants(finalParts);
       setUserPins(newPins);
       lastLocalWriteRef.current = Date.now();
+      lastWritePartsRef.current = Date.now();
       // Write to localStorage immediately, then await Firestore to confirm registration persists
       lsSet('participants', finalParts);
       lsSet('pins', newPins);
@@ -19557,6 +19564,9 @@ function App() {
   // ── LIVE DATA LISTENERS (participants, pins, results, config) ──
   // These replace the 1-hour poll — all users see changes instantly
   const lastLocalWriteRef = useRef(0); // track our own writes so we don't loop
+  const lastWriteResultsRef = useRef(0); // separate: only suppress results listener echo
+  const lastWriteConfigRef = useRef(0); // separate: only suppress config listener echo
+  const lastWritePartsRef = useRef(0); // separate: only suppress participants/pins listener echo
   const adminLoginAttemptsRef = useRef({
     count: 0,
     lockedUntil: 0
@@ -19573,7 +19583,7 @@ function App() {
     };
     const unsubParts = db.collection('wc26').doc('participants').onSnapshot(snap => {
       try {
-        if (Date.now() - lastLocalWriteRef.current < 2000) return; // ignore echo of our own write
+        if (Date.now() - lastWritePartsRef.current < 2000) return; // ignore echo of our own write
         const parts = parse(snap, null);
         if (Array.isArray(parts)) {
           // Auto-logout if this user was deleted by admin
@@ -19616,7 +19626,7 @@ function App() {
     }, () => {});
     const unsubPins = db.collection('wc26').doc('pins').onSnapshot(snap => {
       try {
-        if (Date.now() - lastLocalWriteRef.current < 2000) return;
+        if (Date.now() - lastWritePartsRef.current < 2000) return;
         const pins = parse(snap, null);
         if (pins && typeof pins === 'object') {
           setUserPins(pins);
@@ -19626,7 +19636,7 @@ function App() {
     }, () => {});
     const unsubResults = db.collection('wc26').doc('results').onSnapshot(snap => {
       try {
-        if (Date.now() - lastLocalWriteRef.current < 2000) return;
+        if (Date.now() - lastWriteResultsRef.current < 2000) return;
         const res = parse(snap, null);
         if (res && typeof res === 'object') {
           setResults(res);
@@ -19636,7 +19646,7 @@ function App() {
     }, () => {});
     const unsubConfig = db.collection('wc26').doc('config').onSnapshot(snap => {
       try {
-        if (Date.now() - lastLocalWriteRef.current < 2000) return;
+        if (Date.now() - lastWriteConfigRef.current < 2000) return;
         const cfg = parse(snap, null);
         if (cfg && typeof cfg === 'object') {
           setConfig(cfg);
@@ -19772,6 +19782,7 @@ function App() {
         setParticipants(finalParts);
         setUserPins(newPins);
         lastLocalWriteRef.current = Date.now();
+        lastWritePartsRef.current = Date.now();
         lsSet('participants', finalParts);
         lsSet('pins', newPins);
         if (FB_ON) {
