@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-007'; // bump this on every deploy
+const APP_VERSION = 'v20260627-008'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -19378,15 +19378,23 @@ function App() {
     // Always check live Firestore participants list to prevent deleted users re-registering
     // from stale localStorage cache on their device
     let liveParticipants = participants;
+    let livePins = userPins;
     if (FB_ON) {
       try {
-        const liveSnap = await fbTimeout(db.collection('wc26').doc('participants').get());
+        const [liveSnap, pinsSnap] = await Promise.all([fbTimeout(db.collection('wc26').doc('participants').get()), fbTimeout(db.collection('wc26').doc('pins').get())]);
         if (liveSnap?.exists) {
           const liveParts = JSON.parse(liveSnap.data().value || '[]');
           if (Array.isArray(liveParts)) {
             liveParticipants = liveParts;
             setParticipants(liveParts);
             lsSet('participants', liveParts);
+          }
+        }
+        if (pinsSnap?.exists) {
+          const lp = JSON.parse(pinsSnap.data().value || '{}');
+          if (lp && typeof lp === 'object') {
+            livePins = lp;
+            setUserPins(lp);
           }
         }
       } catch (_e) {}
@@ -19454,9 +19462,9 @@ function App() {
         return;
       }
       // ── No approval required — create immediately ──────────────────
-      finalParts = [...participants, name];
+      finalParts = [...liveParticipants, name];
       const newPins = {
-        ...userPins,
+        ...livePins,
         [name]: await hashPin(pin)
       };
       setParticipants(finalParts);
