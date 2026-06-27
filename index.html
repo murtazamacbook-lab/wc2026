@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260626-001'; // bump this on every deploy
+const APP_VERSION = 'v20260626-002'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -1245,6 +1245,14 @@ const computeUserScore = (userPreds, actualGroupResults, actualKoResults, actual
     }
     koPoints += pts;
     const rnd = mId <= 88 ? 'R32' : ROUND_FOR(mId);
+    // Team advancement bonus: correct predicted winner earns bracket bonus on top of score pts
+    let predWinner = null;
+    if (pH > pA) predWinner = am.home;else if (pA > pH) predWinner = am.away;else if (pred.pk === am.home || pred.pk === am.away) predWinner = pred.pk;
+    let actualWinner = null;
+    if (eH > eA) actualWinner = am.home;else if (eA > eH) actualWinner = am.away;else actualWinner = actual.pkWinner || null;
+    if (predWinner && actualWinner && predWinner === actualWinner && rnd && SCORING.bracketTeam[rnd]) {
+      bracketPoints += SCORING.bracketTeam[rnd];
+    }
     if (rnd) koRoundPts[rnd] = (koRoundPts[rnd] || 0) + pts;
   }
   // Bonus
@@ -3271,13 +3279,17 @@ const BracketCard = ({
   side,
   isFinal,
   isThirdPlace,
-  bracketPts = 0
+  bracketPts = 0,
+  kickoffMs = null,
+  matchLocked = false
 }) => {
   if (!match) return null;
   const hK = !!match.home,
     aK = !!match.away,
     hasTeams = hK && aK;
   const resultLocked = actual && actual.h !== '' && actual.h != null && actual.a !== '' && actual.a != null;
+  const timeLocked = kickoffMs ? Date.now() > kickoffMs : false;
+  const isLocked = resultLocked || timeLocked || matchLocked;
   const up = pred || {
     h: '',
     a: ''
@@ -3405,7 +3417,7 @@ const BracketCard = ({
       const v = e.target.value;
       if (v === '' || parseInt(v) >= 0 && parseInt(v) <= 20) onSet(match.id, side_, v);
     },
-    disabled: !hasTeams || resultLocked,
+    disabled: !hasTeams || isLocked,
     style: {
       width: 26,
       height: 22,
@@ -3414,13 +3426,13 @@ const BracketCard = ({
       fontFamily: 'JetBrains Mono,monospace',
       fontSize: 11,
       fontWeight: 700,
-      background: !hasTeams || resultLocked ? 'var(--cream2)' : 'white',
+      background: !hasTeams || isLocked ? 'var(--cream2)' : 'white',
       border: '1px solid var(--line)',
       borderRadius: 3,
       color: 'var(--ink)',
       MozAppearance: 'textfield'
     }
-  }))), isDraw && hasTeams && !resultLocked && /*#__PURE__*/React.createElement("div", {
+  }))), isDraw && hasTeams && !isLocked && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 4,
       padding: '4px 0 0',
@@ -3620,7 +3632,9 @@ const BracketView = ({
   predictions,
   onSave,
   results,
-  locked
+  locked,
+  kickoffTimes = new Map(),
+  lockedMatchIds = new Set()
 }) => {
   const [mode, setMode] = useState('list');
   // Toggle bracket-visual class on main-shell so sidebars hide and full width is available
@@ -3813,121 +3827,125 @@ const BracketView = ({
         gridTemplateColumns: isFinal ? '1fr' : 'repeat(auto-fill,minmax(240px,1fr))',
         gap: 8
       }
-    }, ms.map(m => /*#__PURE__*/React.createElement("div", {
-      key: m.id,
-      className: "card",
-      style: {
-        padding: 10,
-        background: isFinal ? '#FFF8E5' : 'var(--paper)',
-        borderColor: isFinal ? 'var(--amber)' : 'var(--line)'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: 'var(--ink-soft)',
-        fontWeight: 600,
-        marginBottom: 6
-      }
-    }, isFinal ? '⚜ FINAL' : isThirdPlace ? '3RD PLACE' : `M${m.id}`, " ", isFinal && /*#__PURE__*/React.createElement(Trophy, {
-      size: 10,
-      style: {
-        display: 'inline',
-        color: 'var(--amber)'
-      }
-    })), [[m.home, 'h', true], [m.away, 'a', true]].map(([team, side, _]) => {
-      const known = !!team;
-      const pred = predictions.ko?.[m.id] || {};
-      const v = side === 'h' ? pred.h ?? '' : pred.a ?? '';
-      const resultLocked = results.ko?.[m.id] && results.ko[m.id].h !== '' && results.ko[m.id].h != null;
+    }, ms.map(m => {
+      const _koKickoff = kickoffTimes.get(m.id) || (results.ko?.[m.id]?.kickoff ? new Date(results.ko[m.id].kickoff).getTime() : null);
+      const _resultLocked = !!(results.ko?.[m.id] && results.ko[m.id].h !== '' && results.ko[m.id].h != null);
+      const _matchLocked = _resultLocked || lockedMatchIds.has(m.id) || (_koKickoff ? Date.now() > _koKickoff : false);
       return /*#__PURE__*/React.createElement("div", {
-        key: side,
+        key: m.id,
+        className: "card",
         style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '3px 0'
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 14
-        }
-      }, known ? TEAM_FLAGS[team] || '⚽' : '○'), /*#__PURE__*/React.createElement("span", {
-        style: {
-          flex: 1,
-          fontSize: 12,
-          fontWeight: 500,
-          color: known ? 'var(--ink)' : 'var(--ink-soft)',
-          fontStyle: known ? 'normal' : 'italic'
-        }
-      }, known ? teamShort(team) : getSlotLabel(m.id, side === 'h' ? 'home' : 'away')), /*#__PURE__*/React.createElement("input", {
-        type: "number",
-        min: "0",
-        max: "20",
-        className: "input-score",
-        value: v,
-        onChange: e => {
-          const nv = e.target.value;
-          if (nv === '' || parseInt(nv) >= 0 && parseInt(nv) <= 20) setKoScore(m.id, side, nv);
-        },
-        disabled: !m.home || !m.away || resultLocked || locked,
-        style: {
-          width: 34,
-          height: 30,
-          fontSize: 12,
-          background: !m.home || !m.away || resultLocked || locked ? 'var(--cream2)' : 'white'
-        }
-      }));
-    }), (() => {
-      const p = predictions.ko?.[m.id] || {};
-      const isDraw = p.h !== '' && p.a !== '' && p.h != null && parseInt(p.h) === parseInt(p.a);
-      if (!isDraw || !m.home || !m.away || locked || results.ko?.[m.id]?.h != null && results.ko[m.id].h !== '') return null;
-      return /*#__PURE__*/React.createElement("div", {
-        style: {
-          marginTop: 6,
-          paddingTop: 6,
-          borderTop: '1px dashed var(--line)'
+          padding: 10,
+          background: isFinal ? '#FFF8E5' : 'var(--paper)',
+          borderColor: isFinal ? 'var(--amber)' : 'var(--line)'
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 10,
-          color: p.pk !== m.home && p.pk !== m.away ? 'var(--burgundy)' : 'var(--ink-soft)',
+          color: 'var(--ink-soft)',
           fontWeight: 600,
-          marginBottom: 4,
-          textAlign: 'center'
+          marginBottom: 6
         }
-      }, "Wins on pens:"), /*#__PURE__*/React.createElement("div", {
+      }, isFinal ? '⚜ FINAL' : isThirdPlace ? '3RD PLACE' : `M${m.id}`, " ", isFinal && /*#__PURE__*/React.createElement(Trophy, {
+        size: 10,
         style: {
-          display: 'flex',
-          gap: 4
+          display: 'inline',
+          color: 'var(--amber)'
         }
-      }, [m.home, m.away].map(t => /*#__PURE__*/React.createElement("button", {
-        key: t,
-        onClick: () => setKoPk(m.id, t),
+      })), [[m.home, 'h', true], [m.away, 'a', true]].map(([team, side, _]) => {
+        const known = !!team;
+        const pred = predictions.ko?.[m.id] || {};
+        const v = side === 'h' ? pred.h ?? '' : pred.a ?? '';
+        return /*#__PURE__*/React.createElement("div", {
+          key: side,
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '3px 0'
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 14
+          }
+        }, known ? TEAM_FLAGS[team] || '⚽' : '○'), /*#__PURE__*/React.createElement("span", {
+          style: {
+            flex: 1,
+            fontSize: 12,
+            fontWeight: 500,
+            color: known ? 'var(--ink)' : 'var(--ink-soft)',
+            fontStyle: known ? 'normal' : 'italic'
+          }
+        }, known ? teamShort(team) : getSlotLabel(m.id, side === 'h' ? 'home' : 'away')), /*#__PURE__*/React.createElement("input", {
+          type: "number",
+          min: "0",
+          max: "20",
+          className: "input-score",
+          value: v,
+          onChange: e => {
+            const nv = e.target.value;
+            if (nv === '' || parseInt(nv) >= 0 && parseInt(nv) <= 20) setKoScore(m.id, side, nv);
+          },
+          disabled: !m.home || !m.away || _matchLocked || locked,
+          style: {
+            width: 34,
+            height: 30,
+            fontSize: 12,
+            background: !m.home || !m.away || _matchLocked || locked ? 'var(--cream2)' : 'white'
+          }
+        }));
+      }), (() => {
+        const p = predictions.ko?.[m.id] || {};
+        const isDraw = p.h !== '' && p.a !== '' && p.h != null && parseInt(p.h) === parseInt(p.a);
+        if (!isDraw || !m.home || !m.away || locked || _matchLocked) return null;
+        return /*#__PURE__*/React.createElement("div", {
+          style: {
+            marginTop: 6,
+            paddingTop: 6,
+            borderTop: '1px dashed var(--line)'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 10,
+            color: p.pk !== m.home && p.pk !== m.away ? 'var(--burgundy)' : 'var(--ink-soft)',
+            fontWeight: 600,
+            marginBottom: 4,
+            textAlign: 'center'
+          }
+        }, "Wins on pens:"), /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: 'flex',
+            gap: 4
+          }
+        }, [m.home, m.away].map(t => /*#__PURE__*/React.createElement("button", {
+          key: t,
+          onClick: () => setKoPk(m.id, t),
+          style: {
+            flex: 1,
+            background: p.pk === t ? 'var(--burgundy)' : 'transparent',
+            color: p.pk === t ? 'white' : 'var(--ink)',
+            border: `1px solid ${p.pk === t ? 'var(--burgundy)' : 'var(--line)'}`,
+            borderRadius: 3,
+            padding: '3px',
+            cursor: 'pointer',
+            fontSize: 11,
+            fontWeight: 600,
+            fontFamily: 'inherit'
+          }
+        }, /*#__PURE__*/React.createElement(Flag, {
+          team: t,
+          size: 11
+        }), " ", teamShort(t).slice(0, 8)))));
+      })(), _resultLocked && /*#__PURE__*/React.createElement("div", {
         style: {
-          flex: 1,
-          background: p.pk === t ? 'var(--burgundy)' : 'transparent',
-          color: p.pk === t ? 'white' : 'var(--ink)',
-          border: `1px solid ${p.pk === t ? 'var(--burgundy)' : 'var(--line)'}`,
-          borderRadius: 3,
-          padding: '3px',
-          cursor: 'pointer',
+          marginTop: 4,
+          textAlign: 'center',
           fontSize: 11,
-          fontWeight: 600,
-          fontFamily: 'inherit'
+          color: 'var(--forest)',
+          fontWeight: 600
         }
-      }, /*#__PURE__*/React.createElement(Flag, {
-        team: t,
-        size: 11
-      }), " ", teamShort(t).slice(0, 8)))));
-    })(), results.ko?.[m.id] && results.ko[m.id].h !== '' && results.ko[m.id].h != null && /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 4,
-        textAlign: 'center',
-        fontSize: 11,
-        color: 'var(--forest)',
-        fontWeight: 600
-      }
-    }, "Result: ", results.ko[m.id].homeTeam ? teamShort(results.ko[m.id].homeTeam) : '?', " ", results.ko[m.id].h, "–", results.ko[m.id].a, " ", results.ko[m.id].awayTeam ? teamShort(results.ko[m.id].awayTeam) : '?')))));
+      }, "Result: ", results.ko[m.id].homeTeam ? teamShort(results.ko[m.id].homeTeam) : '?', " ", results.ko[m.id].h, "–", results.ko[m.id].a, " ", results.ko[m.id].awayTeam ? teamShort(results.ko[m.id].awayTeam) : '?'));
+    })));
   }) : /*#__PURE__*/React.createElement("div", {
     style: {
       overflowX: 'auto',
@@ -3971,7 +3989,9 @@ const BracketView = ({
       gridRow: pos.row,
       side: pos.col <= 5 ? 'left' : 'right',
       isFinal: parseInt(mid) === 104,
-      isThirdPlace: parseInt(mid) === 103
+      isThirdPlace: parseInt(mid) === 103,
+      kickoffMs: kickoffTimes.get(parseInt(mid)) || (results.ko?.[parseInt(mid)]?.kickoff ? new Date(results.ko[parseInt(mid)].kickoff).getTime() : null),
+      matchLocked: lockedMatchIds.has(parseInt(mid))
     });
   })))));
 };
@@ -9888,12 +9908,14 @@ const AdminView = ({
             if (m.home === home && m.away === away || m.home === away && m.away === home) {
               const swap = m.home === away,
                 pk = isPen ? pkHome > pkAway ? home : away : null;
+              const koKickoff = f.kickoff || f.datetime || f.matchDate || f.date || f.scheduled || null;
               newKoResults[mId] = {
                 h: String(swap ? aG : hG),
                 a: String(swap ? hG : aG),
                 homeTeam: m.home,
                 awayTeam: m.away,
-                pkWinner: pk || undefined
+                pkWinner: pk || undefined,
+                kickoff: koKickoff || undefined
               };
               log.push('✅ [KO M' + mId + '] ' + m.home + ' ' + (swap ? aG : hG) + '–' + (swap ? hG : aG) + ' ' + m.away + (pk ? ' (PK:' + pk + ')' : ''));
               matched = true;
@@ -16820,8 +16842,7 @@ const Header = ({
   k: 'bracket',
   l: 'Bracket',
   I: Trophy,
-  hide: user === '__guest__',
-  mobileHide: true
+  hide: user === '__guest__'
 }, {
   k: 'bonus',
   l: 'Bonus Picks',
@@ -18738,6 +18759,9 @@ function App() {
       if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v)) v += '+05:00';
       return v;
     };
+    const {
+      bracket: koBrkt
+    } = buildActualBracket(results.group || {}, results.ko || {});
     mergedLiveMatches.forEach(m => {
       const status = (m.status || m.matchStatus || m.state || '').toLowerCase().trim();
       const minute = m.minute ?? m.elapsed ?? m.time ?? null;
@@ -18756,10 +18780,22 @@ function App() {
       const h = tn(m.home || m.homeTeam || m.home_team || m.team_home);
       const a = tn(m.away || m.awayTeam || m.away_team || m.team_away);
       const gm = GROUP_MATCHES.find(x => x.home === h && x.away === a || x.home === a && x.away === h);
-      if (gm) ids.add(gm.id);
+      if (gm) {
+        ids.add(gm.id);
+        return;
+      }
+      // Also lock KO matches when live or near kickoff
+      for (let mId = 73; mId <= 104; mId++) {
+        const bm = koBrkt[mId];
+        if (!bm?.home || !bm?.away) continue;
+        if (bm.home === h && bm.away === a || bm.home === a && bm.away === h) {
+          ids.add(mId);
+          break;
+        }
+      }
     });
     return ids;
-  }, [mergedLiveMatches, nowMs]); // nowMs re-triggers every 30 s near kickoff
+  }, [mergedLiveMatches, nowMs, results]); // nowMs re-triggers every 30 s near kickoff
 
   // Map: GROUP_MATCHES ID → kickoff timestamp (ms) — used for countdown timer
   const kickoffTimes = useMemo(() => {
@@ -18780,6 +18816,9 @@ function App() {
       if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(v)) v += '+05:00';
       return v;
     };
+    const {
+      bracket: koBrktKT
+    } = buildActualBracket(results.group || {}, results.ko || {});
     mergedLiveMatches.forEach(m => {
       const rawDt = m._kickoffNorm ?? normDt(m.kickoff ?? m.datetime ?? m.matchDate ?? m.date ?? m.scheduled ?? null);
       if (!rawDt) return;
@@ -18788,10 +18827,22 @@ function App() {
       const h = tn(m.home || m.homeTeam || m.home_team || m.team_home);
       const a = tn(m.away || m.awayTeam || m.away_team || m.team_away);
       const gm = GROUP_MATCHES.find(x => x.home === h && x.away === a || x.home === a && x.away === h);
-      if (gm) map.set(gm.id, kickoff);
+      if (gm) {
+        map.set(gm.id, kickoff);
+        return;
+      }
+      // Also map KO matches
+      for (let mId = 73; mId <= 104; mId++) {
+        const bm = koBrktKT[mId];
+        if (!bm?.home || !bm?.away) continue;
+        if (bm.home === h && bm.away === a || bm.home === a && bm.away === h) {
+          map.set(mId, kickoff);
+          break;
+        }
+      }
     });
     return map;
-  }, [mergedLiveMatches]);
+  }, [mergedLiveMatches, results]);
 
   // ── KICKOFF COUNTDOWN: watch kickoffTimes for last-15s window ─────
   useEffect(() => {
@@ -19795,7 +19846,7 @@ function App() {
   }, [userPins, currentUser]);
 
   // On mobile, redirect away from views that are hidden in the nav
-  const MOBILE_HIDDEN_VIEWS = ['bracket', 'bonus', 'browse', 'rules', 'admin'];
+  const MOBILE_HIDDEN_VIEWS = ['bonus', 'browse', 'rules', 'admin'];
   const isMobile = useMobile();
   useEffect(() => {
     if (isMobile && MOBILE_HIDDEN_VIEWS.includes(view)) {
@@ -20191,7 +20242,9 @@ function App() {
     predictions: predictions,
     onSave: savePredictions,
     results: results,
-    locked: koLocked
+    locked: koLocked,
+    kickoffTimes: kickoffTimes,
+    lockedMatchIds: lockedMatchIds
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'bonus' && !isGuest
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
