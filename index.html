@@ -112,6 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
+const APP_VERSION = 'v20260626-001'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -13909,7 +13910,55 @@ const AdminView = ({
       color: config.chatEnabled !== false ? 'var(--forest)' : 'var(--ink-soft)',
       fontWeight: 600
     }
-  }, config.chatEnabled !== false ? '✓ Chat is enabled — players can send messages' : '✗ Chat is disabled — chat panel is hidden for all players')), /*#__PURE__*/React.createElement("div", {
+  }, config.chatEnabled !== false ? '✓ Chat is enabled — players can send messages' : '✗ Chat is disabled — chat panel is hidden for all players')), isSuperAdmin && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 20,
+      borderLeft: '3px solid var(--forest)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 16,
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    className: "display",
+    style: {
+      fontSize: 17,
+      fontWeight: 700,
+      margin: '0 0 4px'
+    }
+  }, "🔄 Publish New Version"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      margin: 0
+    }
+  }, "Writes the current app version to Firestore. All users with the page open will see a \"Refresh now\" banner within 2 minutes.")), /*#__PURE__*/React.createElement("button", {
+    onClick: async () => {
+      if (!window.confirm('Publish new version? All users will be prompted to refresh.')) return;
+      await db.collection('wc26').doc('app-version').set({
+        version: APP_VERSION,
+        publishedAt: Date.now()
+      });
+      alert(`✅ Version ${APP_VERSION} published. Users will be notified to refresh.`);
+    },
+    style: {
+      padding: '9px 20px',
+      borderRadius: 6,
+      border: 'none',
+      background: 'var(--forest)',
+      color: 'white',
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      whiteSpace: 'nowrap'
+    }
+  }, "📢 Notify All Users"))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 20,
@@ -19694,6 +19743,23 @@ function App() {
     }, () => {});
     return () => unsub();
   }, [currentUser]);
+
+  // ── APP VERSION CHECK: detect new deploy and prompt all users to reload ──
+  const [newVersionAvailable, setNewVersionAvailable] = useState(false);
+  useEffect(() => {
+    if (!FB_ON) return;
+    const check = async () => {
+      try {
+        const snap = await fbTimeout(db.collection('wc26').doc('app-version').get()).catch(() => null);
+        if (!snap?.exists) return;
+        const serverVersion = snap.data()?.version;
+        if (serverVersion && serverVersion !== APP_VERSION) setNewVersionAvailable(true);
+      } catch (_e) {}
+    };
+    check(); // check on load
+    const interval = setInterval(check, 120000); // re-check every 2 minutes
+    return () => clearInterval(interval);
+  }, []);
   const handleLogout = useCallback(async () => {
     try {
       sessionStorage.removeItem('wc26_cu');
@@ -20006,7 +20072,59 @@ function App() {
   }), changePinOpen && /*#__PURE__*/React.createElement(ChangePinModal, {
     onClose: () => setChangePinOpen(false),
     onSave: handleChangePin
-  }), /*#__PURE__*/React.createElement(LiveMatchBanner, {
+  }), newVersionAvailable && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      bottom: 16,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 9999,
+      background: '#1b5e3f',
+      color: 'white',
+      borderRadius: 10,
+      padding: '12px 20px',
+      boxShadow: '0 4px 24px rgba(0,0,0,.3)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      maxWidth: 420,
+      width: 'calc(100% - 32px)',
+      animation: 'fadein .3s ease'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 20
+    }
+  }, "🔄"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 14
+    }
+  }, "New version available"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      opacity: .85,
+      marginTop: 2
+    }
+  }, "Refresh to get the latest updates & fixes.")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => window.location.reload(),
+    style: {
+      background: 'white',
+      color: '#1b5e3f',
+      border: 'none',
+      borderRadius: 6,
+      padding: '8px 14px',
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: 'pointer',
+      whiteSpace: 'nowrap',
+      fontFamily: 'inherit'
+    }
+  }, "Refresh now")), /*#__PURE__*/React.createElement(LiveMatchBanner, {
     matches: mergedLiveMatches,
     loading: liveLoading,
     onTeamClick: handleBannerTeamClick
