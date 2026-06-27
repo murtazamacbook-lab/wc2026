@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-004'; // bump this on every deploy
+const APP_VERSION = 'v20260627-005'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -8173,39 +8173,7 @@ const LiveDataView = React.memo(({
       fontSize: 12,
       fontWeight: 700
     }
-  }, "💾 Save to Firebase")))), !window.__RAPID_KEY && !FUNC_BASE && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 16,
-      marginBottom: 20,
-      maxWidth: 520
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "micro-caps",
-    style: {
-      marginBottom: 6
-    }
-  }, "API Key (optional override)"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    type: "password",
-    value: syncKey,
-    onChange: e => setSyncKey(e.target.value),
-    placeholder: "Paste RapidAPI key…",
-    style: {
-      flex: 1,
-      padding: '9px 12px',
-      fontSize: 13,
-      border: '1px solid var(--line)',
-      borderRadius: 4,
-      fontFamily: 'JetBrains Mono,monospace',
-      background: 'white',
-      color: 'var(--ink)'
-    }
-  }))), adminRole === 'superadmin' || adminRole === 'subadmin' ? /*#__PURE__*/React.createElement("div", {
+  }, "💾 Save to Firebase")))), !window.__RAPID_KEY && !FUNC_BASE && null, adminRole === 'superadmin' || adminRole === 'subadmin' ? /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 20
     }
@@ -8273,74 +8241,7 @@ const LiveDataView = React.memo(({
         whiteSpace: 'nowrap'
       }
     }, loadingPanel === espnKey ? '⏳ Loading…' : label);
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      fontWeight: 700,
-      color: 'var(--ink-soft)',
-      marginBottom: 6,
-      letterSpacing: '.05em'
-    }
-  }, "📡 RapidAPI (key required — use for Standings & Top Scorers only)"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 8,
-      flexWrap: 'wrap'
-    }
-  }, [{
-    key: 'live',
-    label: '🔴 Live (fallback)',
-    ep: 'live',
-    params: '',
-    bg: '#7f8c8d'
-  }, {
-    key: 'results',
-    label: '✅ Results (fallback)',
-    ep: 'results',
-    params: '',
-    bg: '#7f8c8d'
-  }, {
-    key: 'upcoming',
-    label: '📅 Upcoming (fallback)',
-    ep: 'upcoming',
-    params: '',
-    bg: '#7f8c8d'
-  }, {
-    key: 'standings',
-    label: '📊 Standings',
-    ep: 'standings',
-    params: '',
-    bg: '#9f1b1b'
-  }, {
-    key: 'scorers',
-    label: '⚽ Top Scorers',
-    ep: 'scorers',
-    params: '',
-    bg: '#6c3483'
-  }].map(({
-    key,
-    label,
-    ep,
-    params,
-    bg
-  }) => /*#__PURE__*/React.createElement("button", {
-    key: key + '-rapid',
-    onClick: () => key === 'standings' ? handleFetchStandings() : fetchPanel(key, ep, params),
-    disabled: loadingPanel === key || key === 'standings' && standingsLoading || !syncKey.trim() && !FUNC_BASE,
-    style: {
-      background: loadingPanel === key || key === 'standings' && standingsLoading ? '#888' : bg,
-      color: 'white',
-      border: 'none',
-      borderRadius: 6,
-      padding: '9px 16px',
-      fontSize: 12,
-      fontWeight: 700,
-      cursor: 'pointer',
-      fontFamily: 'inherit',
-      opacity: !syncKey.trim() && !FUNC_BASE ? 0.4 : 1,
-      whiteSpace: 'nowrap'
-    }
-  }, loadingPanel === key || key === 'standings' && standingsLoading ? '⏳ Loading…' : label)))) : /*#__PURE__*/React.createElement("div", {
+  }))) : /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 20
     }
@@ -11591,7 +11492,7 @@ const AdminView = ({
       color: 'var(--ink-soft)',
       marginTop: 1
     }
-  }, "Pulls today\\'s completed scores from ESPN\\'s free public API. Use as a fallback when RapidAPI is missing data."))), /*#__PURE__*/React.createElement("div", {
+  }, "Pulls today's completed scores from ESPN's free public API — primary and only sync source."))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
