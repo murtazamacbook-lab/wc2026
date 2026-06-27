@@ -19804,7 +19804,9 @@ function App() {
         const snap = await fbTimeout(db.collection('wc26').doc('app-version').get()).catch(() => null);
         if (!snap?.exists) return;
         const serverVersion = snap.data()?.version;
-        if (serverVersion && serverVersion !== APP_VERSION) setNewVersionAvailable(true);
+        // Only show banner when server has a NEWER version than the code running right now.
+        // If this client's APP_VERSION already equals or is newer, stay silent.
+        if (serverVersion && serverVersion !== APP_VERSION && serverVersion > APP_VERSION) setNewVersionAvailable(true);
       } catch (_e) {}
     };
     check(); // check on load
@@ -20175,7 +20177,22 @@ function App() {
       whiteSpace: 'nowrap',
       fontFamily: 'inherit'
     }
-  }, "Refresh now")), /*#__PURE__*/React.createElement(LiveMatchBanner, {
+  }, "Refresh now"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setNewVersionAvailable(false),
+    style: {
+      background: 'transparent',
+      border: '1px solid rgba(255,255,255,.4)',
+      color: 'white',
+      borderRadius: 6,
+      padding: '6px 10px',
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      lineHeight: 1
+    },
+    title: "Dismiss"
+  }, "✕")), /*#__PURE__*/React.createElement(LiveMatchBanner, {
     matches: mergedLiveMatches,
     loading: liveLoading,
     onTeamClick: handleBannerTeamClick
