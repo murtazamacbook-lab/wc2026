@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-001'; // bump this on every deploy
+const APP_VERSION = 'v20260627-002'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -19163,6 +19163,21 @@ function App() {
       });
       return out;
     };
+    // KO prediction guard: strip KO changes for matches whose result is already entered or kickoff has passed
+    const sanitizeKo = (incoming, existing = {}) => {
+      const out = {
+        ...incoming
+      };
+      for (let mId = 73; mId <= 104; mId++) {
+        const resultEntered = results?.ko?.[mId] && results.ko[mId].h != null && results.ko[mId].h !== '';
+        const kickoffMs = results?.ko?.[mId]?.kickoff ? new Date(results.ko[mId].kickoff).getTime() : null;
+        const pastKickoff = kickoffMs && nowTs > kickoffMs;
+        if (resultEntered || pastKickoff) {
+          if (existing[mId] !== undefined) out[mId] = existing[mId];else delete out[mId];
+        }
+      }
+      return out;
+    };
     setPredictions(newPreds);
     setSaveStatus('saving');
     // Merge with latest Firestore copy so a second tab/device can't clobber the other's changes.
@@ -19181,17 +19196,21 @@ function App() {
               ...(remote.group || {}),
               ...(newPreds.group || {})
             }, remote.group || {}),
-            ko: {
+            ko: sanitizeKo({
               ...(remote.ko || {}),
               ...(newPreds.ko || {})
-            },
+            }, remote.ko || {}),
             bonus: {
               ...(remote.bonus || {}),
               ...(newPreds.bonus || {})
             },
             joker: newPreds.joker || remote.joker || {},
             jokerHistory: newPreds.jokerHistory || remote.jokerHistory || [],
-            jokerLockedDate: newPreds.jokerLockedDate || remote.jokerLockedDate || null
+            jokerLockedDate: newPreds.jokerLockedDate || remote.jokerLockedDate || null,
+            jokerLockHistory: {
+              ...(remote.jokerLockHistory || {}),
+              ...(newPreds.jokerLockHistory || {})
+            }
           };
         }
       } catch (_e) {/* network error — write what we have */}
