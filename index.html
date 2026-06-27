@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260626-003'; // bump this on every deploy
+const APP_VERSION = 'v20260627-001'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -2455,8 +2455,11 @@ const MobilePredictionsView = ({
   const joker = predictions.joker || {};
   const jokerLockedDate = predictions.jokerLockedDate || null;
   const jokerLockedToday = jokerLockedDate === todayStr;
-  const jTeamGroup = joker.team ? GROUP_KEYS.find(g => GROUPS[g].includes(joker.team)) : null;
-  const isTriple = joker.team && joker.group && jTeamGroup === joker.group;
+  // Always show empty picks until user locks today — forces fresh daily pick
+  const isKoEra = Date.now() >= JOKER_DAILY_CUTOFF_MS;
+  const uiJoker = jokerLockedToday ? joker : {};
+  const jTeamGroup = uiJoker.team ? GROUP_KEYS.find(g => GROUPS[g].includes(uiJoker.team)) : null;
+  const isTriple = uiJoker.team && uiJoker.group && jTeamGroup === uiJoker.group;
   const todayFirstKickoff = useMemo(() => {
     const todayStart = new Date(todayStr + 'T00:00:00').getTime();
     const todayEnd = todayStart + 86400000;
@@ -2472,8 +2475,10 @@ const MobilePredictionsView = ({
   const jokerMinsLeft = todayFirstKickoff && !jokerCutoffPassed ? Math.round((todayFirstKickoff - nowTick) / 60000) : null;
   const setJoker = (k, v) => {
     if (locked || jokerLockedToday) return;
+    // In KO era, a fresh pick starts from uiJoker (empty) not the stale stored joker
+    const base = isKoEra ? uiJoker : joker;
     const newJoker = {
-      ...joker,
+      ...base,
       [k]: v
     };
     const existingHist = predictions.jokerHistory || [];
@@ -2503,18 +2508,26 @@ const MobilePredictionsView = ({
     }
   };
   const submitJokerForToday = () => {
-    if (!joker.team && !joker.group) {
+    if (!uiJoker.team && !uiJoker.group) {
       alert('Please select a Joker Team and/or Joker Group first.');
       return;
     }
     if (jokerCutoffPassed) {
       if (!window.confirm('⚠️ Cutoff has passed. Lock anyway for remaining matches?')) return;
     } else {
-      if (!window.confirm(`Lock Joker for today?\n\n• Team: ${joker.team || '(none)'}\n• Group: ${joker.group ? 'Group ' + joker.group : '(none)'}`)) return;
+      if (!window.confirm(`Lock Joker for today?\n\n• Team: ${uiJoker.team || '(none)'}\n• Group: ${uiJoker.group ? 'Group ' + uiJoker.group : '(none)'}`)) return;
     }
     onSave({
       ...predictions,
-      jokerLockedDate: todayStr
+      jokerLockedDate: todayStr,
+      jokerLockHistory: {
+        ...(predictions.jokerLockHistory || {}),
+        [todayStr]: {
+          team: uiJoker.team || null,
+          group: uiJoker.group || null,
+          lockedAt: Date.now()
+        }
+      }
     });
   };
   // For matches without a kickoffTime entry, fall back to matchday approximate date
@@ -2669,7 +2682,7 @@ const MobilePredictionsView = ({
       color: 'var(--ink)',
       lineHeight: 1.5
     }
-  }, joker.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[joker.team] || '', " ", /*#__PURE__*/React.createElement("strong", null, joker.team), joker.group ? ' · ' : ''), joker.group && /*#__PURE__*/React.createElement("span", null, "Group ", /*#__PURE__*/React.createElement("strong", null, joker.group)), isTriple && /*#__PURE__*/React.createElement("span", {
+  }, uiJoker.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[uiJoker.team] || '', " ", /*#__PURE__*/React.createElement("strong", null, uiJoker.team), uiJoker.group ? ' · ' : ''), uiJoker.group && /*#__PURE__*/React.createElement("span", null, "Group ", /*#__PURE__*/React.createElement("strong", null, uiJoker.group)), isTriple && /*#__PURE__*/React.createElement("span", {
     style: {
       marginLeft: 6,
       fontSize: 10,
@@ -2701,16 +2714,16 @@ const MobilePredictionsView = ({
       marginBottom: 5
     }
   }, "Joker Team"), /*#__PURE__*/React.createElement(TeamSearchInput, {
-    value: joker.team || '',
+    value: uiJoker.team || '',
     onChange: v => setJoker('team', v),
     placeholder: "Pick a team…"
-  }), joker.team && jTeamGroup && /*#__PURE__*/React.createElement("div", {
+  }), uiJoker.team && jTeamGroup && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)',
       marginTop: 3
     }
-  }, TEAM_FLAGS[joker.team], " plays in ", /*#__PURE__*/React.createElement("strong", null, "Group ", jTeamGroup))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, TEAM_FLAGS[uiJoker.team], " plays in ", /*#__PURE__*/React.createElement("strong", null, "Group ", jTeamGroup))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       fontWeight: 700,
@@ -2720,13 +2733,13 @@ const MobilePredictionsView = ({
       marginBottom: 5
     }
   }, "Joker Group"), /*#__PURE__*/React.createElement("select", {
-    value: joker.group || '',
+    value: uiJoker.group || '',
     onChange: e => setJoker('group', e.target.value),
     style: {
       width: '100%',
       padding: '10px 12px',
       fontSize: 14,
-      border: `1px solid ${joker.group ? 'var(--forest)' : 'var(--line)'}`,
+      border: `1px solid ${uiJoker.group ? 'var(--forest)' : 'var(--line)'}`,
       borderRadius: 6,
       background: 'white',
       fontFamily: 'inherit',
@@ -2737,7 +2750,7 @@ const MobilePredictionsView = ({
   }, "Pick a group…"), GROUP_KEYS.map(g => /*#__PURE__*/React.createElement("option", {
     key: g,
     value: g
-  }, "Group ", g, " — ", GROUPS[g].map(t => teamShort(t)).join(', ')))))), (joker.team || joker.group) && /*#__PURE__*/React.createElement("div", {
+  }, "Group ", g, " — ", GROUPS[g].map(t => teamShort(t)).join(', ')))))), (uiJoker.team || uiJoker.group) && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10,
       padding: '8px 12px',
@@ -2751,13 +2764,13 @@ const MobilePredictionsView = ({
       fontWeight: 700,
       color: isTriple ? 'var(--burgundy)' : 'var(--amber)'
     }
-  }, isTriple ? `🃏 TRIPLE — ${joker.team} matches score 3×` : `${joker.team ? `${TEAM_FLAGS[joker.team] || ''} ${joker.team} → 2×` : ''} ${joker.group ? `Group ${joker.group} → 2×` : ''}`), /*#__PURE__*/React.createElement("div", {
+  }, isTriple ? `🃏 TRIPLE — ${uiJoker.team} matches score 3×` : `${uiJoker.team ? `${TEAM_FLAGS[uiJoker.team] || ''} ${uiJoker.team} → 2×` : ''} ${uiJoker.group ? `Group ${uiJoker.group} → 2×` : ''}`), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)',
       marginTop: 3
     }
-  }, "Applies from this moment to all upcoming matches.")), (joker.team || joker.group) && !jokerCutoffPassed && /*#__PURE__*/React.createElement("div", {
+  }, "Applies from this moment to all upcoming matches.")), (uiJoker.team || uiJoker.group) && !jokerCutoffPassed && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8,
       display: 'flex',
@@ -2788,17 +2801,17 @@ const MobilePredictionsView = ({
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: submitJokerForToday,
-    disabled: !joker.team && !joker.group,
+    disabled: !uiJoker.team && !uiJoker.group,
     style: {
       flex: 1,
       padding: '10px 0',
       borderRadius: 6,
       border: 'none',
-      background: joker.team || joker.group ? 'var(--burgundy)' : 'var(--line)',
-      color: joker.team || joker.group ? 'white' : 'var(--ink-soft)',
+      background: uiJoker.team || uiJoker.group ? 'var(--burgundy)' : 'var(--line)',
+      color: uiJoker.team || uiJoker.group ? 'white' : 'var(--ink-soft)',
       fontWeight: 700,
       fontSize: 13,
-      cursor: joker.team || joker.group ? 'pointer' : 'not-allowed',
+      cursor: uiJoker.team || uiJoker.group ? 'pointer' : 'not-allowed',
       fontFamily: 'inherit'
     }
   }, "🔒 Lock Joker"), (joker.team || joker.group) && todayFirstKickoff && !jokerCutoffPassed && jokerMinsLeft !== null && /*#__PURE__*/React.createElement("span", {
@@ -2949,13 +2962,12 @@ const PredictionsView = ({
   };
   const setJoker = (k, v) => {
     if (locked || jokerLockedToday) return;
+    const base = isKoEra ? uiJoker : joker;
     const newJoker = {
-      ...joker,
+      ...base,
       [k]: v
     };
     const existingHist = predictions.jokerHistory || [];
-    // On the very first change, snapshot the ORIGINAL joker as setAt=0 so all
-    // prior matchdays that already happened still get the correct multiplier.
     const baseHist = existingHist.length === 0 && (joker.team || joker.group) ? [{
       team: joker.team || null,
       group: joker.group || null,
@@ -2971,7 +2983,6 @@ const PredictionsView = ({
       joker: newJoker,
       jokerHistory: newHist
     });
-    // Backup joker history to a separate Firestore doc so it survives any prediction overwrites
     if (FB_ON && window.__db) {
       window.__db.collection('wc26-joker-backup').doc(currentUser).set({
         joker: newJoker,
@@ -3022,8 +3033,11 @@ const PredictionsView = ({
   }, [predictions]);
   const totalDone = Object.values(groupProgress).reduce((s, p) => s + p.done, 0);
   const standings = useMemo(() => computeAllStandings(predictions.group || {}), [predictions]);
-  const jTeamGroup = joker.team ? GROUP_KEYS.find(g => GROUPS[g].includes(joker.team)) : null;
-  const isTriple = joker.team && joker.group && jTeamGroup === joker.group;
+  // Always show empty picks until user locks today — forces fresh daily pick
+  const isKoEra = Date.now() >= JOKER_DAILY_CUTOFF_MS;
+  const uiJoker = jokerLockedToday ? joker : {};
+  const uiJTeamGroup = uiJoker.team ? GROUP_KEYS.find(g => GROUPS[g].includes(uiJoker.team)) : null;
+  const isTriple = uiJoker.team && uiJoker.group && uiJTeamGroup === uiJoker.group;
   const totalPredsMade = Object.values(predictions.group || {}).filter(p => p && p.h !== '' && p.a !== '' && p.h != null && p.a != null).length;
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
     kicker: "Stage 1 of 2",
@@ -3129,7 +3143,7 @@ const PredictionsView = ({
       color: 'var(--ink-soft)',
       marginTop: 3
     }
-  }, joker.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[joker.team] || '', " ", /*#__PURE__*/React.createElement("strong", null, joker.team), " (team)", joker.group ? ' · ' : ''), joker.group && /*#__PURE__*/React.createElement("span", null, "Group ", /*#__PURE__*/React.createElement("strong", null, joker.group), " (group)"), isTriple && /*#__PURE__*/React.createElement("span", {
+  }, uiJoker.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[uiJoker.team] || '', " ", /*#__PURE__*/React.createElement("strong", null, uiJoker.team), " (team)", uiJoker.group ? ' · ' : ''), uiJoker.group && /*#__PURE__*/React.createElement("span", null, "Group ", /*#__PURE__*/React.createElement("strong", null, uiJoker.group), " (group)"), isTriple && /*#__PURE__*/React.createElement("span", {
     style: {
       marginLeft: 8,
       fontSize: 11,
@@ -3157,28 +3171,28 @@ const PredictionsView = ({
       marginBottom: 6
     }
   }, "Joker Team"), /*#__PURE__*/React.createElement(TeamSearchInput, {
-    value: joker.team || '',
+    value: uiJoker.team || '',
     onChange: v => setJoker('team', v),
     placeholder: "Pick a team…"
-  }), joker.team && jTeamGroup && /*#__PURE__*/React.createElement("div", {
+  }), uiJoker.team && uiJTeamGroup && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)',
       marginTop: 4
     }
-  }, TEAM_FLAGS[joker.team], " plays in ", /*#__PURE__*/React.createElement("strong", null, "Group ", jTeamGroup))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, TEAM_FLAGS[uiJoker.team], " plays in ", /*#__PURE__*/React.createElement("strong", null, "Group ", uiJTeamGroup))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "micro-caps",
     style: {
       marginBottom: 6
     }
   }, "Joker Group"), /*#__PURE__*/React.createElement("select", {
-    value: joker.group || '',
+    value: uiJoker.group || '',
     onChange: e => setJoker('group', e.target.value),
     style: {
       width: '100%',
       padding: '10px 12px',
       fontSize: 14,
-      border: `1px solid ${joker.group ? 'var(--forest)' : 'var(--line)'}`,
+      border: `1px solid ${uiJoker.group ? 'var(--forest)' : 'var(--line)'}`,
       borderRadius: 4,
       background: 'white',
       fontFamily: 'inherit',
@@ -3189,7 +3203,7 @@ const PredictionsView = ({
   }, "Pick a group…"), GROUP_KEYS.map(g => /*#__PURE__*/React.createElement("option", {
     key: g,
     value: g
-  }, "Group ", g, " — ", GROUPS[g].map(t => teamShort(t)).join(', ')))))), (joker.team || joker.group) && /*#__PURE__*/React.createElement("div", {
+  }, "Group ", g, " — ", GROUPS[g].map(t => teamShort(t)).join(', ')))))), (uiJoker.team || uiJoker.group) && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 12,
       padding: '8px 12px',
@@ -3203,7 +3217,7 @@ const PredictionsView = ({
       fontWeight: 600,
       color: isTriple ? 'var(--burgundy)' : 'var(--amber)'
     }
-  }, isTriple ? `🃏 TRIPLE: ${joker.team} matches score 3×` : `${joker.team ? `${TEAM_FLAGS[joker.team] || ''} ${joker.team} matches → 2×` : ''} ${joker.group ? `All Group ${joker.group} matches → 2×` : ''}`), /*#__PURE__*/React.createElement("div", {
+  }, isTriple ? `🃏 TRIPLE: ${uiJoker.team} matches score 3×` : `${uiJoker.team ? `${TEAM_FLAGS[uiJoker.team] || ''} ${uiJoker.team} matches → 2×` : ''} ${uiJoker.group ? `All Group ${uiJoker.group} matches → 2×` : ''}`), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)',
@@ -3225,19 +3239,19 @@ const PredictionsView = ({
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: submitJokerForToday,
-    disabled: !joker.team && !joker.group,
+    disabled: !uiJoker.team && !uiJoker.group,
     style: {
       padding: '9px 22px',
       borderRadius: 6,
       border: 'none',
-      background: joker.team || joker.group ? 'var(--burgundy)' : 'var(--line)',
-      color: joker.team || joker.group ? 'white' : 'var(--ink-soft)',
+      background: uiJoker.team || uiJoker.group ? 'var(--burgundy)' : 'var(--line)',
+      color: uiJoker.team || uiJoker.group ? 'white' : 'var(--ink-soft)',
       fontWeight: 700,
       fontSize: 13,
-      cursor: joker.team || joker.group ? 'pointer' : 'not-allowed',
+      cursor: uiJoker.team || uiJoker.group ? 'pointer' : 'not-allowed',
       fontFamily: 'inherit'
     }
-  }, "🔒 Lock Joker (prevent changes)"), (joker.team || joker.group) && todayFirstKickoff && !jokerCutoffPassed && jokerMinsLeft !== null && /*#__PURE__*/React.createElement("span", {
+  }, "🔒 Lock Joker (prevent changes)"), (uiJoker.team || uiJoker.group) && todayFirstKickoff && !jokerCutoffPassed && jokerMinsLeft !== null && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
       fontWeight: 700,
@@ -3247,7 +3261,7 @@ const PredictionsView = ({
       borderRadius: 4,
       border: `1px solid ${jokerMinsLeft < 30 ? 'rgba(159,27,27,.3)' : 'rgba(27,94,63,.3)'}`
     }
-  }, "⏰ Locks in ", jokerMinsLeft >= 60 ? `${Math.floor(jokerMinsLeft / 60)}h ${jokerMinsLeft % 60}m` : `${jokerMinsLeft}m`), (joker.team || joker.group) && jokerCutoffPassed && /*#__PURE__*/React.createElement("span", {
+  }, "⏰ Locks in ", jokerMinsLeft >= 60 ? `${Math.floor(jokerMinsLeft / 60)}h ${jokerMinsLeft % 60}m` : `${jokerMinsLeft}m`), (uiJoker.team || uiJoker.group) && jokerCutoffPassed && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
       fontWeight: 700,
@@ -3262,13 +3276,13 @@ const PredictionsView = ({
       fontSize: 11,
       color: 'var(--ink-soft)'
     }
-  }, "Last locked: ", jokerLockedDate), !joker.team && !joker.group && /*#__PURE__*/React.createElement("span", {
+  }, "Last locked: ", jokerLockedDate), !uiJoker.team && !uiJoker.group && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)',
       fontStyle: 'italic'
     }
-  }, "Select a team and/or group first")), (joker.team || joker.group) && !jokerLockedToday && !jokerCutoffPassed && /*#__PURE__*/React.createElement("div", {
+  }, "Select a team and/or group first")), (uiJoker.team || uiJoker.group) && !jokerLockedToday && !jokerCutoffPassed && /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
