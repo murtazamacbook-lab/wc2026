@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-048'; // bump this on every deploy
+const APP_VERSION = 'v20260628-050'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -4673,6 +4673,7 @@ const LeaderboardView = React.memo(({
   phase = 'group',
   currentUser = null
 }) => {
+  const [lbTab, setLbTab] = useState(phase === 'ko' ? 'korace' : 'overall');
   const actualTiebreakSecs = parseTiebreakTime(results.bonus?.tiebreak);
   const scores = useMemo(() => {
     try {
@@ -4730,7 +4731,42 @@ const LeaderboardView = React.memo(({
     kicker: `${participants.length} participants`,
     title: "Leaderboard",
     subtitle: matchesDone === 0 ? 'No results entered yet — leaderboard populates as matches are played.' : `${matchesDone}/72 group matches resulted`
-  }), !predsReady && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }), phase === 'ko' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginBottom: 16,
+      background: 'var(--cream2)',
+      borderRadius: 8,
+      padding: 4
+    }
+  }, [{
+    id: 'overall',
+    label: '🏅 Overall'
+  }, {
+    id: 'korace',
+    label: '🏆 KO Race'
+  }].map(({
+    id,
+    label
+  }) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    onClick: () => setLbTab(id),
+    style: {
+      flex: 1,
+      padding: '8px 0',
+      borderRadius: 6,
+      border: 'none',
+      background: lbTab === id ? 'var(--paper)' : 'transparent',
+      color: lbTab === id ? 'var(--ink)' : 'var(--ink-soft)',
+      fontWeight: lbTab === id ? 700 : 500,
+      fontSize: 13,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      boxShadow: lbTab === id ? '0 1px 4px rgba(0,0,0,.1)' : 'none',
+      transition: 'all .15s'
+    }
+  }, label))), (phase !== 'ko' || lbTab === 'overall') && !predsReady && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -4821,7 +4857,7 @@ const LeaderboardView = React.memo(({
       borderRadius: 4,
       animation: 'pulse 1.4s ease-in-out infinite'
     }
-  })))))), predsReady && /*#__PURE__*/React.createElement("div", {
+  })))))), (phase !== 'ko' || lbTab === 'overall') && predsReady && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 20,
       display: 'flex',
@@ -4955,7 +4991,7 @@ const LeaderboardView = React.memo(({
         color: 'var(--ink-soft)'
       }
     }, "pts"))));
-  })), predsReady && phase === 'ko' && (() => {
+  })), predsReady && phase === 'ko' && lbTab === 'korace' && (() => {
     const KO_ROUNDS = [{
       label: 'Round of 32',
       ids: range(73, 88),
@@ -5023,6 +5059,7 @@ const LeaderboardView = React.memo(({
       }).sort((a, b) => b.bpts - a.bpts);
     }, [participants, allPredictions, results, actualBracket]);
     const maxBpts = Math.max(...koScores.map(s => s.bpts), 1);
+    const koScoresWithPts = koScores.filter(s => s.bpts > 0);
 
     // Per-round: per-team picks: who picked them, did they advance
     const roundData = useMemo(() => KO_ROUNDS.map(({
@@ -5071,43 +5108,13 @@ const LeaderboardView = React.memo(({
         matchups
       };
     }), [actualBracket, results, participants, allPredictions]);
-    const [koRaceOpen, setKoRaceOpen] = useState(true);
+    const [koRaceOpen, setKoRaceOpen] = useState(true); // kept for compat
     const [activeRoundTab, setActiveRoundTab] = useState(0);
     // Auto-advance tab to latest round with results
     const latestRoundWithResults = roundData.reduce((acc, rd, i) => rd.matchups.some(m => m.resultIn) ? i : acc, -1);
     const displayTab = Math.max(0, latestRoundWithResults === roundData.length - 1 ? latestRoundWithResults : latestRoundWithResults + 1 < roundData.length ? latestRoundWithResults + 1 : latestRoundWithResults);
     const activeRound = roundData[activeRoundTab] || roundData[0];
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 28
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: () => setKoRaceOpen(o => !o),
-      style: {
-        width: '100%',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: 'linear-gradient(135deg,rgba(159,27,27,.07),var(--paper))',
-        border: '1px solid var(--burgundy)',
-        borderRadius: 8,
-        padding: '12px 16px',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        marginBottom: koRaceOpen ? 12 : 0
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontWeight: 800,
-        fontSize: 15,
-        color: 'var(--burgundy)'
-      }
-    }, "🏆 KO Race — Bracket Standings"), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 16,
-        color: 'var(--ink-soft)'
-      }
-    }, koRaceOpen ? '▲' : '▼')), koRaceOpen && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       className: "card",
       style: {
         marginBottom: 12,
@@ -5125,7 +5132,14 @@ const LeaderboardView = React.memo(({
       style: {
         padding: '8px 0'
       }
-    }, koScores.map((s, i) => {
+    }, koScoresWithPts.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '12px 14px',
+        fontSize: 12,
+        color: 'var(--ink-soft)',
+        fontStyle: 'italic'
+      }
+    }, "No results yet — standings will appear once matches are played."), koScoresWithPts.map((s, i) => {
       const isMe = s.name === currentUser;
       return /*#__PURE__*/React.createElement("div", {
         key: s.name,
@@ -5348,7 +5362,7 @@ const LeaderboardView = React.memo(({
           border: p === currentUser ? '1px solid var(--amber)' : '1px solid transparent'
         }
       }, p, p === currentUser ? ' 👤' : ''))));
-    })))))));
+    }))))));
   })());
 });
 const RulesView = () => /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
