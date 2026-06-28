@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-046'; // bump this on every deploy
+const APP_VERSION = 'v20260628-047'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -8521,6 +8521,7 @@ const LiveDataView = React.memo(({
     }
   });
   const [liveStandings, setLiveStandings] = useState(null);
+  const [standingsLocked, setStandingsLocked] = useState(false); // true = final standings frozen, no more API overwrites
   const [standingsLoading, setStandingsLoading] = useState(false);
   const [liveData, setLiveData] = useState({});
   const [loadingPanel, setLoadingPanel] = useState(null);
@@ -8565,6 +8566,7 @@ const LiveDataView = React.memo(({
             }
           }));
         }
+        if (cached?.locked) setStandingsLocked(true);
       } catch (_e) {}
     }, () => {});
     const unsubResults = db.collection('wc26').doc('live-cache-results').onSnapshot(snap => {
@@ -8757,6 +8759,10 @@ const LiveDataView = React.memo(({
     setCacheLoading(null);
   };
   const handleFetchStandings = async () => {
+    if (standingsLocked) {
+      alert('Group stage standings are locked. Unlock first to refresh.');
+      return;
+    }
     if (!syncKey.trim() && !FUNC_BASE) {
       alert('API key is required.');
       return;
@@ -8817,6 +8823,24 @@ const LiveDataView = React.memo(({
       alert('Standings fetch failed: ' + e.message);
     }
     setStandingsLoading(false);
+  };
+  const handleLockStandings = async () => {
+    if (!liveStandings) {
+      alert('No standings loaded yet.');
+      return;
+    }
+    if (!window.confirm(standingsLocked ? 'Unlock standings? Admins will be able to refresh them again.' : 'Lock final group standings? The API refresh button will be disabled and data frozen in Firestore.')) return;
+    const newLocked = !standingsLocked;
+    try {
+      const existing = (await storage.getShared('live-cache-standings')) || {};
+      await storage.setJSON('live-cache-standings', {
+        ...existing,
+        locked: newLocked
+      }, true);
+      setStandingsLocked(newLocked);
+    } catch (e) {
+      alert('Failed: ' + e.message);
+    }
   };
   const fetchPanel = async (panelKey, endpoint, params = '') => {
     if (!syncKey.trim() && !FUNC_BASE) {
@@ -10063,10 +10087,39 @@ const LiveDataView = React.memo(({
     }
   }, /*#__PURE__*/React.createElement(PanelHdr, {
     bg: "#9f1b1b",
-    title: "📊 Live Standings",
+    title: standingsLocked ? "📊 Final Group Standings 🔒" : "📊 Live Standings",
     count: liveStandings ? `${Object.keys(liveStandings).length} groups` : '…',
     panelKey: "standings"
-  }), standingsLoading ? /*#__PURE__*/React.createElement("div", {
+  }), (adminRole === 'superadmin' || adminRole === 'subadmin') && liveStandings && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '8px 14px',
+      background: standingsLocked ? 'rgba(27,94,63,.08)' : 'rgba(214,137,42,.07)',
+      borderBottom: '1px solid var(--line)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)'
+    }
+  }, standingsLocked ? '🔒 Standings are frozen — API refresh disabled. Data will not change.' : '⚠️ Standings unlocked — API refresh can overwrite data.'), /*#__PURE__*/React.createElement("button", {
+    onClick: handleLockStandings,
+    style: {
+      background: standingsLocked ? 'var(--ink-soft)' : 'var(--forest)',
+      color: 'white',
+      border: 'none',
+      borderRadius: 5,
+      padding: '5px 12px',
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      whiteSpace: 'nowrap'
+    }
+  }, standingsLocked ? '🔓 Unlock' : '🔒 Lock Final Standings')), standingsLoading ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 16,
       textAlign: 'center',
@@ -12902,10 +12955,10 @@ const AdminView = ({
     bg: '#d4890a'
   }, {
     key: 'standings',
-    label: '📊 Standings',
+    label: standingsLocked ? '📊 Standings 🔒' : '📊 Standings',
     ep: 'standings',
     params: '',
-    bg: '#9f1b1b'
+    bg: standingsLocked ? '#555' : '#9f1b1b'
   }, {
     key: 'scorers',
     label: '⚽ Top Scorers',
@@ -12921,7 +12974,7 @@ const AdminView = ({
   }) => /*#__PURE__*/React.createElement("button", {
     key: key,
     onClick: () => key === 'standings' ? handleFetchStandings() : fetchPanel(key, ep, params),
-    disabled: loadingPanel === key || key === 'standings' && standingsLoading || !syncKey.trim() && !FUNC_BASE,
+    disabled: loadingPanel === key || key === 'standings' && (standingsLoading || standingsLocked) || !syncKey.trim() && !FUNC_BASE,
     style: {
       background: loadingPanel === key || key === 'standings' && standingsLoading ? '#888' : bg,
       color: 'white',
@@ -12930,9 +12983,9 @@ const AdminView = ({
       padding: '9px 16px',
       fontSize: 12,
       fontWeight: 700,
-      cursor: 'pointer',
+      cursor: standingsLocked && key === 'standings' ? 'not-allowed' : 'pointer',
       fontFamily: 'inherit',
-      opacity: !syncKey.trim() && !FUNC_BASE ? 0.5 : 1,
+      opacity: !syncKey.trim() && !FUNC_BASE || standingsLocked && key === 'standings' ? 0.5 : 1,
       whiteSpace: 'nowrap'
     }
   }, loadingPanel === key || key === 'standings' && standingsLoading ? '⏳ Loading…' : label))), (() => {
