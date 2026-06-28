@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-042'; // bump this on every deploy
+const APP_VERSION = 'v20260628-043'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -20753,36 +20753,38 @@ function App() {
 
   // Show winner popup on login (track previous user to detect login event)
   const prevUserRef = React.useRef(null);
+  const [pendingWinnerCheck, setPendingWinnerCheck] = useState(false);
   useEffect(() => {
     const prev = prevUserRef.current;
     prevUserRef.current = currentUser;
-    // Only fire when transitioning from null → logged-in name (actual login)
+    // Only set pending when transitioning from null → logged-in name (actual login)
     if (!prev && currentUser && currentUser !== '__guest__') {
-      const allParts = participants.length > 0 ? participants : [];
-      const scores = allParts.map(p => {
-        const s = computeUserScore(allPredictions[p] || {}, results.group || {}, results.ko || {}, results.bonus || {}, kickoffTimes);
-        return {
-          name: p,
-          total: s.total
-        };
-      }).sort((a, b) => b.total - a.total);
-      const top = scores[0];
-      if (top && top.total > 0) {
-        const tied = scores.filter(s => s.total === top.total).length > 1;
-        setWinnerNotif({
-          name: top.name,
-          pts: top.total,
-          tied
-        });
-      } else {
-        setWinnerNotif({
-          name: 'Nobody yet',
-          pts: 0,
-          tied: false
-        });
-      }
+      setPendingWinnerCheck(true);
     }
   }, [currentUser]);
+  // Fire the winner notif only once predsReady is true — ensures fresh data, not stale cache
+  useEffect(() => {
+    if (!pendingWinnerCheck || !predsReady) return;
+    setPendingWinnerCheck(false);
+    const allParts = participants.length > 0 ? participants : [];
+    const scores = allParts.map(p => {
+      const s = computeUserScore(allPredictions[p] || {}, results.group || {}, results.ko || {}, results.bonus || {}, kickoffTimes);
+      return {
+        name: p,
+        total: s.total
+      };
+    }).sort((a, b) => b.total - a.total);
+    const top = scores[0];
+    if (top && top.total > 0) {
+      const tied = scores.filter(s => s.total === top.total).length > 1;
+      setWinnerNotif({
+        name: top.name,
+        pts: top.total,
+        tied
+      });
+    }
+    // Don't show "Nobody yet" — just skip the popup if no scores yet
+  }, [pendingWinnerCheck, predsReady]);
   useEffect(() => {
     // Phase 1: load from localStorage immediately — page unblocks in <1ms
     try {
