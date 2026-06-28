@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-035'; // bump this on every deploy
+const APP_VERSION = 'v20260628-036'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -18008,7 +18008,8 @@ const Header = ({
 const BALLOON_COLORS = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6', '#e91e63', '#00bcd4'];
 function BalloonPopup({
   notif,
-  onClose
+  onClose,
+  phase = 'group'
 }) {
   const [visible, setVisible] = React.useState(false);
   const DURATION = 3200;
@@ -18088,18 +18089,19 @@ function BalloonPopup({
       borderRadius: 16,
       padding: '16px 28px',
       display: 'inline-block',
-      border: '1px solid rgba(214,137,42,.4)'
+      border: phase === 'ko' ? '1px solid rgba(255,215,0,.5)' : '1px solid rgba(214,137,42,.4)',
+      boxShadow: phase === 'ko' ? '0 0 32px rgba(255,215,0,.15)' : 'none'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: 700,
       letterSpacing: 3,
       textTransform: 'uppercase',
-      color: 'rgba(214,137,42,.8)',
+      color: phase === 'ko' ? '#FFD700' : 'rgba(214,137,42,.8)',
       marginBottom: 4
     }
-  }, notif.isNew ? 'New Player' : 'Welcome Back'), /*#__PURE__*/React.createElement("div", {
+  }, notif.isNew ? '🆕 New Player' : phase === 'ko' ? '⚡ KO Phase — Welcome Back' : 'Welcome Back'), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 28,
       fontWeight: 900,
@@ -18112,7 +18114,43 @@ function BalloonPopup({
       color: 'rgba(255,255,255,.55)',
       marginTop: 4
     }
-  }, "Player #", notif.rank, " of ", notif.total, " 🏆"), !notif.isNew && /*#__PURE__*/React.createElement("div", {
+  }, "Player #", notif.rank, " of ", notif.total, " 🏆"), !notif.isNew && phase === 'ko' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8,
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,.65)',
+      marginBottom: 6
+    }
+  }, "The battle for the trophy is on. 🎯"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'center',
+      gap: 5,
+      flexWrap: 'wrap'
+    }
+  }, ['R32', 'R16', 'QF', 'SF', 'FINAL'].map((r, i) => /*#__PURE__*/React.createElement("span", {
+    key: r,
+    style: {
+      fontSize: 9,
+      fontWeight: 800,
+      padding: '2px 7px',
+      borderRadius: 20,
+      background: `rgba(255,215,0,${0.1 + i * 0.05})`,
+      color: '#FFD700',
+      border: '1px solid rgba(255,215,0,.3)',
+      letterSpacing: '.06em'
+    }
+  }, r))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'rgba(255,255,255,.4)',
+      marginTop: 6
+    }
+  }, notif.total, " player", notif.total !== 1 ? 's' : '', " competing")), !notif.isNew && phase !== 'ko' && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
       color: 'rgba(255,255,255,.5)',
@@ -21790,7 +21828,8 @@ function App() {
     chatEnabled: config.chatEnabled !== false
   }), /*#__PURE__*/React.createElement(BalloonPopup, {
     notif: balloonNotif,
-    onClose: () => setBalloonNotif(null)
+    onClose: () => setBalloonNotif(null),
+    phase: config.phase || 'group'
   }), /*#__PURE__*/React.createElement(WinnerPopup, {
     notif: balloonNotif ? null : winnerNotif,
     onClose: () => setWinnerNotif(null)
