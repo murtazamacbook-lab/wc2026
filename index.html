@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-053'; // bump this on every deploy
+const APP_VERSION = 'v20260628-054'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -3587,7 +3587,14 @@ const BracketCard = ({
       textOverflow: 'ellipsis',
       fontStyle: known ? 'normal' : 'italic'
     }
-  }, known ? teamShort(team) : getSlotLabel(match.id, side_ === 'h' ? 'home' : 'away')), /*#__PURE__*/React.createElement("input", {
+  }, known ? teamShort(team) : getSlotLabel(match.id, side_ === 'h' ? 'home' : 'away')), known && FIFA_RANKINGS[team] && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: 'var(--ink-soft)',
+      flexShrink: 0,
+      lineHeight: 1
+    }
+  }, "#", FIFA_RANKINGS[team]), /*#__PURE__*/React.createElement("input", {
     type: "number",
     min: "0",
     max: "20",
