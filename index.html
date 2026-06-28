@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-020'; // bump this on every deploy
+const APP_VERSION = 'v20260627-021'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -3418,14 +3418,10 @@ const BracketCard = ({
   kickoffMs = null,
   matchLocked = false
 }) => {
-  if (!match) return null;
-  const hK = !!match.home,
-    aK = !!match.away,
-    hasTeams = hK && aK;
-  const resultLocked = actual && actual.h !== '' && actual.h != null && actual.a !== '' && actual.a != null;
+  // Hooks must come before any early return (Rules of Hooks)
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const resultLocked = actual && actual.h !== '' && actual.h != null && actual.a !== '' && actual.a != null;
   const timeLocked = kickoffMs ? nowMs > kickoffMs : false;
-  const isLocked = resultLocked || timeLocked || matchLocked;
   const minsUntilKickoff = kickoffMs && !resultLocked && !matchLocked ? (kickoffMs - nowMs) / 60000 : null;
   const showCountdown = minsUntilKickoff !== null && minsUntilKickoff > 0 && minsUntilKickoff <= 45;
   const secsUntilKickoff = kickoffMs ? Math.max(0, kickoffMs - nowMs) / 1000 : null;
@@ -3436,6 +3432,11 @@ const BracketCard = ({
     const t = setInterval(() => setNowMs(Date.now()), interval);
     return () => clearInterval(t);
   }, [showCountdown, inLastMinute]);
+  if (!match) return null;
+  const hK = !!match.home,
+    aK = !!match.away,
+    hasTeams = hK && aK;
+  const isLocked = resultLocked || timeLocked || matchLocked;
   const countdownStr = showCountdown ? (() => {
     const totalSec = Math.max(0, kickoffMs - nowMs) / 1000;
     const m = Math.floor(totalSec / 60),
