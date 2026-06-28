@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-047'; // bump this on every deploy
+const APP_VERSION = 'v20260628-048'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -4669,7 +4669,9 @@ const LeaderboardView = React.memo(({
   allPredictions,
   results,
   kickoffTimes = new Map(),
-  predsReady = true
+  predsReady = true,
+  phase = 'group',
+  currentUser = null
 }) => {
   const actualTiebreakSecs = parseTiebreakTime(results.bonus?.tiebreak);
   const scores = useMemo(() => {
@@ -4953,7 +4955,401 @@ const LeaderboardView = React.memo(({
         color: 'var(--ink-soft)'
       }
     }, "pts"))));
-  })));
+  })), predsReady && phase === 'ko' && (() => {
+    const KO_ROUNDS = [{
+      label: 'Round of 32',
+      ids: range(73, 88),
+      rnd: 'R32',
+      pts: 4
+    }, {
+      label: 'Round of 16',
+      ids: range(89, 96),
+      rnd: 'R16',
+      pts: 4
+    }, {
+      label: 'Quarter-Finals',
+      ids: range(97, 100),
+      rnd: 'QF',
+      pts: 6
+    }, {
+      label: 'Semi-Finals',
+      ids: [101, 102],
+      rnd: 'SF',
+      pts: 8
+    }, {
+      label: '3rd Place',
+      ids: [103],
+      rnd: '3rd',
+      pts: 4
+    }, {
+      label: 'Final',
+      ids: [104],
+      rnd: 'Final',
+      pts: 10
+    }];
+    const {
+      bracket: actualBracket
+    } = buildActualBracket(results.group || {}, results.ko || {});
+
+    // Per-participant KO-only scores (bracketPoints only)
+    const koScores = useMemo(() => {
+      return [...participants].map(p => {
+        const preds = allPredictions[p] || {};
+        let bpts = 0;
+        KO_ROUNDS.forEach(({
+          ids,
+          rnd,
+          pts
+        }) => {
+          ids.forEach(mId => {
+            const actual = results.ko?.[mId];
+            const pred = preds.ko?.[mId];
+            const bm = actualBracket[mId];
+            if (!actual || actual.h == null || actual.h === '' || !pred || pred.h == null || pred.h === '' || !bm?.home || !bm?.away) return;
+            const eH = parseInt(actual.h),
+              eA = parseInt(actual.a),
+              pH = parseInt(pred.h),
+              pA = parseInt(pred.a);
+            if (isNaN(eH) || isNaN(eA) || isNaN(pH) || isNaN(pA)) return;
+            const predW = pH > pA ? bm.home : pA > pH ? bm.away : pred.pk === bm.home || pred.pk === bm.away ? pred.pk : null;
+            const actW = eH > eA ? bm.home : eA > eH ? bm.away : actual.pkWinner || null;
+            if (predW && actW && predW === actW) bpts += pts;
+          });
+        });
+        return {
+          name: p,
+          bpts
+        };
+      }).sort((a, b) => b.bpts - a.bpts);
+    }, [participants, allPredictions, results, actualBracket]);
+    const maxBpts = Math.max(...koScores.map(s => s.bpts), 1);
+
+    // Per-round: per-team picks: who picked them, did they advance
+    const roundData = useMemo(() => KO_ROUNDS.map(({
+      label,
+      ids,
+      rnd,
+      pts
+    }) => {
+      // Collect all matchups in this round
+      const matchups = ids.map(mId => {
+        const bm = actualBracket[mId] || {};
+        const actual = results.ko?.[mId];
+        const resultIn = actual && actual.h != null && actual.h !== '';
+        let actualWinner = null;
+        if (resultIn) {
+          const eH = parseInt(actual.h),
+            eA = parseInt(actual.a);
+          if (eH > eA) actualWinner = bm.home;else if (eA > eH) actualWinner = bm.away;else actualWinner = actual.pkWinner || null;
+        }
+        // Per team: list of pickers
+        const teamPickers = {};
+        [bm.home, bm.away].filter(Boolean).forEach(team => {
+          teamPickers[team] = [];
+        });
+        participants.forEach(p => {
+          const pred = allPredictions[p]?.ko?.[mId];
+          if (!pred || pred.h == null || pred.h === '') return;
+          const pH = parseInt(pred.h),
+            pA = parseInt(pred.a);
+          const predW = pH > pA ? bm.home : pA > pH ? bm.away : pred.pk === bm.home || pred.pk === bm.away ? pred.pk : null;
+          if (predW && teamPickers[predW]) teamPickers[predW].push(p);
+        });
+        return {
+          mId,
+          home: bm.home,
+          away: bm.away,
+          resultIn,
+          actualWinner,
+          teamPickers
+        };
+      }).filter(m => m.home || m.away);
+      return {
+        label,
+        rnd,
+        pts,
+        matchups
+      };
+    }), [actualBracket, results, participants, allPredictions]);
+    const [koRaceOpen, setKoRaceOpen] = useState(true);
+    const [activeRoundTab, setActiveRoundTab] = useState(0);
+    // Auto-advance tab to latest round with results
+    const latestRoundWithResults = roundData.reduce((acc, rd, i) => rd.matchups.some(m => m.resultIn) ? i : acc, -1);
+    const displayTab = Math.max(0, latestRoundWithResults === roundData.length - 1 ? latestRoundWithResults : latestRoundWithResults + 1 < roundData.length ? latestRoundWithResults + 1 : latestRoundWithResults);
+    const activeRound = roundData[activeRoundTab] || roundData[0];
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 28
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setKoRaceOpen(o => !o),
+      style: {
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        background: 'linear-gradient(135deg,rgba(159,27,27,.07),var(--paper))',
+        border: '1px solid var(--burgundy)',
+        borderRadius: 8,
+        padding: '12px 16px',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        marginBottom: koRaceOpen ? 12 : 0
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 800,
+        fontSize: 15,
+        color: 'var(--burgundy)'
+      }
+    }, "🏆 KO Race — Bracket Standings"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        color: 'var(--ink-soft)'
+      }
+    }, koRaceOpen ? '▲' : '▼')), koRaceOpen && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "card",
+      style: {
+        marginBottom: 12,
+        overflow: 'hidden'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '10px 14px',
+        background: 'var(--burgundy)',
+        color: 'white',
+        fontWeight: 700,
+        fontSize: 13
+      }
+    }, "🥊 Bracket Points Only"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '8px 0'
+      }
+    }, koScores.map((s, i) => {
+      const isMe = s.name === currentUser;
+      return /*#__PURE__*/React.createElement("div", {
+        key: s.name,
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '6px 14px',
+          background: isMe ? 'rgba(214,137,42,.06)' : 'transparent',
+          borderLeft: isMe ? '3px solid var(--amber)' : '3px solid transparent'
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 13,
+          minWidth: 24,
+          textAlign: 'center',
+          color: 'var(--ink-soft)',
+          fontWeight: 600
+        }
+      }, i + 1), /*#__PURE__*/React.createElement(Avatar, {
+        name: s.name,
+        size: 26
+      }), /*#__PURE__*/React.createElement("span", {
+        style: {
+          flex: 1,
+          fontSize: 13,
+          fontWeight: isMe ? 700 : 500,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }
+      }, s.name, isMe && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: 'var(--amber)',
+          marginLeft: 5
+        }
+      }, "you")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          textAlign: 'right',
+          flexShrink: 0
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "mono",
+        style: {
+          fontSize: 18,
+          fontWeight: 800,
+          color: s.bpts > 0 ? 'var(--burgundy)' : 'var(--ink-soft)'
+        }
+      }, s.bpts), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: 'var(--ink-soft)',
+          marginLeft: 3
+        }
+      }, "pts")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          width: 80,
+          height: 4,
+          background: 'var(--cream2)',
+          borderRadius: 2,
+          flexShrink: 0,
+          overflow: 'hidden'
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          width: `${s.bpts / maxBpts * 100}%`,
+          height: '100%',
+          background: i === 0 ? 'var(--amber)' : 'var(--burgundy)',
+          borderRadius: 2
+        }
+      })));
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 4,
+        flexWrap: 'wrap',
+        marginBottom: 10
+      }
+    }, roundData.map((rd, i) => {
+      const hasAny = rd.matchups.some(m => m.home || m.away);
+      if (!hasAny) return null;
+      const done = rd.matchups.every(m => m.resultIn);
+      const inProg = rd.matchups.some(m => m.resultIn) && !done;
+      return /*#__PURE__*/React.createElement("button", {
+        key: i,
+        onClick: () => setActiveRoundTab(i),
+        style: {
+          padding: '5px 10px',
+          borderRadius: 5,
+          border: `1px solid ${activeRoundTab === i ? 'var(--burgundy)' : 'var(--line)'}`,
+          background: activeRoundTab === i ? 'var(--burgundy)' : 'transparent',
+          color: activeRoundTab === i ? 'white' : 'var(--ink)',
+          fontWeight: activeRoundTab === i ? 700 : 500,
+          fontSize: 11,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4
+        }
+      }, rd.label, done && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 9,
+          color: activeRoundTab === i ? 'rgba(255,255,255,.7)' : 'var(--forest)'
+        }
+      }, "✓"), inProg && /*#__PURE__*/React.createElement("span", {
+        style: {
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          background: activeRoundTab === i ? '#ffd' : 'var(--amber)',
+          display: 'inline-block'
+        }
+      }));
+    })), activeRound && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        marginBottom: 8,
+        fontWeight: 600
+      }
+    }, activeRound.label, " · +", activeRound.pts, " pts per correct advancement"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8
+      }
+    }, activeRound.matchups.map(({
+      mId,
+      home,
+      away,
+      resultIn,
+      actualWinner,
+      teamPickers
+    }) => /*#__PURE__*/React.createElement("div", {
+      key: mId,
+      className: "card",
+      style: {
+        padding: '10px 14px',
+        borderLeft: resultIn ? `3px solid ${actualWinner ? 'var(--forest)' : 'var(--line)'}` : '3px solid var(--line)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 8,
+        fontSize: 10,
+        color: 'var(--ink-soft)',
+        fontWeight: 600
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "M", mId), resultIn && actualWinner && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--forest)'
+      }
+    }, "✓ ", teamShort(actualWinner), " advanced"), !resultIn && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--amber)'
+      }
+    }, "⏳ Pending")), [home, away].filter(Boolean).map(team => {
+      const pickers = teamPickers[team] || [];
+      const isWinner = resultIn && actualWinner === team;
+      const isElim = resultIn && actualWinner && actualWinner !== team;
+      return /*#__PURE__*/React.createElement("div", {
+        key: team,
+        style: {
+          marginBottom: 6
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 4
+        }
+      }, /*#__PURE__*/React.createElement(Flag, {
+        team: team,
+        size: 13
+      }), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 12,
+          fontWeight: 700,
+          color: isWinner ? 'var(--forest)' : isElim ? 'var(--ink-soft)' : 'var(--ink)',
+          textDecoration: isElim ? 'line-through' : 'none'
+        }
+      }, teamShort(team)), isWinner && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: 'var(--forest)',
+          fontWeight: 700
+        }
+      }, "✓ +", activeRound.pts, "pts"), isElim && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: 'var(--ink-soft)'
+        }
+      }, "✗ out"), /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 'auto',
+          fontSize: 11,
+          color: 'var(--ink-soft)'
+        }
+      }, pickers.length, " pick", pickers.length !== 1 ? 's' : '')), pickers.length > 0 && /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 4,
+          paddingLeft: 19
+        }
+      }, pickers.map(p => /*#__PURE__*/React.createElement("span", {
+        key: p,
+        style: {
+          fontSize: 10,
+          padding: '2px 7px',
+          borderRadius: 10,
+          background: isWinner ? 'rgba(27,94,63,.12)' : isElim ? 'var(--cream2)' : 'rgba(214,137,42,.1)',
+          color: isWinner ? 'var(--forest)' : isElim ? 'var(--ink-soft)' : 'var(--ink)',
+          fontWeight: p === currentUser ? 700 : 400,
+          border: p === currentUser ? '1px solid var(--amber)' : '1px solid transparent'
+        }
+      }, p, p === currentUser ? ' 👤' : ''))));
+    })))))));
+  })());
 });
 const RulesView = () => /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionHeader, {
   kicker: "How it works",
@@ -22379,7 +22775,9 @@ function App() {
     },
     results: results,
     kickoffTimes: kickoffTimes,
-    predsReady: predsReady
+    predsReady: predsReady,
+    phase: config.phase || 'group',
+    currentUser: currentUser
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'scores'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
