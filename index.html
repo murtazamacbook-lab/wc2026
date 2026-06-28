@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-018'; // bump this on every deploy
+const APP_VERSION = 'v20260627-020'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -1324,6 +1324,12 @@ const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
   *{box-sizing:border-box}
   .app{--cream:#F5F1E8;--cream2:#EDE7D6;--paper:#FBF8F0;--ink:#1A1715;--ink-soft:#6B635B;--burgundy:#9F1B1B;--forest:#1B5E3F;--amber:#D6892A;--line:#DFDAD3;--line-soft:#EDE7D6;font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--paper);min-height:100vh;overflow-x:hidden}
+  /* KO round background themes — subtle gradient on html body */
+  .ko-r32{background:linear-gradient(160deg,#f0f4ff 0%,#FBF8F0 35%) !important}
+  .ko-r16{background:linear-gradient(160deg,#f0ebff 0%,#FBF8F0 35%) !important}
+  .ko-qf{background:linear-gradient(160deg,#fff4e8 0%,#FBF8F0 35%) !important}
+  .ko-sf{background:linear-gradient(160deg,#e8f8f0 0%,#FBF8F0 35%) !important}
+  .ko-final{background:linear-gradient(160deg,#fffbe8 0%,#FDF9EE 35%) !important}
   .display{font-family:'Fraunces',serif}
   .mono{font-family:'JetBrains Mono',monospace}
   .micro-caps{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
@@ -17800,17 +17806,17 @@ const SpotlightPanel = React.memo(({
   return /*#__PURE__*/React.createElement("aside", {
     className: "card spotlight-panel",
     style: {
-      borderTop: '3px solid var(--forest)'
+      borderTop: `3px solid ${spotlights.some(s => s.isKo) ? 'var(--amber)' : 'var(--forest)'}`
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '12px 14px',
       borderBottom: '1px solid var(--line)',
-      background: 'linear-gradient(180deg,rgba(27,94,63,.07),var(--paper))'
+      background: spotlights.some(s => s.isKo) ? 'linear-gradient(180deg,rgba(214,137,42,.1),var(--paper))' : 'linear-gradient(180deg,rgba(27,94,63,.07),var(--paper))'
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "micro-caps"
-  }, "Last 3 Days"), /*#__PURE__*/React.createElement("div", {
+  }, spotlights.some(s => s.isKo) ? 'Knockout Stage' : 'Last 3 Days'), /*#__PURE__*/React.createElement("div", {
     className: "display",
     style: {
       fontSize: 18,
@@ -17847,13 +17853,38 @@ const SpotlightPanel = React.memo(({
     }
   }, dayLabel(dk)), byDate[dk].map((s, i) => {
     const matchId = `${dk}-${i}`;
+    const isKoFinal = s.isKo && s.isFinal;
     return /*#__PURE__*/React.createElement("div", {
       key: i,
       style: {
         padding: '12px 14px',
-        borderBottom: '1px solid var(--line-soft)'
+        borderBottom: '1px solid var(--line-soft)',
+        background: isKoFinal ? 'linear-gradient(135deg,rgba(214,137,42,.06),var(--paper))' : s.isKo ? 'linear-gradient(135deg,rgba(159,27,27,.03),var(--paper))' : 'var(--paper)'
       }
-    }, /*#__PURE__*/React.createElement("div", {
+    }, s.isKo && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        fontWeight: 800,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: s.isFinal ? 'var(--amber)' : s.rnd === 'SF' ? '#e74c3c' : s.rnd === 'QF' ? '#e67e22' : 'var(--burgundy)',
+        marginBottom: 5,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        background: s.isFinal ? 'rgba(214,137,42,.15)' : s.rnd === 'SF' ? 'rgba(231,76,60,.12)' : s.rnd === 'QF' ? 'rgba(230,126,34,.12)' : 'rgba(159,27,27,.1)',
+        padding: '2px 8px',
+        borderRadius: 10
+      }
+    }, s.roundLabel), s.pkWinner && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--ink-soft)',
+        fontWeight: 600
+      }
+    }, "· Pens: ", teamShort(s.pkWinner))), /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         alignItems: 'center',
@@ -17873,8 +17904,8 @@ const SpotlightPanel = React.memo(({
     }), " ", teamShort(s.home), /*#__PURE__*/React.createElement("span", {
       style: {
         fontFamily: 'monospace',
-        background: 'var(--ink)',
-        color: 'var(--cream)',
+        background: isKoFinal ? 'var(--amber)' : s.isKo ? 'var(--burgundy)' : 'var(--ink)',
+        color: 'white',
         borderRadius: 4,
         padding: '1px 6px',
         margin: '0 5px',
@@ -17890,12 +17921,36 @@ const SpotlightPanel = React.memo(({
         fontWeight: 700,
         padding: '2px 6px',
         borderRadius: 3,
-        background: 'rgba(27,94,63,.12)',
-        color: 'var(--forest)',
+        background: s.isKo ? 'rgba(159,27,27,.12)' : 'rgba(27,94,63,.12)',
+        color: s.isKo ? 'var(--burgundy)' : 'var(--forest)',
         flexShrink: 0,
         marginLeft: 6
       }
-    }, "FT")), s.exact.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, "FT", s.pkWinner ? '+P' : '')), s.isKo && s.actualWinner && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        marginBottom: 7,
+        padding: '4px 8px',
+        background: 'rgba(27,94,63,.07)',
+        borderRadius: 4,
+        border: '1px solid rgba(27,94,63,.15)'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10
+      }
+    }, "➡️"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--forest)'
+      }
+    }, teamShort(s.actualWinner), " advances"), /*#__PURE__*/React.createElement(Flag, {
+      team: s.actualWinner,
+      size: 12
+    })), s.exact.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 6
       }
@@ -17918,12 +17973,6 @@ const SpotlightPanel = React.memo(({
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
         fontSize: 9,
         fontWeight: 800,
         letterSpacing: .08,
@@ -17931,18 +17980,35 @@ const SpotlightPanel = React.memo(({
         color: 'var(--forest)',
         marginBottom: 2
       }
-    }, "✅ Correct Result (", s.resultRight.length, ")")), /*#__PURE__*/React.createElement(NameChips, {
+    }, "✅ Correct Result (", s.resultRight.length, ")"), /*#__PURE__*/React.createElement(NameChips, {
       names: s.resultRight,
       color: "var(--forest)",
       id: matchId + '-re'
-    })), s.exact.length === 0 && s.resultRight.length === 0 && s.total > 0 && /*#__PURE__*/React.createElement("div", {
+    })), s.isKo && s.advancers && s.advancers.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        fontWeight: 800,
+        letterSpacing: .08,
+        textTransform: 'uppercase',
+        color: 'var(--amber)',
+        marginBottom: 2
+      }
+    }, "🏆 Called the Winner (", s.advancers.length, ")"), /*#__PURE__*/React.createElement(NameChips, {
+      names: s.advancers,
+      color: "var(--amber)",
+      id: matchId + '-adv'
+    })), s.exact.length === 0 && s.resultRight.length === 0 && (!s.isKo || !s.advancers?.length) && s.total > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: 'var(--ink-soft)',
         fontStyle: 'italic',
         marginBottom: 4
       }
-    }, "Nobody got the result 😬"), s.jokers.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    }, "Nobody got the result 😬"), s.jokers && s.jokers.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 9,
         fontWeight: 800,
@@ -20605,8 +20671,8 @@ function App() {
   }, []);
 
   // ── COMPUTED SPOTLIGHT (before early returns — hook rules) ─────
-  // Derived from results + allPredictions, last 3 days. Always computed,
-  // stored in a ref so early-return renders keep the last good value.
+  // Derived from results + allPredictions, last 3 days (group) + all KO results.
+  // Always computed, stored in a ref so early-return renders keep the last good value.
   {
     const cutoff = Date.now() - 3 * 86400000;
     const allPreds = {
@@ -20615,7 +20681,8 @@ function App() {
         [currentUser]: predictions
       } : {})
     };
-    const spots = GROUP_MATCHES.filter(m => {
+    // ── Group stage spots ──
+    const groupSpots = GROUP_MATCHES.filter(m => {
       const r = results.group?.[m.id];
       if (!r || r.h === '' || r.h == null) return false;
       const koMs = kickoffTimes instanceof Map ? kickoffTimes.get(m.id) : null;
@@ -20662,10 +20729,72 @@ function App() {
         isFT: true,
         ts: koMs || 0,
         matchday: m.matchday,
-        dateKey: koMs ? new Date(koMs).toLocaleDateString('sv') : null
+        dateKey: koMs ? new Date(koMs).toLocaleDateString('sv') : null,
+        isKo: false
       };
-    }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    computedSpotlightsRef.current = spots; // always update, even if empty
+    });
+    // ── KO stage spots ──
+    const KO_ROUND_LABEL = {
+      R32: 'Round of 32',
+      R16: 'Round of 16',
+      QF: '⚡ Quarter-Final',
+      SF: '🔥 Semi-Final',
+      '3rd': '3rd Place',
+      'Final': '⚜ FINAL'
+    };
+    const {
+      bracket: spotBracket
+    } = buildActualBracket(results.group || {}, results.ko || {});
+    const koSpots = [];
+    for (let mId = 73; mId <= 104; mId++) {
+      const actual = results.ko?.[mId];
+      if (!actual || actual.h === '' || actual.h == null) continue;
+      const am = spotBracket[mId];
+      if (!am?.home || !am?.away) continue;
+      const eH = parseInt(actual.h),
+        eA = parseInt(actual.a);
+      const aRes = eH > eA ? 'H' : eA > eH ? 'A' : 'D';
+      const actualWinner = eH > eA ? am.home : eA > eH ? am.away : actual.pkWinner || null;
+      const rnd = mId <= 88 ? 'R32' : ROUND_FOR(mId);
+      const exact = [],
+        resultRight = [],
+        advancers = [];
+      Object.entries(allPreds).forEach(([name, preds]) => {
+        const pred = preds.ko?.[mId];
+        if (!pred || pred.h === '' || pred.h == null) return;
+        const pH = parseInt(pred.h),
+          pA = parseInt(pred.a);
+        if (isNaN(pH) || isNaN(pA)) return;
+        const pRes = pH > pA ? 'H' : pA > pH ? 'A' : 'D';
+        if (pH === eH && pA === eA) exact.push(name);else if (pRes === aRes) resultRight.push(name);
+        let predWinner = null;
+        if (pH > pA) predWinner = am.home;else if (pA > pH) predWinner = am.away;else if (pred.pk === am.home || pred.pk === am.away) predWinner = pred.pk;
+        if (predWinner && actualWinner && predWinner === actualWinner && !exact.includes(name) && !resultRight.includes(name)) advancers.push(name);
+      });
+      const koKickoffMs = actual.kickoff ? new Date(actual.kickoff).getTime() : (kickoffTimes instanceof Map ? kickoffTimes.get(mId) : null) || 0;
+      const totalPreds = Object.values(allPreds).filter(p => p.ko?.[mId]?.h != null && p.ko[mId].h !== '').length;
+      koSpots.push({
+        home: am.home,
+        away: am.away,
+        score: `${eH}–${eA}`,
+        exact,
+        resultRight,
+        jokers: [],
+        advancers,
+        actualWinner,
+        rnd,
+        roundLabel: KO_ROUND_LABEL[rnd] || rnd,
+        total: totalPreds,
+        isFT: true,
+        ts: koKickoffMs,
+        dateKey: koKickoffMs ? new Date(koKickoffMs).toLocaleDateString('sv') : null,
+        isKo: true,
+        isFinal: mId === 104,
+        pkWinner: actual.pkWinner
+      });
+    }
+    const spots = [...groupSpots, ...koSpots].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    computedSpotlightsRef.current = spots;
   }
   const computedSpotlights = computedSpotlightsRef.current;
   if (loading) return /*#__PURE__*/React.createElement("div", {
@@ -20790,8 +20919,20 @@ function App() {
     },
     onClick: () => setView('leaderboard')
   }, "← Back")));
+
+  // Detect current active KO round for background theming
+  const koRoundClass = useMemo(() => {
+    if (config.phase !== 'ko') return '';
+    const ko = results.ko || {};
+    const has = ids => ids.some(id => ko[id] && ko[id].h != null && ko[id].h !== '');
+    if (has([103, 104])) return 'ko-final';
+    if (has([101, 102])) return 'ko-sf';
+    if (has([97, 98, 99, 100])) return 'ko-qf';
+    if (has([89, 90, 91, 92, 93, 94, 95, 96])) return 'ko-r16';
+    return 'ko-r32';
+  }, [config.phase, results.ko]);
   return /*#__PURE__*/React.createElement("div", {
-    className: "app"
+    className: `app${koRoundClass ? ' ' + koRoundClass : ''}`
   }, /*#__PURE__*/React.createElement("style", null, CSS), /*#__PURE__*/React.createElement(Header, {
     user: currentUser,
     onLogout: handleLogout,
