@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-028'; // bump this on every deploy
+const APP_VERSION = 'v20260628-029'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -5293,7 +5293,10 @@ const RulesView = () => /*#__PURE__*/React.createElement("div", null, /*#__PURE_
 const SupportWall = React.memo(({
   supportByUser,
   currentSupportTeam,
-  onToggle
+  onToggle,
+  allPredictions = {},
+  results = {},
+  participants = []
 }) => {
   const counts = useMemo(() => {
     const c = {};
@@ -5313,7 +5316,119 @@ const SupportWall = React.memo(({
   const maxCount = top5.length > 0 ? top5[0].count : 1;
   return /*#__PURE__*/React.createElement("aside", {
     className: "card support-wall"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, (() => {
+    // Count exact scores across group + KO for each participant
+    const shooters = participants.map(name => {
+      const preds = allPredictions[name] || {};
+      let exact = 0;
+      // Group stage
+      GROUP_MATCHES.forEach(m => {
+        if (m.matchday < COMP_START_MATCHDAY || EARLY_MD2_IDS.has(m.id)) return;
+        const a = results.group?.[m.id];
+        if (!a || a.h == null || a.h === '') return;
+        const p = preds.group?.[m.id];
+        if (!p || p.h == null || p.h === '') return;
+        if (parseInt(p.h) === parseInt(a.h) && parseInt(p.a) === parseInt(a.a)) exact++;
+      });
+      // KO stage
+      for (let mId = 73; mId <= 104; mId++) {
+        const a = results.ko?.[mId];
+        if (!a || a.h == null || a.h === '') continue;
+        const p = preds.ko?.[mId];
+        if (!p || p.h == null || p.h === '') continue;
+        if (parseInt(p.h) === parseInt(a.h) && parseInt(p.a) === parseInt(a.a)) exact++;
+      }
+      return {
+        name,
+        exact
+      };
+    }).filter(s => s.exact > 0).sort((a, b) => b.exact - a.exact);
+    if (!shooters.length) return null;
+    const maxEx = shooters[0].exact;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        borderBottom: '1px solid var(--line)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '10px 14px 6px',
+        background: 'linear-gradient(180deg,rgba(159,27,27,.06),var(--paper))'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "micro-caps"
+    }, "🎯 Sharp Shooters"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        marginTop: 2
+      }
+    }, "Most exact scores predicted")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxHeight: 160,
+        overflowY: 'auto'
+      },
+      className: "scrollbar"
+    }, shooters.map((s, i) => /*#__PURE__*/React.createElement("div", {
+      key: s.name,
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        padding: '5px 14px',
+        borderBottom: '1px solid var(--line-soft)'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--ink-soft)',
+        minWidth: 14,
+        textAlign: 'right'
+      }
+    }, i + 1), /*#__PURE__*/React.createElement(Avatar, {
+      name: s.name,
+      size: 20
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        flex: 1,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }
+    }, s.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 3
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 40,
+        height: 5,
+        background: 'var(--line)',
+        borderRadius: 3,
+        overflow: 'hidden'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: '100%',
+        borderRadius: 3,
+        background: 'var(--burgundy)',
+        width: `${Math.round(s.exact / maxEx * 100)}%`
+      }
+    })), /*#__PURE__*/React.createElement("span", {
+      className: "mono",
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--burgundy)',
+        minWidth: 16,
+        textAlign: 'right'
+      }
+    }, s.exact))))));
+  })(), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '12px 14px',
       borderBottom: '1px solid var(--line)',
@@ -21536,7 +21651,10 @@ function App() {
   }))), view !== 'admin' && /*#__PURE__*/React.createElement(SupportWall, {
     supportByUser: supportByUser,
     currentSupportTeam: currentSupportTeam,
-    onToggle: onToggleSupport
+    onToggle: onToggleSupport,
+    allPredictions: allPredictions,
+    results: results,
+    participants: participants
   }), (() => {
     return view !== 'admin' && /*#__PURE__*/React.createElement(SpotlightPanel, {
       spotlights: computedSpotlights
