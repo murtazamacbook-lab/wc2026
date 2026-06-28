@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-032'; // bump this on every deploy
+const APP_VERSION = 'v20260628-033'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -1365,30 +1365,37 @@ const CSS = `
   @keyframes balloonRise{0%{transform:translateY(60px);opacity:0}60%{opacity:1}100%{transform:translateY(0);opacity:1}}
   @keyframes popIn{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
   /* ─── FIFA ball bounce ─── */
-  @keyframes ballMoveX{from{transform:translateX(-90px)}to{transform:translateX(110vw)}}
-  @keyframes ballBounceY{
-    0%  {transform:translateY(0px) rotate(0deg)}
-    13% {transform:translateY(-200px) rotate(75deg)}
-    26% {transform:translateY(6px) rotate(165deg)}
-    37% {transform:translateY(-110px) rotate(235deg)}
-    48% {transform:translateY(6px) rotate(300deg)}
-    57% {transform:translateY(-52px) rotate(352deg)}
-    66% {transform:translateY(6px) rotate(400deg)}
-    73% {transform:translateY(-22px) rotate(434deg)}
-    79% {transform:translateY(6px) rotate(460deg)}
-    100%{transform:translateY(6px) rotate(540deg)}
+  @keyframes koBallDrop{
+    0%  {transform:translateY(-80vh) scale(1.15);opacity:0}
+    8%  {opacity:1}
+    /* Bounce 1 — big */
+    28% {transform:translateY(0px) scale(1,0.82)}
+    38% {transform:translateY(-42vh) scale(1.08,1)}
+    /* Bounce 2 — medium */
+    55% {transform:translateY(0px) scale(1,0.88)}
+    63% {transform:translateY(-20vh) scale(1.04,1)}
+    /* Bounce 3 — small */
+    76% {transform:translateY(0px) scale(1,0.93)}
+    82% {transform:translateY(-7vh) scale(1.02,1)}
+    /* Settle + fade */
+    90% {transform:translateY(0px) scale(1);opacity:1}
+    100%{transform:translateY(0px) scale(1);opacity:0}
   }
-  @keyframes ballShadow{
-    0%  {transform:translateX(-50%) scaleX(1);opacity:.35}
-    13% {transform:translateX(-50%) scaleX(.3);opacity:.1}
-    26% {transform:translateX(-50%) scaleX(1);opacity:.35}
-    37% {transform:translateX(-50%) scaleX(.45);opacity:.15}
-    48% {transform:translateX(-50%) scaleX(1);opacity:.35}
-    57% {transform:translateX(-50%) scaleX(.65);opacity:.22}
-    66% {transform:translateX(-50%) scaleX(1);opacity:.35}
-    73% {transform:translateX(-50%) scaleX(.8);opacity:.28}
-    79% {transform:translateX(-50%) scaleX(1);opacity:.35}
-    100%{transform:translateX(-50%) scaleX(1);opacity:.35}
+  @keyframes koBallSpin{
+    0%  {transform:rotate(0deg)}
+    100%{transform:rotate(720deg)}
+  }
+  @keyframes koShadowBounce{
+    0%  {transform:translateX(-50%) scaleX(.1);opacity:0}
+    8%  {opacity:.3}
+    28% {transform:translateX(-50%) scaleX(1.1);opacity:.5}
+    38% {transform:translateX(-50%) scaleX(.3);opacity:.15}
+    55% {transform:translateX(-50%) scaleX(1);opacity:.4}
+    63% {transform:translateX(-50%) scaleX(.5);opacity:.18}
+    76% {transform:translateX(-50%) scaleX(.9);opacity:.35}
+    82% {transform:translateX(-50%) scaleX(.7);opacity:.22}
+    90% {transform:translateX(-50%) scaleX(.85);opacity:.3}
+    100%{transform:translateX(-50%) scaleX(.85);opacity:0}
   }
   @keyframes ballWelcome{0%{opacity:0;transform:translateX(-50%) translateY(10px)}20%{opacity:1;transform:translateX(-50%) translateY(0)}80%{opacity:1;transform:translateX(-50%) translateY(0)}100%{opacity:0;transform:translateX(-50%) translateY(-8px)}}
   @keyframes liveBlink{0%,100%{opacity:1}50%{opacity:.3}}
@@ -17962,7 +17969,7 @@ function BalloonPopup({
     return () => clearTimeout(t);
   }, [notif]);
   if (!notif || !visible) return null;
-  const ballDuration = '3s';
+  const ballDuration = '3.2s';
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
@@ -17978,43 +17985,43 @@ function BalloonPopup({
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
-      top: 'calc(62vh + 58px)',
-      left: 0,
-      animation: `ballMoveX ${ballDuration} linear forwards`,
+      left: '50%',
+      top: '72vh',
+      transform: 'translateX(-50%)',
       pointerEvents: 'none'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      width: 52,
-      height: 14,
+      width: 64,
+      height: 16,
       borderRadius: '50%',
-      background: 'rgba(0,0,0,.55)',
-      filter: 'blur(6px)',
-      animation: `ballShadow ${ballDuration} linear forwards`,
+      background: 'rgba(0,0,0,.5)',
+      filter: 'blur(7px)',
+      animation: `koShadowBounce ${ballDuration} cubic-bezier(.25,.46,.45,.94) forwards`,
       transformOrigin: 'center',
       position: 'relative',
-      left: 2
+      top: 10,
+      left: 0
     }
-  })), /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
-      top: '62vh',
+      top: 0,
       left: 0,
-      animation: `ballMoveX ${ballDuration} linear forwards`,
-      pointerEvents: 'none'
+      animation: `koBallDrop ${ballDuration} cubic-bezier(.25,.46,.45,.94) forwards`
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 58,
+      fontSize: 64,
       lineHeight: 1,
       display: 'inline-block',
-      animation: `ballBounceY ${ballDuration} linear forwards`,
-      filter: 'drop-shadow(0 6px 10px rgba(0,0,0,.45))'
+      animation: `koBallSpin ${ballDuration} linear forwards`,
+      filter: 'drop-shadow(0 8px 16px rgba(0,0,0,.55)) drop-shadow(0 0 24px rgba(214,137,42,.6))'
     }
-  }, "⚽")), /*#__PURE__*/React.createElement("div", {
+  }, "🏆"))), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
-      top: '50%',
+      top: '38%',
       left: '50%',
       transform: 'translateX(-50%) translateY(-50%)',
       animation: `ballWelcome ${ballDuration} ease forwards`,
@@ -18023,11 +18030,12 @@ function BalloonPopup({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      background: 'rgba(0,0,0,.72)',
+      background: 'rgba(0,0,0,.75)',
       backdropFilter: 'blur(12px)',
       borderRadius: 16,
       padding: '16px 28px',
-      display: 'inline-block'
+      display: 'inline-block',
+      border: '1px solid rgba(214,137,42,.4)'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -18035,7 +18043,7 @@ function BalloonPopup({
       fontWeight: 700,
       letterSpacing: 3,
       textTransform: 'uppercase',
-      color: 'rgba(255,255,255,.6)',
+      color: 'rgba(214,137,42,.8)',
       marginBottom: 4
     }
   }, notif.isNew ? 'New Player' : 'Welcome Back'), /*#__PURE__*/React.createElement("div", {
