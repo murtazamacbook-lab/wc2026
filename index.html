@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-034'; // bump this on every deploy
+const APP_VERSION = 'v20260628-035'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -15898,7 +15898,8 @@ const LoginScreen = ({
   participants,
   pendingUsers,
   locked,
-  loginSuspended: loginSuspendedProp
+  loginSuspended: loginSuspendedProp,
+  phase = 'group'
 }) => {
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
@@ -16048,7 +16049,59 @@ const LoginScreen = ({
       fontWeight: 700,
       color: 'var(--ink)'
     }
-  }, "🎈 ", participants.length, " player", participants.length !== 1 ? 's' : '', " competing"))), /*#__PURE__*/React.createElement("div", {
+  }, "🎈 ", participants.length, " player", participants.length !== 1 ? 's' : '', " competing")), phase === 'ko' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16,
+      background: 'linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)',
+      borderRadius: 14,
+      padding: '16px 20px',
+      textAlign: 'center',
+      border: '1px solid rgba(214,137,42,.4)',
+      boxShadow: '0 4px 24px rgba(0,0,0,.3)',
+      animation: 'fadein .5s ease'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      marginBottom: 4
+    }
+  }, "⚡🏆⚡"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 900,
+      color: '#FFD700',
+      letterSpacing: '.04em',
+      textTransform: 'uppercase',
+      textShadow: '0 0 20px rgba(255,215,0,.6)'
+    }
+  }, "Knockout Phase Is Live!"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,.7)',
+      marginTop: 6,
+      lineHeight: 1.5
+    }
+  }, "The group stage is over — the real battle begins.", /*#__PURE__*/React.createElement("br", null), "Only the best advance. Who did you pick? 🎯"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: 'flex',
+      justifyContent: 'center',
+      gap: 6,
+      flexWrap: 'wrap'
+    }
+  }, ['R32', 'R16', 'QF', 'SF', 'FINAL'].map((r, i) => /*#__PURE__*/React.createElement("span", {
+    key: r,
+    style: {
+      fontSize: 10,
+      fontWeight: 800,
+      padding: '3px 8px',
+      borderRadius: 20,
+      background: `rgba(255,215,0,${0.08 + i * 0.04})`,
+      color: '#FFD700',
+      border: '1px solid rgba(255,215,0,.25)',
+      letterSpacing: '.06em'
+    }
+  }, r))))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 28
@@ -21331,7 +21384,8 @@ function App() {
     participants: participants,
     pendingUsers: pendingUsers || {},
     locked: config.phase === 'complete' || config.phase == null && !!config.locked,
-    loginSuspended: !!config.loginSuspended
+    loginSuspended: !!config.loginSuspended,
+    phase: config.phase || 'group'
   });
 
   // ── PHASE-BASED LOCKS ────────────────────────────────────────────
