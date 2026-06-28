@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-039'; // bump this on every deploy
+const APP_VERSION = 'v20260628-040'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -3568,9 +3568,15 @@ const BracketCard = ({
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
-      flexShrink: 0
+      flexShrink: 0,
+      lineHeight: 1,
+      display: 'flex',
+      alignItems: 'center'
     }
-  }, known ? TEAM_FLAGS[team] || '⚽' : '○'), /*#__PURE__*/React.createElement("span", {
+  }, known ? /*#__PURE__*/React.createElement(Flag, {
+    team: team,
+    size: 12
+  }) : '○'), /*#__PURE__*/React.createElement("span", {
     style: {
       flex: 1,
       fontSize: 10,
