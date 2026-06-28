@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-051'; // bump this on every deploy
+const APP_VERSION = 'v20260628-052'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -14387,6 +14387,272 @@ const AdminView = ({
       marginTop: 16
     }
   }, (() => {
+    const total = participants.length;
+    const hasGroupPred = p => {
+      const d = allPredictions[p] || {};
+      return Object.values(d.group || {}).some(v => v && v.h != null && v.h !== '');
+    };
+    const hasKoPred = p => {
+      const d = allPredictions[p] || {};
+      return Object.values(d.ko || {}).some(v => v && v.h != null && v.h !== '');
+    };
+    const hasBonusPred = p => {
+      const d = allPredictions[p] || {};
+      const b = d.bonus || {};
+      return !!(b.winner || b.runnerUp || b.thirdPlace || b.goldenBoot);
+    };
+    const hasJoker = p => {
+      const d = allPredictions[p] || {};
+      return !!(d.joker?.team || d.joker?.group || (d.jokerHistory || []).length > 0);
+    };
+    const active = participants.filter(p => hasGroupPred(p) || hasKoPred(p) || hasBonusPred(p));
+    const koActive = participants.filter(p => hasKoPred(p));
+    const bonusActive = participants.filter(p => hasBonusPred(p));
+    const jokerActive = participants.filter(p => hasJoker(p));
+    const ghost = participants.filter(p => !hasGroupPred(p) && !hasKoPred(p) && !hasBonusPred(p));
+    const pct = n => total > 0 ? Math.round(n / total * 100) : 0;
+    const Bar = ({
+      n,
+      color
+    }) => /*#__PURE__*/React.createElement("div", {
+      style: {
+        height: 6,
+        background: 'var(--cream2)',
+        borderRadius: 3,
+        overflow: 'hidden',
+        marginTop: 4
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: `${pct(n)}%`,
+        height: '100%',
+        background: color,
+        borderRadius: 3
+      }
+    }));
+    return /*#__PURE__*/React.createElement("div", {
+      className: "card",
+      style: {
+        marginBottom: 16,
+        overflow: 'hidden',
+        borderLeft: '3px solid var(--forest)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '12px 16px',
+        background: 'rgba(27,94,63,.06)',
+        borderBottom: '1px solid var(--line)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16
+      }
+    }, "📊"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontSize: 14
+      }
+    }, "Participation Report"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        marginLeft: 'auto'
+      }
+    }, total, " registered")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '14px 16px'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 8,
+        flexWrap: 'wrap',
+        marginBottom: 16
+      }
+    }, [{
+      label: 'Active',
+      n: active.length,
+      color: 'var(--forest)',
+      desc: 'Made at least 1 prediction'
+    }, {
+      label: 'No activity',
+      n: ghost.length,
+      color: 'var(--burgundy)',
+      desc: 'Account created, nothing predicted'
+    }, {
+      label: 'KO picks',
+      n: koActive.length,
+      color: 'var(--amber)',
+      desc: 'Entered KO round predictions'
+    }, {
+      label: 'Bonus done',
+      n: bonusActive.length,
+      color: '#6c3483',
+      desc: 'Winner/Golden Boot picked'
+    }].map(({
+      label,
+      n,
+      color,
+      desc
+    }) => /*#__PURE__*/React.createElement("div", {
+      key: label,
+      style: {
+        background: 'var(--cream2)',
+        borderRadius: 8,
+        padding: '10px 14px',
+        minWidth: 110,
+        border: `1px solid ${color}40`
+      },
+      title: desc
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 22,
+        fontWeight: 800,
+        color,
+        fontFamily: 'JetBrains Mono,monospace'
+      }
+    }, n), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 600,
+        color: 'var(--ink)',
+        marginTop: 1
+      }
+    }, label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)'
+      }
+    }, pct(n), "% of total"), /*#__PURE__*/React.createElement(Bar, {
+      n: n,
+      color: color
+    })))), /*#__PURE__*/React.createElement("table", {
+      style: {
+        width: '100%',
+        fontSize: 12,
+        borderCollapse: 'collapse'
+      }
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+      style: {
+        borderBottom: '1px solid var(--line)'
+      }
+    }, /*#__PURE__*/React.createElement("th", {
+      style: {
+        textAlign: 'left',
+        padding: '5px 0',
+        color: 'var(--ink-soft)',
+        fontWeight: 600
+      }
+    }, "Category"), /*#__PURE__*/React.createElement("th", {
+      style: {
+        textAlign: 'right',
+        padding: '5px 0',
+        color: 'var(--ink-soft)',
+        fontWeight: 600
+      }
+    }, "Count"), /*#__PURE__*/React.createElement("th", {
+      style: {
+        textAlign: 'right',
+        padding: '5px 0',
+        color: 'var(--ink-soft)',
+        fontWeight: 600
+      }
+    }, "%"))), /*#__PURE__*/React.createElement("tbody", null, [{
+      label: 'Total registered accounts',
+      n: total,
+      bold: true
+    }, {
+      label: 'Active (any prediction made)',
+      n: active.length,
+      color: 'var(--forest)'
+    }, {
+      label: '→ Group stage picks entered',
+      n: participants.filter(p => hasGroupPred(p)).length,
+      indent: true
+    }, {
+      label: '→ KO bracket picks entered',
+      n: koActive.length,
+      indent: true
+    }, {
+      label: '→ Bonus picks entered',
+      n: bonusActive.length,
+      indent: true
+    }, {
+      label: '→ Joker set at any point',
+      n: jokerActive.length,
+      indent: true
+    }, {
+      label: 'No activity (ghost accounts)',
+      n: ghost.length,
+      color: 'var(--burgundy)'
+    }].map(({
+      label,
+      n,
+      color,
+      bold,
+      indent
+    }) => /*#__PURE__*/React.createElement("tr", {
+      key: label,
+      style: {
+        borderBottom: '1px solid var(--line-soft)'
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: '6px 0',
+        paddingLeft: indent ? 16 : 0,
+        color: color || 'var(--ink)',
+        fontWeight: bold ? 700 : 400
+      }
+    }, label), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: '6px 0',
+        textAlign: 'right',
+        fontWeight: 700,
+        fontFamily: 'JetBrains Mono,monospace',
+        color: color || 'var(--ink)'
+      }
+    }, n), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: '6px 0',
+        textAlign: 'right',
+        color: 'var(--ink-soft)'
+      }
+    }, pct(n), "%"))))), ghost.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 12,
+        padding: '10px 12px',
+        background: 'rgba(159,27,27,.05)',
+        borderRadius: 6,
+        border: '1px solid rgba(159,27,27,.15)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--burgundy)',
+        marginBottom: 6
+      }
+    }, "🚫 No-activity accounts (", ghost.length, ")"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 4
+      }
+    }, ghost.map(p => /*#__PURE__*/React.createElement("span", {
+      key: p,
+      style: {
+        fontSize: 11,
+        padding: '2px 8px',
+        borderRadius: 10,
+        background: 'var(--cream2)',
+        border: '1px solid var(--line)',
+        color: 'var(--ink-soft)'
+      }
+    }, p))))));
+  })(), (() => {
     const pending = Object.values(pendingUsers || {}).filter(p => p.status === 'pending');
     const reviewed = Object.values(pendingUsers || {}).filter(p => p.status !== 'pending').sort((a, b) => (b.approvedAt || b.rejectedAt || 0) - (a.approvedAt || a.rejectedAt || 0)).slice(0, 10);
     if (pending.length === 0 && reviewed.length === 0) return null;
