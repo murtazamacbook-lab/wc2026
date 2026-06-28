@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-045'; // bump this on every deploy
+const APP_VERSION = 'v20260628-046'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -21764,14 +21764,20 @@ function App() {
         const snap = await fbTimeout(db.collection('wc26').doc('app-version').get()).catch(() => null);
         if (!snap?.exists) return;
         const serverVersion = snap.data()?.version;
-        // Only show banner when server has a NEWER version than the code running right now.
-        // If this client's APP_VERSION already equals or is newer, stay silent.
         if (serverVersion && serverVersion !== APP_VERSION && serverVersion > APP_VERSION) setNewVersionAvailable(true);
       } catch (_e) {}
     };
     check(); // check on load
     const interval = setInterval(check, 120000); // re-check every 2 minutes
-    return () => clearInterval(interval);
+    // Also check immediately when tab becomes visible again (handles hibernate/sleep/tab-switch)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
   const handleLogout = useCallback(async () => {
     try {
