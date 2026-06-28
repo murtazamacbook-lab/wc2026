@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-029'; // bump this on every deploy
+const APP_VERSION = 'v20260628-030'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -5321,7 +5321,6 @@ const SupportWall = React.memo(({
     const shooters = participants.map(name => {
       const preds = allPredictions[name] || {};
       let exact = 0;
-      // Group stage
       GROUP_MATCHES.forEach(m => {
         if (m.matchday < COMP_START_MATCHDAY || EARLY_MD2_IDS.has(m.id)) return;
         const a = results.group?.[m.id];
@@ -5330,7 +5329,6 @@ const SupportWall = React.memo(({
         if (!p || p.h == null || p.h === '') return;
         if (parseInt(p.h) === parseInt(a.h) && parseInt(p.a) === parseInt(a.a)) exact++;
       });
-      // KO stage
       for (let mId = 73; mId <= 104; mId++) {
         const a = results.ko?.[mId];
         if (!a || a.h == null || a.h === '') continue;
@@ -5347,11 +5345,17 @@ const SupportWall = React.memo(({
     const maxEx = shooters[0].exact;
     return /*#__PURE__*/React.createElement("div", {
       style: {
-        borderBottom: '1px solid var(--line)'
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        borderBottom: '2px solid var(--line)'
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         padding: '10px 14px 6px',
+        flexShrink: 0,
         background: 'linear-gradient(180deg,rgba(159,27,27,.06),var(--paper))'
       }
     }, /*#__PURE__*/React.createElement("div", {
@@ -5364,8 +5368,9 @@ const SupportWall = React.memo(({
       }
     }, "Most exact scores predicted")), /*#__PURE__*/React.createElement("div", {
       style: {
-        maxHeight: 160,
-        overflowY: 'auto'
+        flex: 1,
+        overflowY: 'auto',
+        minHeight: 0
       },
       className: "scrollbar"
     }, shooters.map((s, i) => /*#__PURE__*/React.createElement("div", {
@@ -5430,8 +5435,17 @@ const SupportWall = React.memo(({
     }, s.exact))))));
   })(), /*#__PURE__*/React.createElement("div", {
     style: {
+      flex: 1,
+      minHeight: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
       padding: '12px 14px',
       borderBottom: '1px solid var(--line)',
+      flexShrink: 0,
       background: 'linear-gradient(180deg,var(--cream2),var(--paper))'
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -5453,6 +5467,7 @@ const SupportWall = React.memo(({
     style: {
       padding: '10px 14px',
       borderBottom: '1px solid var(--line)',
+      flexShrink: 0,
       background: 'var(--cream2)'
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -5514,7 +5529,11 @@ const SupportWall = React.memo(({
       color: 'var(--ink-soft)'
     }
   }, x.count)))), /*#__PURE__*/React.createElement("div", {
-    className: "support-list scrollbar"
+    className: "support-list scrollbar",
+    style: {
+      flex: 1,
+      minHeight: 0
+    }
   }, ALL_TEAMS.map(team => {
     const active = currentSupportTeam === team;
     return /*#__PURE__*/React.createElement("div", {
@@ -5545,7 +5564,7 @@ const SupportWall = React.memo(({
     }, /*#__PURE__*/React.createElement("span", null, active ? '💚' : '👍'), /*#__PURE__*/React.createElement("span", {
       className: "mono"
     }, counts[team] || 0)));
-  })));
+  }))));
 });
 
 // ── BROWSE VIEW ──────────────────────────────────────────────────
