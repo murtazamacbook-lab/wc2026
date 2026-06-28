@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-055'; // bump this on every deploy
+const APP_VERSION = 'v20260628-057'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -4743,6 +4743,14 @@ const LeaderboardView = React.memo(({
           pH = parseInt(pred.h),
           pA = parseInt(pred.a);
         if (isNaN(eH) || isNaN(eA) || isNaN(pH) || isNaN(pA)) return;
+        // Score prediction pts
+        const aRes = eH > eA ? 'H' : eA > eH ? 'A' : 'D',
+          pRes = pH > pA ? 'H' : pA > pH ? 'A' : 'D';
+        if (aRes === pRes) bpts += aRes === 'D' ? 2 : 1;
+        if (pH === eH) bpts += 1;
+        if (pA === eA) bpts += 1;
+        if (pH === eH && pA === eA) bpts += 1;
+        // Advancement bonus
         const predW = pH > pA ? bm.home : pA > pH ? bm.away : pred.pk === bm.home || pred.pk === bm.away ? pred.pk : null;
         const actW = eH > eA ? bm.home : eA > eH ? bm.away : actual.pkWinner || null;
         if (predW && actW && predW === actW) bpts += pts;
@@ -5130,7 +5138,7 @@ const LeaderboardView = React.memo(({
       fontWeight: 700,
       fontSize: 13
     }
-  }, "🥊 Bracket Points Only"), /*#__PURE__*/React.createElement("div", {
+  }, "🏆 KO Points (Score + Advancement)"), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '8px 0'
     }
@@ -11889,6 +11897,10 @@ const AdminView = ({
   // ── ESPN SYNC ────────────────────────────────────────────────
   const handleEspnSync = async (confirm = false) => {
     if (confirm && espnPreview) {
+      if (!isSuperAdmin) {
+        alert('🔒 Only the Super Admin (Murtaza) can import group results.');
+        return;
+      }
       await onSave({
         ...results,
         group: espnPreview.newGroupResults
@@ -11970,11 +11982,16 @@ const AdminView = ({
   };
   const handleSync = async (confirm = false) => {
     if (confirm && syncPreview) {
-      await onSave({
+      // Subadmin: strip group writes — only allow KO results
+      const savePayload = isSuperAdmin ? {
         ...results,
         group: syncPreview.newGroupResults,
         ko: syncPreview.newKoResults
-      });
+      } : {
+        ...results,
+        ko: syncPreview.newKoResults
+      };
+      await onSave(savePayload);
       const ok = syncPreview.log.filter(l => l.startsWith('✅')).length;
       setSyncLog('✅ Done! ' + ok + ' results imported.\n\n' + syncPreview.log.join('\n'));
       setSyncPreview(null);
@@ -12716,7 +12733,18 @@ const AdminView = ({
       color: 'var(--ink-soft)',
       margin: '0 0 14px'
     }
-  }, totalGroupDone, "/72 group match results entered."), isSuperAdmin && /*#__PURE__*/React.createElement("div", {
+  }, totalGroupDone, "/72 group match results entered."), !isSuperAdmin && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '10px 14px',
+      background: 'rgba(159,27,27,.07)',
+      border: '1px solid rgba(159,27,27,.3)',
+      borderRadius: 6,
+      marginBottom: 14,
+      fontSize: 12,
+      color: 'var(--burgundy)',
+      fontWeight: 600
+    }
+  }, "🔒 Group stage results are locked — only the Super Admin (Murtaza) can edit them."), isSuperAdmin && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '14px 16px',
       background: 'rgba(159,27,27,.06)',
@@ -12994,10 +13022,12 @@ const AdminView = ({
             width: 36,
             height: 32,
             background: isDone ? 'rgba(27,94,63,.07)' : undefined,
-            borderColor: isDone ? 'var(--forest)' : undefined
+            borderColor: isDone ? 'var(--forest)' : undefined,
+            cursor: isSuperAdmin ? undefined : 'not-allowed'
           },
           value: r.h ?? '',
-          onChange: e => setGroupResult(m.id, 'h', e.target.value)
+          onChange: e => setGroupResult(m.id, 'h', e.target.value),
+          disabled: !isSuperAdmin
         }), /*#__PURE__*/React.createElement("span", {
           style: {
             fontSize: 11,
@@ -13012,10 +13042,12 @@ const AdminView = ({
             width: 36,
             height: 32,
             background: isDone ? 'rgba(27,94,63,.07)' : undefined,
-            borderColor: isDone ? 'var(--forest)' : undefined
+            borderColor: isDone ? 'var(--forest)' : undefined,
+            cursor: isSuperAdmin ? undefined : 'not-allowed'
           },
           value: r.a ?? '',
-          onChange: e => setGroupResult(m.id, 'a', e.target.value)
+          onChange: e => setGroupResult(m.id, 'a', e.target.value),
+          disabled: !isSuperAdmin
         })), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
