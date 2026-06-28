@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-036'; // bump this on every deploy
+const APP_VERSION = 'v20260628-037'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -18012,7 +18012,7 @@ function BalloonPopup({
   phase = 'group'
 }) {
   const [visible, setVisible] = React.useState(false);
-  const DURATION = 3200;
+  const DURATION = 20000;
   React.useEffect(() => {
     if (!notif) return;
     setVisible(true);
@@ -18024,6 +18024,7 @@ function BalloonPopup({
   }, [notif]);
   if (!notif || !visible) return null;
   const ballDuration = '3.2s';
+  const cardDuration = '20s';
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
@@ -18078,7 +18079,7 @@ function BalloonPopup({
       top: '38%',
       left: '50%',
       transform: 'translateX(-50%) translateY(-50%)',
-      animation: `ballWelcome ${ballDuration} ease forwards`,
+      animation: `ballWelcome ${cardDuration} ease forwards`,
       pointerEvents: 'none',
       textAlign: 'center'
     }
