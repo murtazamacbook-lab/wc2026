@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-031'; // bump this on every deploy
+const APP_VERSION = 'v20260628-032'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -5345,8 +5345,7 @@ const SupportWall = React.memo(({
     const maxEx = shooters[0].exact;
     return /*#__PURE__*/React.createElement("div", {
       style: {
-        flex: 1,
-        minHeight: 0,
+        flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -5368,7 +5367,7 @@ const SupportWall = React.memo(({
       }
     }, "Most exact scores predicted")), /*#__PURE__*/React.createElement("div", {
       style: {
-        flex: 1,
+        maxHeight: 220,
         overflowY: 'auto',
         minHeight: 0
       },
