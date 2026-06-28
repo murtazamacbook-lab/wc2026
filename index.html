@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-043'; // bump this on every deploy
+const APP_VERSION = 'v20260628-044'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -4321,6 +4321,20 @@ const BracketView = ({
         const pRes = hasPred ? pH > pA ? 'H' : pA > pH ? 'A' : 'D' : null;
         const correctResult = hasPred && pRes === aRes;
         const color = exact ? 'var(--forest)' : correctResult ? 'var(--amber)' : 'var(--ink-soft)';
+        // Compute pts
+        let listKoPts = 0,
+          listBracketPts = 0;
+        if (hasPred && !isNaN(pH) && !isNaN(pA) && !isNaN(eH) && !isNaN(eA)) {
+          if (aRes === pRes) listKoPts += aRes === 'D' ? 2 : 1;
+          if (pH === eH) listKoPts += 1;
+          if (pA === eA) listKoPts += 1;
+          if (exact) listKoPts += 1;
+          const rnd = m.id <= 88 ? 'R32' : ROUND_FOR(m.id);
+          const predWinner = pH > pA ? m.home : pA > pH ? m.away : p.pk === m.home || p.pk === m.away ? p.pk : null;
+          const actualWinner = eH > eA ? m.home : eA > eH ? m.away : r.pkWinner || null;
+          if (predWinner && actualWinner && predWinner === actualWinner && rnd && SCORING.bracketTeam[rnd]) listBracketPts = SCORING.bracketTeam[rnd];
+        }
+        const totalPts = listKoPts + listBracketPts;
         return /*#__PURE__*/React.createElement("div", {
           style: {
             marginTop: 4,
@@ -4356,7 +4370,26 @@ const BracketView = ({
             marginLeft: 4,
             color: 'var(--ink-soft)'
           }
-        }, "pk:", teamShort(r.pkWinner))));
+        }, "pk:", teamShort(r.pkWinner))), hasPred && totalPts > 0 && /*#__PURE__*/React.createElement("span", {
+          style: {
+            display: 'inline-block',
+            fontSize: 10,
+            fontWeight: 800,
+            color: 'var(--forest)',
+            background: 'rgba(27,94,63,.1)',
+            padding: '1px 6px',
+            borderRadius: 3,
+            marginTop: 3
+          }
+        }, "+", totalPts, " pts"), hasPred && totalPts === 0 && /*#__PURE__*/React.createElement("span", {
+          style: {
+            display: 'inline-block',
+            fontSize: 10,
+            color: 'var(--ink-soft)',
+            padding: '1px 6px',
+            marginTop: 3
+          }
+        }, "0 pts"));
       })());
     })));
   }) : /*#__PURE__*/React.createElement("div", {
@@ -4391,20 +4424,37 @@ const BracketView = ({
   }, l)), Object.entries(BRACKET_POS).map(([mid, pos]) => {
     const m = bracket[parseInt(mid)];
     if (!m) return null;
+    const mId = parseInt(mid);
+    const actual = results.ko?.[mId];
+    const pred = predictions.ko?.[mId];
+    let bracketPts = 0;
+    if (actual && actual.h != null && actual.h !== '' && pred && pred.h != null && pred.h !== '' && m.home && m.away) {
+      const eH = parseInt(actual.h),
+        eA = parseInt(actual.a),
+        pH = parseInt(pred.h),
+        pA = parseInt(pred.a);
+      if (!isNaN(eH) && !isNaN(eA) && !isNaN(pH) && !isNaN(pA)) {
+        const rnd = mId <= 88 ? 'R32' : ROUND_FOR(mId);
+        let predWinner = pH > pA ? m.home : pA > pH ? m.away : pred.pk === m.home || pred.pk === m.away ? pred.pk : null;
+        let actualWinner = eH > eA ? m.home : eA > eH ? m.away : actual.pkWinner || null;
+        if (predWinner && actualWinner && predWinner === actualWinner && rnd && SCORING.bracketTeam[rnd]) bracketPts = SCORING.bracketTeam[rnd];
+      }
+    }
     return /*#__PURE__*/React.createElement(BracketCard, {
       key: mid,
       match: m,
-      pred: predictions.ko?.[parseInt(mid)],
-      actual: results.ko?.[parseInt(mid)],
+      pred: pred,
+      actual: actual,
       onSet: setKoScore,
       onSetPk: setKoPk,
       gridColumn: pos.col,
       gridRow: pos.row,
       side: pos.col <= 5 ? 'left' : 'right',
-      isFinal: parseInt(mid) === 104,
-      isThirdPlace: parseInt(mid) === 103,
-      kickoffMs: kickoffTimes.get(parseInt(mid)) || (results.ko?.[parseInt(mid)]?.kickoff ? new Date(results.ko[parseInt(mid)].kickoff).getTime() : null),
-      matchLocked: lockedMatchIds.has(parseInt(mid))
+      isFinal: mId === 104,
+      isThirdPlace: mId === 103,
+      bracketPts: bracketPts,
+      kickoffMs: kickoffTimes.get(mId) || (actual?.kickoff ? new Date(actual.kickoff).getTime() : null),
+      matchLocked: lockedMatchIds.has(mId)
     });
   })))));
 };
