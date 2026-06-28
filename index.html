@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-013'; // bump this on every deploy
+const APP_VERSION = 'v20260627-014'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -18386,14 +18386,19 @@ function App() {
   const POLL_INTERVAL_MS = 3600000; // poll every 1 hour
   const DONE_STATUSES = ['ft', 'aet', 'pen', 'finished', 'completed', 'full-time', 'full time'];
   const handleBannerTeamClick = useCallback(teamName => {
-    // find which group this team belongs to
+    // During KO phase, banner clicks go to Bracket view
+    if (config.phase === 'ko') {
+      setView('bracket');
+      return;
+    }
+    // Group stage: jump to the team's group in predictions
     const grp = GROUP_KEYS.find(g => GROUPS[g].includes(teamName));
     if (!grp) return;
     setView('predictions');
     setJumpToGroup(grp);
     // reset after a tick so re-clicking the same group still triggers the effect
     setTimeout(() => setJumpToGroup(null), 500);
-  }, []);
+  }, [config.phase]);
 
   // ── AUTO-PUSH helpers: compute standings/results from stored data, fetch scorers ──
   // Declared here (before ESPN useEffects) to avoid temporal dead zone errors.
