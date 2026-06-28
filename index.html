@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-022'; // bump this on every deploy
+const APP_VERSION = 'v20260627-023'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -14028,6 +14028,7 @@ const AdminView = ({
             console.warn('KO phase backup error:', e);
           }
         }
+        if (k === 'ko') setView('bracket');
         setConfig({
           ...config,
           phase: k,
@@ -18362,7 +18363,14 @@ function App() {
   const [pendingStatus, setPendingStatus] = useState(null); // null | 'waiting' | 'approved' | 'rejected'
   const [pendingName, setPendingName] = useState(null);
   const [pendingPin, setPendingPin] = useState(null);
-  const [view, setView] = useState('predictions');
+  const [view, setView] = useState(() => {
+    try {
+      const cfg = JSON.parse(localStorage.getItem('wc26_config') || '{}');
+      return cfg.phase === 'ko' ? 'bracket' : 'predictions';
+    } catch {
+      return 'predictions';
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState('');
   const [allPredictions, setAllPredictions] = useState({});
