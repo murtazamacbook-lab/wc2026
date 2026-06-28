@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-027'; // bump this on every deploy
+const APP_VERSION = 'v20260628-028'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -4288,15 +4288,56 @@ const BracketView = ({
           team: t,
           size: 11
         }), " ", teamShort(t).slice(0, 8)))));
-      })(), _resultLocked && /*#__PURE__*/React.createElement("div", {
-        style: {
-          marginTop: 4,
-          textAlign: 'center',
-          fontSize: 11,
-          color: 'var(--forest)',
-          fontWeight: 600
-        }
-      }, "Result: ", results.ko[m.id].homeTeam ? teamShort(results.ko[m.id].homeTeam) : '?', " ", results.ko[m.id].h, "–", results.ko[m.id].a, " ", results.ko[m.id].awayTeam ? teamShort(results.ko[m.id].awayTeam) : '?'));
+      })(), _resultLocked && (() => {
+        const r = results.ko[m.id];
+        const eH = parseInt(r.h),
+          eA = parseInt(r.a);
+        const p = predictions.ko?.[m.id];
+        const hasPred = p && p.h != null && p.h !== '';
+        const pH = parseInt(p?.h),
+          pA = parseInt(p?.a);
+        const exact = hasPred && pH === eH && pA === eA;
+        const aRes = eH > eA ? 'H' : eA > eH ? 'A' : 'D';
+        const pRes = hasPred ? pH > pA ? 'H' : pA > pH ? 'A' : 'D' : null;
+        const correctResult = hasPred && pRes === aRes;
+        const color = exact ? 'var(--forest)' : correctResult ? 'var(--amber)' : 'var(--ink-soft)';
+        return /*#__PURE__*/React.createElement("div", {
+          style: {
+            marginTop: 4,
+            textAlign: 'center'
+          }
+        }, hasPred && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 11,
+            fontWeight: 700,
+            color
+          }
+        }, "Your pick: ", /*#__PURE__*/React.createElement("span", {
+          className: "mono"
+        }, p.h, "–", p.a), exact && /*#__PURE__*/React.createElement("span", {
+          style: {
+            marginLeft: 4
+          }
+        }, "✓ EXACT"), !exact && correctResult && /*#__PURE__*/React.createElement("span", {
+          style: {
+            marginLeft: 4
+          }
+        }, "✓ RESULT")), /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 11,
+            color: 'var(--forest)',
+            fontWeight: 600
+          }
+        }, "FT: ", /*#__PURE__*/React.createElement("span", {
+          className: "mono"
+        }, r.h, "–", r.a), r.pkWinner && /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 10,
+            marginLeft: 4,
+            color: 'var(--ink-soft)'
+          }
+        }, "pk:", teamShort(r.pkWinner))));
+      })());
     })));
   }) : /*#__PURE__*/React.createElement("div", {
     style: {
