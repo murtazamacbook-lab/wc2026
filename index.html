@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-009'; // bump this on every deploy
+const APP_VERSION = 'v20260627-013'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -14034,6 +14034,256 @@ const AdminView = ({
     className: "card",
     style: {
       padding: 20,
+      borderLeft: '3px solid var(--amber)'
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "display",
+    style: {
+      fontSize: 17,
+      fontWeight: 700,
+      margin: '0 0 4px'
+    }
+  }, "💾 Full Backup & Restore"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: 'var(--ink-soft)',
+      margin: '0 0 16px'
+    }
+  }, "Backup saves everything — results, participants, pins, config, and all user predictions. Restore lets you pick exactly what to recover. Results are also backed up automatically on every save."), (() => {
+    const doRestore = async (label, fn) => {
+      try {
+        const snap = await db.collection('wc26').doc('full-backup').get();
+        if (!snap.exists) {
+          alert('No full backup found. Use Backup Now first.');
+          return;
+        }
+        const bk = JSON.parse(snap.data().value || '{}');
+        const savedAt = bk.savedAt ? new Date(bk.savedAt).toLocaleString() : 'unknown';
+        if (!window.confirm(`Restore ${label} from backup?\n\nBackup saved: ${savedAt}`)) return;
+        await fn(bk);
+      } catch (e) {
+        alert('Restore error: ' + e.message);
+      }
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: async () => {
+        try {
+          const predSnaps = await Promise.all(participants.map(p => db.collection('wc26').doc(`pred-${p}`).get().catch(() => null)));
+          const predsMap = {};
+          predSnaps.forEach((s, i) => {
+            if (s && s.exists) {
+              try {
+                predsMap[participants[i]] = JSON.parse(s.data().value || '{}');
+              } catch (_e) {}
+            }
+          });
+          const fullBk = {
+            results,
+            config,
+            participants,
+            pins: userPins,
+            predictions: predsMap,
+            savedAt: Date.now()
+          };
+          await Promise.all([db.collection('wc26').doc('full-backup').set({
+            value: JSON.stringify(fullBk),
+            savedAt: Date.now()
+          }), db.collection('wc26').doc('results-backup').set({
+            value: JSON.stringify(results),
+            savedAt: Date.now()
+          })]);
+          alert(`✅ Full backup saved.\n${participants.length} users · ${Object.keys(results.group || {}).length} group results · ${Object.keys(results.ko || {}).length} KO results · ${Object.keys(predsMap).length} prediction sets`);
+        } catch (e) {
+          alert('Backup error: ' + e.message);
+        }
+      },
+      style: {
+        padding: '10px 20px',
+        borderRadius: 6,
+        border: 'none',
+        background: 'var(--forest)',
+        color: 'white',
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left'
+      }
+    }, "💾 Backup Now — saves everything to Firestore"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--ink-soft)',
+        letterSpacing: 1,
+        marginTop: 4
+      }
+    }, "RESTORE OPTIONS"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => doRestore('Match Results (group + KO)', async bk => {
+        await db.collection('wc26').doc('results').set({
+          value: JSON.stringify(bk.results || {})
+        });
+        setResults(bk.results || {});
+        lsSet('results', bk.results || {});
+        alert(`✅ Results restored.\n${Object.keys((bk.results || {}).group || {}).length} group + ${Object.keys((bk.results || {}).ko || {}).length} KO results.`);
+      }),
+      style: {
+        padding: '9px 16px',
+        borderRadius: 6,
+        border: '1px solid var(--amber)',
+        background: 'rgba(214,137,42,.08)',
+        color: 'var(--amber)',
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left'
+      }
+    }, "♻️ Restore Match Results \xA0", /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 400,
+        fontSize: 11
+      }
+    }, "(group scores + KO scores)")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => doRestore('Participants list + PINs', async bk => {
+        await Promise.all([db.collection('wc26').doc('participants').set({
+          value: JSON.stringify(bk.participants || [])
+        }), db.collection('wc26').doc('pins').set({
+          value: JSON.stringify(bk.pins || {})
+        })]);
+        setParticipants(bk.participants || []);
+        lsSet('participants', bk.participants || []);
+        setUserPins(bk.pins || {});
+        lsSet('pins', bk.pins || {});
+        alert(`✅ Participants restored.\n${(bk.participants || []).length} users.`);
+      }),
+      style: {
+        padding: '9px 16px',
+        borderRadius: 6,
+        border: '1px solid var(--amber)',
+        background: 'rgba(214,137,42,.08)',
+        color: 'var(--amber)',
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left'
+      }
+    }, "♻️ Restore Participants & PINs \xA0", /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 400,
+        fontSize: 11
+      }
+    }, "(user list + passwords)")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => doRestore('All User Predictions', async bk => {
+        const preds = bk.predictions || {};
+        await Promise.all(Object.entries(preds).map(([u, p]) => db.collection('wc26').doc(`pred-${u}`).set({
+          value: JSON.stringify(p)
+        })));
+        setAllPredictions(prev => ({
+          ...prev,
+          ...preds
+        }));
+        alert(`✅ Predictions restored for ${Object.keys(preds).length} users.`);
+      }),
+      style: {
+        padding: '9px 16px',
+        borderRadius: 6,
+        border: '1px solid var(--amber)',
+        background: 'rgba(214,137,42,.08)',
+        color: 'var(--amber)',
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left'
+      }
+    }, "♻️ Restore User Predictions \xA0", /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 400,
+        fontSize: 11
+      }
+    }, "(all picks, jokers, bonus)")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => doRestore('App Config/Settings', async bk => {
+        await db.collection('wc26').doc('config').set({
+          value: JSON.stringify(bk.config || {})
+        });
+        setConfig(bk.config || {});
+        lsSet('config', bk.config || {});
+        alert('✅ Config/settings restored.');
+      }),
+      style: {
+        padding: '9px 16px',
+        borderRadius: 6,
+        border: '1px solid var(--amber)',
+        background: 'rgba(214,137,42,.08)',
+        color: 'var(--amber)',
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left'
+      }
+    }, "♻️ Restore Config/Settings \xA0", /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 400,
+        fontSize: 11
+      }
+    }, "(phase, locks, approval settings)")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => doRestore('EVERYTHING', async bk => {
+        const preds = bk.predictions || {};
+        await Promise.all([db.collection('wc26').doc('results').set({
+          value: JSON.stringify(bk.results || {})
+        }), db.collection('wc26').doc('participants').set({
+          value: JSON.stringify(bk.participants || [])
+        }), db.collection('wc26').doc('pins').set({
+          value: JSON.stringify(bk.pins || {})
+        }), db.collection('wc26').doc('config').set({
+          value: JSON.stringify(bk.config || {})
+        }), ...Object.entries(preds).map(([u, p]) => db.collection('wc26').doc(`pred-${u}`).set({
+          value: JSON.stringify(p)
+        }))]);
+        setResults(bk.results || {});
+        lsSet('results', bk.results || {});
+        setParticipants(bk.participants || []);
+        lsSet('participants', bk.participants || []);
+        setUserPins(bk.pins || {});
+        lsSet('pins', bk.pins || {});
+        setConfig(bk.config || {});
+        lsSet('config', bk.config || {});
+        setAllPredictions(prev => ({
+          ...prev,
+          ...preds
+        }));
+        alert(`✅ Full restore complete.\n${(bk.participants || []).length} users · ${Object.keys((bk.results || {}).group || {}).length} group results · ${Object.keys(preds).length} prediction sets restored.`);
+      }),
+      style: {
+        padding: '9px 16px',
+        borderRadius: 6,
+        border: 'none',
+        background: 'var(--burgundy)',
+        color: 'white',
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left'
+      }
+    }, "♻️ Restore EVERYTHING \xA0", /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 400,
+        fontSize: 11
+      }
+    }, "(results + users + predictions + settings)")));
+  })()), isSuperAdmin && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 20,
       borderLeft: '3px solid var(--forest)'
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -19275,6 +19525,11 @@ function App() {
     }
     setResults(newRes);
     await storage.setJSON('results', newRes, true);
+    // Always keep a backup copy — restores instantly if main doc gets corrupted
+    if (FB_ON) db.collection('wc26').doc('results-backup').set({
+      value: JSON.stringify(newRes),
+      savedAt: Date.now()
+    }).catch(() => {});
     pushComputedStandings(newRes.group || {});
     pushComputedResults(newRes.group || {});
     autoFetchScorers();
