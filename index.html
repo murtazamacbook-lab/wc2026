@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260627-021'; // bump this on every deploy
+const APP_VERSION = 'v20260627-022'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -20798,6 +20798,18 @@ function App() {
     computedSpotlightsRef.current = spots;
   }
   const computedSpotlights = computedSpotlightsRef.current;
+
+  // koRoundClass must be computed before any early returns (Rules of Hooks)
+  const koRoundClass = useMemo(() => {
+    if (config.phase !== 'ko') return '';
+    const ko = results.ko || {};
+    const has = ids => ids.some(id => ko[id] && ko[id].h != null && ko[id].h !== '');
+    if (has([103, 104])) return 'ko-final';
+    if (has([101, 102])) return 'ko-sf';
+    if (has([97, 98, 99, 100])) return 'ko-qf';
+    if (has([89, 90, 91, 92, 93, 94, 95, 96])) return 'ko-r16';
+    return 'ko-r32';
+  }, [config.phase, results.ko]);
   if (loading) return /*#__PURE__*/React.createElement("div", {
     className: "app",
     style: {
@@ -20920,18 +20932,6 @@ function App() {
     },
     onClick: () => setView('leaderboard')
   }, "← Back")));
-
-  // Detect current active KO round for background theming
-  const koRoundClass = useMemo(() => {
-    if (config.phase !== 'ko') return '';
-    const ko = results.ko || {};
-    const has = ids => ids.some(id => ko[id] && ko[id].h != null && ko[id].h !== '');
-    if (has([103, 104])) return 'ko-final';
-    if (has([101, 102])) return 'ko-sf';
-    if (has([97, 98, 99, 100])) return 'ko-qf';
-    if (has([89, 90, 91, 92, 93, 94, 95, 96])) return 'ko-r16';
-    return 'ko-r32';
-  }, [config.phase, results.ko]);
   return /*#__PURE__*/React.createElement("div", {
     className: `app${koRoundClass ? ' ' + koRoundClass : ''}`
   }, /*#__PURE__*/React.createElement("style", null, CSS), /*#__PURE__*/React.createElement(Header, {
