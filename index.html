@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260628-041'; // bump this on every deploy
+const APP_VERSION = 'v20260628-042'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -5686,9 +5686,13 @@ const BrowseView = React.memo(({
   participants,
   allPredictions,
   results,
-  kickoffTimes = new Map()
+  kickoffTimes = new Map(),
+  phase = 'group'
 }) => {
   const [selected, setSelected] = useState(null);
+  const isKo = phase === 'ko';
+  const [groupOpen, setGroupOpen] = useState(!isKo);
+  const [bonusOpen, setBonusOpen] = useState(!isKo);
   const sorted = useMemo(() => [...participants].sort((a, b) => a.localeCompare(b)), [participants]);
   const viewPreds = selected ? allPredictions[selected] || {
     group: {},
@@ -5762,7 +5766,51 @@ const BrowseView = React.memo(({
       fontSize: 13,
       color: 'var(--ink-soft)'
     }
-  }, /*#__PURE__*/React.createElement("strong", null, viewScore.total, " pts"), " — Group: ", viewScore.groupPoints, " | KO: ", viewScore.koPoints, " | Bonus: ", viewScore.bonusPoints))), GROUP_KEYS.map(g => {
+  }, /*#__PURE__*/React.createElement("strong", null, viewScore.total, " pts"), " — Group: ", viewScore.groupPoints, " | KO: ", viewScore.koPoints, " | Bonus: ", viewScore.bonusPoints))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setGroupOpen(o => !o),
+    style: {
+      width: '100%',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      background: 'var(--cream2)',
+      border: '1px solid var(--line)',
+      borderRadius: 6,
+      padding: '9px 14px',
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      marginBottom: groupOpen ? 8 : 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13
+    }
+  }, "📋 Group Stage Picks"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--ink-soft)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6
+    }
+  }, isKo && !groupOpen && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      background: 'var(--line)',
+      borderRadius: 3,
+      padding: '1px 6px',
+      color: 'var(--ink-soft)'
+    }
+  }, "Group stage complete"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16
+    }
+  }, groupOpen ? '▲' : '▼'))), groupOpen && GROUP_KEYS.map(g => {
     const ms = GROUP_MATCHES_BY_GROUP[g] || [];
     const groupTotal = ms.reduce((s, m) => s + (viewScore?.matchPts?.[m.id] || 0), 0);
     return /*#__PURE__*/React.createElement("div", {
@@ -5902,7 +5950,7 @@ const BrowseView = React.memo(({
         }
       }, "0") : null));
     }));
-  }), (() => {
+  })), (() => {
     const {
       bracket: actualBracket
     } = buildActualBracket(results.group || {}, results.ko || {});
@@ -6120,12 +6168,32 @@ const BrowseView = React.memo(({
     style: {
       marginTop: 16
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "micro-caps",
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setBonusOpen(o => !o),
     style: {
-      marginBottom: 8
+      width: '100%',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      background: 'var(--cream2)',
+      border: '1px solid var(--line)',
+      borderRadius: 6,
+      padding: '9px 14px',
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      marginBottom: bonusOpen ? 8 : 0
     }
-  }, "Bonus Picks"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13
+    }
+  }, "🃏 Bonus & Joker Picks"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16,
+      color: 'var(--ink-soft)'
+    }
+  }, bonusOpen ? '▲' : '▼')), bonusOpen && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 16
@@ -6354,7 +6422,7 @@ const BrowseView = React.memo(({
         }
       }, "current") : null);
     }));
-  })()))));
+  })())))));
 });
 
 // ── CROWD VIEW ───────────────────────────────────────────────────
@@ -22235,7 +22303,8 @@ function App() {
     participants: participants,
     allPredictions: allPredictions,
     results: results,
-    kickoffTimes: kickoffTimes
+    kickoffTimes: kickoffTimes,
+    phase: config.phase || 'group'
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'live'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
