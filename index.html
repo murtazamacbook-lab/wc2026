@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-061'; // bump this on every deploy
+const APP_VERSION = 'v20260629-062'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -21303,7 +21303,7 @@ function App() {
   const pushComputedResults = useCallback(async groupResults => {
     try {
       const kt = kickoffTimesRef.current;
-      const sevenDaysAgo = Date.now() - 7 * 86400000;
+      const sevenDaysAgo = Date.now() - 60 * 86400000;
       const matches = GROUP_MATCHES.filter(m => {
         const r = groupResults[m.id];
         return r && r.h !== '' && r.h != null;
@@ -21581,8 +21581,8 @@ function App() {
       try {
         const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
         const now = new Date();
-        // Fetch 7-day lookback + 1 day ahead in a single ESPN range request
-        const from = localDateStr(new Date(now.getTime() - 7 * 86400000));
+        // Fetch 60-day lookback + 1 day ahead to cover full tournament
+        const from = localDateStr(new Date(now.getTime() - 60 * 86400000));
         const to = localDateStr(new Date(now.getTime() + 86400000));
         const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
         const matches = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
@@ -21862,7 +21862,7 @@ function App() {
       try {
         const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
         const now = new Date();
-        const from = localDateStr(new Date(now.getTime() - 7 * 86400000));
+        const from = localDateStr(new Date(now.getTime() - 60 * 86400000));
         const to = localDateStr(new Date(now.getTime() + 86400000));
         const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
         const all = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
