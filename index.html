@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-065'; // bump this on every deploy
+const APP_VERSION = 'v20260629-066'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -21462,158 +21462,9 @@ function App() {
     scorersFetchingRef.current = false;
   }, []);
 
-  // ── AUTO-POLL: import live results every 60s while page is visible ──────
-  useEffect(() => {
-    const apiKey = () => {
-      try {
-        return localStorage.getItem('wc26_synckey') || window.__RAPID_KEY || '';
-      } catch {
-        return window.__RAPID_KEY || '';
-      }
-    };
-    const fetchAndImport = async () => {
-      if (document.visibilityState === 'hidden') return; // skip while tab hidden
-      const key = apiKey();
-      if (!key && !FUNC_BASE) return;
-      // RapidAPI disabled — quota exhausted. Skip RapidAPI /results, ESPN handles result imports.
-      if (!FUNC_BASE) return;
-      const hdrs = key ? {
-        'X-RapidAPI-Key': key,
-        'X-RapidAPI-Host': API_HOST
-      } : null;
-      try {
-        // 1. Fetch /results
-        const url = FUNC_BASE ? `${FUNC_BASE}/proxy?ep=results` : `https://${API_HOST}/results`;
-        const r = await fetch(url, hdrs ? {
-          headers: hdrs
-        } : {});
-        const d = await r.json();
-        // Flatten
-        const flattenGrouped = obj => {
-          if (!obj) return [];
-          if (Array.isArray(obj)) return obj;
-          const res = [];
-          Object.entries(obj).forEach(([k, v]) => {
-            if (Array.isArray(v)) v.forEach(m => res.push({
-              ...m,
-              _groupKey: k
-            }));
-          });
-          return res;
-        };
-        const candidates = [d?.data?.groups, d?.data?.matches, d?.data?.results, d?.data, d?.groups, d?.matches, d?.results];
-        let best = [];
-        for (const c of candidates) {
-          if (!c) continue;
-          const f = flattenGrouped(c);
-          if (f.length > best.length) best = f;
-        }
-        const finished = best.filter(m => {
-          const s = (m.status || m.matchStatus || m.state || '').toLowerCase();
-          const hG = m.homeScore ?? m.home_score ?? m.goalsHome ?? m.homeGoals;
-          const aG = m.awayScore ?? m.away_score ?? m.goalsAway ?? m.awayGoals;
-          const hasScore = hG != null && aG != null && !(hG === 0 && aG === 0 && !DONE_STATUSES.some(ds => s.includes(ds)));
-          return DONE_STATUSES.some(ds => s.includes(ds)) || hasScore;
-        });
-        if (finished.length === 0) return;
-        // 2. Get current stored results
-        const stored = (await storage.getJSON('results', true)) || {
-          group: {},
-          ko: {},
-          bonus: {}
-        };
-        const newGR = {
-          ...stored.group
-        };
-        let count = 0;
-        finished.forEach(f => {
-          // Extract team names — handle both string and object-shaped fields
-          const rawH = f.home || f.homeTeam || f.team_home || f.homeName || f.home_team;
-          const rawA = f.away || f.awayTeam || f.team_away || f.awayName || f.away_team;
-          const home = normTeam(extractApiTeamName(rawH) || String(rawH || ''));
-          const away = normTeam(extractApiTeamName(rawA) || String(rawA || ''));
-          const hG = f.homeScore ?? f.home_score ?? f.score_home ?? f.goals_home ?? f.goalsHome ?? f.homeGoals;
-          const aG = f.awayScore ?? f.away_score ?? f.score_away ?? f.goals_away ?? f.goalsAway ?? f.awayGoals;
-          if (hG == null || hG === '' || aG == null || aG === '') return;
-          // Find the match first — if it's in GROUP_MATCHES it IS a group stage match
-          const m = GROUP_MATCHES.find(m => m.home === home && m.away === away || m.home === away && m.away === home);
-          if (!m) return;
-          const swap = m.home === away;
-          const nh = String(swap ? aG : hG),
-            na = String(swap ? hG : aG);
-          const existing = newGR[m.id];
-          if (existing && existing.h === nh && existing.a === na) return; // no change
-          newGR[m.id] = {
-            h: nh,
-            a: na
-          };
-          count++;
-        });
-        if (count === 0) return; // nothing new
-        // 3. Save + update state — only if newGR has valid data
-        const newResults = {
-          ...stored,
-          group: newGR
-        };
-        if (Object.keys(newGR).length === 0) {
-          return;
-        } // nothing to save
-        lastLocalWriteRef.current = Date.now();
-        lastWriteResultsRef.current = Date.now();
-        await storage.setJSON('results', newResults, true);
-        setResults(newResults);
-        // No prediction re-read — leaderboard useMemo recomputes from existing allPredictions state
-        // 4. Refresh live match banner
-        try {
-          const liveUrl = FUNC_BASE ? `${FUNC_BASE}/proxy?ep=live` : `https://${API_HOST}/live`;
-          const lr = await fetch(liveUrl, hdrs ? {
-            headers: hdrs
-          } : {});
-          const ld = await lr.json();
-          const liveArr = flattenGrouped(ld?.data || ld?.live || ld) || [];
-          const uUrl = FUNC_BASE ? `${FUNC_BASE}/proxy?ep=upcoming&day=today` : `https://${API_HOST}/upcoming?day=today`;
-          const ur = await fetch(uUrl, hdrs ? {
-            headers: hdrs
-          } : {});
-          const ud = await ur.json();
-          const upArr = flattenGrouped(ud?.data || ud?.upcoming || ud) || [];
-          const combined = [...liveArr, ...upArr];
-          if (combined.length > 0) setLiveMatches(combined);
-        } catch (e) {}
-        // 5. Show toast
-        const now = new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-        addToast('sync', {
-          count,
-          time: now
-        });
-      } catch (e) {
-        console.warn('Auto-sync error:', e);
-      }
-    };
-    // Initial fetch after 5s (allow page to settle)
-    const initialTimer = setTimeout(fetchAndImport, 5000);
-    // Recurring poll
-    autoSyncRef.current = setInterval(fetchAndImport, POLL_INTERVAL_MS);
-    // Re-fetch when tab becomes visible again — throttled: minimum 60s between fetches
-    let lastFetchTs = 0;
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastFetchTs > 60000) {
-        lastFetchTs = Date.now();
-        fetchAndImport();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(autoSyncRef.current);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [participants]); // restart if participants list changes
-
-  // ── END AUTO-POLL ─────────────────────────────────────────────────
+  // ── AUTO-POLL (RapidAPI): PERMANENTLY DISABLED — ESPN handles all result imports ──
+  // RapidAPI removed because it was causing group results to be wiped on network errors.
+  useEffect(() => {/* disabled */}, []);
 
   // ── ESPN CACHE: onSnapshot subscription (eliminates per-user .get() polling) ────
   // All 200 clients subscribe once; Firestore pushes updates over existing WebSocket.
