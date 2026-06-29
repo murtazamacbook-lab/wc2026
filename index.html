@@ -11706,6 +11706,244 @@ const OnlinePanel = ({
     }
   }, "🟢 Bright green = active in last 90s · 🟠 Orange = seen 90s–3min ago · 📱 Mobile · 🖥️ Desktop"));
 };
+// ── SHOUTOUT PANEL ───────────────────────────────────────────────
+const ShoutoutPanel = ({
+  results,
+  participants,
+  allPredictions,
+  kickoffTimes
+}) => {
+  const SPEECHES = [["The beautiful game never lies — every prediction tells a story.", "Keep going, the trophy is still up for grabs! 🏆"], ["Football is 90 minutes of chess with your feet — your picks prove you see the board.", "Stay sharp, the best matches are still ahead! ⚡"], ["Predicting football is an art — and some of you are Picasso.", "One match at a time, glory awaits the bold! 🎯"], ["The crowd roars, the numbers don't lie — great picks were made today!", "Keep the faith, the tournament is heating up! 🔥"], ["Every correct pick is a small victory — celebrate it!", "Fortune favours the prepared — study those fixtures! 📊"], ["The real World Cup is the predictions we made along the way.", "Stay in the game — comebacks are always possible! 💪"]];
+  const allPlayedMatches = [...GROUP_MATCHES.filter(m => {
+    const r = results.group?.[m.id];
+    return r && r.h != null && r.h !== '' && r.a != null && r.a !== '';
+  }), ...(() => {
+    const ko = [];
+    for (let id = 73; id <= 104; id++) {
+      const r = results.ko?.[id];
+      if (r && r.h != null && r.h !== '') ko.push({
+        id
+      });
+    }
+    return ko;
+  })()];
+  const defaultId = allPlayedMatches.length > 0 ? String(allPlayedMatches[allPlayedMatches.length - 1].id) : '';
+  const [selMatchId, setSelMatchId] = useState(defaultId);
+  const [copied, setCopied] = useState(false);
+  const mIdNum = parseInt(selMatchId);
+  const isKo = mIdNum >= 73;
+  const groupMatch = !isKo ? GROUP_MATCHES.find(m => m.id === mIdNum) : null;
+  const actual = isKo ? results.ko?.[mIdNum] : results.group?.[mIdNum];
+  const homeTeam = isKo ? (() => {
+    try {
+      const {
+        bracket
+      } = buildActualBracket(results.group || {}, results.ko || {});
+      return bracket[mIdNum]?.home || `M${mIdNum} Home`;
+    } catch {
+      return `M${mIdNum} Home`;
+    }
+  })() : groupMatch?.home || '';
+  const awayTeam = isKo ? (() => {
+    try {
+      const {
+        bracket
+      } = buildActualBracket(results.group || {}, results.ko || {});
+      return bracket[mIdNum]?.away || `M${mIdNum} Away`;
+    } catch {
+      return `M${mIdNum} Away`;
+    }
+  })() : groupMatch?.away || '';
+  const matchLabel = isKo ? `M${mIdNum}` : groupMatch ? `M${groupMatch.id} (Grp ${groupMatch.group} MD${groupMatch.matchday})` : '';
+  const matchStats = actual && homeTeam ? participants.map(p => {
+    const upreds = allPredictions[p] || {};
+    const pred = isKo ? upreds.ko?.[mIdNum] : upreds.group?.[mIdNum];
+    if (!pred || pred.h === '' || pred.h == null) return {
+      name: p,
+      pts: 0,
+      exact: false,
+      correctResult: false,
+      noPred: true
+    };
+    const {
+      total,
+      breakdown
+    } = scoreMatch(pred, actual, homeTeam, awayTeam, !isKo);
+    if (!isKo) {
+      const matchKickoffMs = kickoffTimes instanceof Map ? kickoffTimes.get(mIdNum) : null;
+      const jokerCutoffMs = matchKickoffMs || MATCHDAY_CUTOFFS[groupMatch?.matchday];
+      let ej;
+      if (matchKickoffMs && matchKickoffMs >= JOKER_DAILY_CUTOFF_MS) {
+        const matchDateStr = new Date(matchKickoffMs).toLocaleDateString('sv');
+        ej = getJokerForDate(upreds.jokerLockHistory, matchDateStr);
+      } else {
+        ej = getJokerForTimestamp(upreds.jokerHistory, jokerCutoffMs, upreds.joker || {});
+      }
+      const mult = getJokerMultiplier(groupMatch, ej.team, ej.group);
+      return {
+        name: p,
+        pts: total * mult,
+        exact: !!breakdown.exactBonus,
+        correctResult: !!(breakdown.correctResult || breakdown.correctDraw),
+        noPred: false
+      };
+    } else {
+      const {
+        bracket: ab
+      } = buildActualBracket(results.group || {}, results.ko || {});
+      const am = ab[mIdNum];
+      const pH = parseInt(pred.h),
+        pA = parseInt(pred.a),
+        eH = parseInt(actual.h),
+        eA = parseInt(actual.a);
+      let predWinner = null;
+      if (pH > pA) predWinner = am?.home;else if (pA > pH) predWinner = am?.away;else if (pred.pk === am?.home || pred.pk === am?.away) predWinner = pred.pk;
+      let actualWinner = null;
+      if (eH > eA) actualWinner = am?.home;else if (eA > eH) actualWinner = am?.away;else actualWinner = actual.pkWinner || null;
+      const rnd = mIdNum <= 88 ? 'R32' : ROUND_FOR(mIdNum);
+      const bracketBonus = predWinner && actualWinner && predWinner === actualWinner && rnd && SCORING.bracketTeam[rnd] ? SCORING.bracketTeam[rnd] : 0;
+      return {
+        name: p,
+        pts: total + bracketBonus,
+        exact: !!breakdown.exactBonus,
+        correctResult: !!(breakdown.correctResult || breakdown.correctDraw),
+        noPred: false
+      };
+    }
+  }) : [];
+  const exacters = matchStats.filter(s => s.exact).sort((a, b) => b.pts - a.pts);
+  const correctOnes = matchStats.filter(s => !s.exact && s.correctResult).sort((a, b) => b.pts - a.pts);
+  const missed = matchStats.filter(s => !s.exact && !s.correctResult && !s.noPred);
+  const topScorer = matchStats.filter(s => !s.noPred).sort((a, b) => b.pts - a.pts)[0];
+  const ah = actual ? parseInt(actual.h) : 0,
+    aa = actual ? parseInt(actual.a) : 0;
+  const speech = SPEECHES[mIdNum % SPEECHES.length];
+  const generateText = () => {
+    if (!actual || !homeTeam) return '';
+    const flag = t => TEAM_FLAGS[t] || '🏳';
+    const lines = [];
+    lines.push(`⚽ *WC 2026 Match Shoutout — ${matchLabel}*`);
+    lines.push(`${flag(homeTeam)} *${homeTeam}* ${ah}–${aa} *${awayTeam}* ${flag(awayTeam)}`);
+    lines.push('');
+    if (exacters.length > 0) {
+      lines.push(`🎯 *Exact Score* (${ah}-${aa}):`);
+      exacters.forEach(s => lines.push(`   👏 ${s.name} (+${s.pts} pts)`));
+      lines.push('');
+    }
+    if (correctOnes.length > 0) {
+      lines.push(`✅ *Correct Result*:`);
+      correctOnes.forEach(s => lines.push(`   ${s.name} (+${s.pts} pts)`));
+      lines.push('');
+    }
+    if (missed.length > 0) {
+      lines.push(`😬 *Missed this one*: ${missed.map(s => s.name).join(', ')}`);
+      lines.push('');
+    }
+    if (topScorer && topScorer.pts > 0) {
+      lines.push(`🏅 *Match MVP: ${topScorer.name}* with ${topScorer.pts} pts — well played!`);
+      lines.push('');
+    }
+    lines.push(`💬 _"${speech[0]}"_`);
+    lines.push(`🚀 _"${speech[1]}"_`);
+    return lines.join('\n');
+  };
+  const text = generateText();
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16,
+      maxWidth: 600
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "display",
+    style: {
+      fontSize: 20,
+      fontWeight: 700,
+      margin: '0 0 4px'
+    }
+  }, "📣 Match Shoutout Generator"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: 'var(--ink-soft)',
+      margin: '0 0 16px'
+    }
+  }, "Pick a match → copy the WhatsApp-ready shoutout to send to your group."), allPlayedMatches.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'var(--ink-soft)',
+      fontSize: 13
+    }
+  }, "No completed matches yet."), allPlayedMatches.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 10,
+      alignItems: 'center',
+      marginBottom: 16,
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("select", {
+    value: selMatchId,
+    onChange: e => {
+      setSelMatchId(e.target.value);
+      setCopied(false);
+    },
+    style: {
+      padding: '8px 12px',
+      fontSize: 13,
+      border: '1px solid var(--line)',
+      borderRadius: 4,
+      background: 'white',
+      fontFamily: 'inherit',
+      flex: '1 1 260px',
+      maxWidth: 380
+    }
+  }, allPlayedMatches.map(m => {
+    const isKoM = m.id >= 73;
+    const r = isKoM ? results.ko?.[m.id] : results.group?.[m.id];
+    const h = r ? r.h : '?',
+      a = r ? r.a : '?';
+    const gm = !isKoM ? GROUP_MATCHES.find(x => x.id === m.id) : null;
+    const lbl = isKoM ? `M${m.id}` : `M${m.id} — Grp ${gm?.group} MD${gm?.matchday} | ${gm?.home} vs ${gm?.away}`;
+    return /*#__PURE__*/React.createElement("option", {
+      key: m.id,
+      value: String(m.id)
+    }, lbl, " (", h, "–", a, ")");
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      });
+    },
+    className: "btn btn-green",
+    style: {
+      padding: '8px 20px',
+      fontSize: 13,
+      flexShrink: 0
+    }
+  }, copied ? '✅ Copied!' : '📋 Copy')), text && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'var(--cream2)',
+      border: '1px solid var(--line)',
+      borderRadius: 8,
+      padding: 16
+    }
+  }, /*#__PURE__*/React.createElement("pre", {
+    style: {
+      margin: 0,
+      fontFamily: 'inherit',
+      fontSize: 13,
+      lineHeight: 1.7,
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word',
+      color: 'var(--ink)'
+    }
+  }, text)), !text && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'var(--ink-soft)',
+      fontSize: 13
+    }
+  }, "No result data for this match yet.")));
+};
 
 // ── ADMIN VIEW ───────────────────────────────────────────────────
 const AdminView = ({
@@ -14948,248 +15186,12 @@ const AdminView = ({
     matchCommentary: matchCommentary,
     saveCommentary: saveCommentary,
     adminRole: adminRole
-  }), section === 'shoutout' && (() => {
-    // ── MATCH SHOUTOUT GENERATOR ──
-    const allPlayedMatches = [...GROUP_MATCHES.filter(m => {
-      const r = results.group?.[m.id];
-      return r && r.h != null && r.h !== '' && r.a != null && r.a !== '';
-    }), ...(() => {
-      const ko = [];
-      for (let id = 73; id <= 104; id++) {
-        const r = results.ko?.[id];
-        if (r && r.h != null && r.h !== '') ko.push({
-          id,
-          label: `M${id}`
-        });
-      }
-      return ko;
-    })()];
-    const [selMatchId, setSelMatchId] = React.useState(allPlayedMatches.length > 0 ? String(allPlayedMatches[allPlayedMatches.length - 1].id) : '');
-    const [copied, setCopied] = React.useState(false);
-    const SPEECHES = [["The beautiful game never lies — every prediction tells a story.", "Keep going, the trophy is still up for grabs! 🏆"], ["Football is 90 minutes of chess with your feet — your picks prove you see the board.", "Stay sharp, the best matches are still ahead! ⚡"], ["Predicting football is an art — and some of you are Picasso.", "One match at a time, glory awaits the bold! 🎯"], ["The crowd roars, the numbers don't lie — great picks were made today!", "Keep the faith, the tournament is heating up! 🔥"], ["Every correct pick is a small victory — celebrate it!", "Fortune favours the prepared — study those fixtures! 📊"], ["The real World Cup is the predictions we made along the way.", "Stay in the game — comebacks are always possible! 💪"]];
-    const mIdNum = parseInt(selMatchId);
-    const isKo = mIdNum >= 73;
-    const groupMatch = !isKo ? GROUP_MATCHES.find(m => m.id === mIdNum) : null;
-    const actual = isKo ? results.ko?.[mIdNum] : results.group?.[mIdNum];
-    const homeTeam = isKo ? (() => {
-      try {
-        const {
-          bracket
-        } = buildActualBracket(results.group || {}, results.ko || {});
-        return bracket[mIdNum]?.home || `M${mIdNum} Home`;
-      } catch {
-        return `M${mIdNum} Home`;
-      }
-    })() : groupMatch?.home || '';
-    const awayTeam = isKo ? (() => {
-      try {
-        const {
-          bracket
-        } = buildActualBracket(results.group || {}, results.ko || {});
-        return bracket[mIdNum]?.away || `M${mIdNum} Away`;
-      } catch {
-        return `M${mIdNum} Away`;
-      }
-    })() : groupMatch?.away || '';
-    const matchLabel = isKo ? `M${mIdNum}` : groupMatch ? `M${groupMatch.id} (${groupMatch.group}${groupMatch.matchday})` : '';
-
-    // Compute per-user stats for this match
-    const matchStats = actual && homeTeam ? participants.map(p => {
-      const upreds = allPredictions[p] || {};
-      const pred = isKo ? upreds.ko?.[mIdNum] : upreds.group?.[mIdNum];
-      if (!pred || pred.h === '' || pred.h == null) return {
-        name: p,
-        pts: 0,
-        exact: false,
-        correctResult: false,
-        noPred: true
-      };
-      const {
-        total,
-        breakdown
-      } = scoreMatch(pred, actual, homeTeam, awayTeam, !isKo);
-      let mult = 1;
-      if (!isKo) {
-        const matchKickoffMs = kickoffTimes instanceof Map ? kickoffTimes.get(mIdNum) : null;
-        const jokerCutoffMs = matchKickoffMs || MATCHDAY_CUTOFFS[groupMatch?.matchday];
-        let ej;
-        if (matchKickoffMs && matchKickoffMs >= JOKER_DAILY_CUTOFF_MS) {
-          const matchDateStr = new Date(matchKickoffMs).toLocaleDateString('sv');
-          ej = getJokerForDate(upreds.jokerLockHistory, matchDateStr);
-        } else {
-          ej = getJokerForTimestamp(upreds.jokerHistory, jokerCutoffMs, upreds.joker || {});
-        }
-        mult = getJokerMultiplier(groupMatch, ej.team, ej.group);
-      } else {
-        // KO bracket advancement
-        const preds = upreds;
-        const ko = results.ko || {};
-        const {
-          bracket: ab
-        } = buildActualBracket(results.group || {}, ko);
-        const am = ab[mIdNum];
-        const pH = parseInt(pred.h),
-          pA = parseInt(pred.a);
-        const eH = parseInt(actual.h),
-          eA = parseInt(actual.a);
-        let predWinner = null;
-        if (pH > pA) predWinner = am?.home;else if (pA > pH) predWinner = am?.away;else if (pred.pk === am?.home || pred.pk === am?.away) predWinner = pred.pk;
-        let actualWinner = null;
-        if (eH > eA) actualWinner = am?.home;else if (eA > eH) actualWinner = am?.away;else actualWinner = actual.pkWinner || null;
-        const rnd = mIdNum <= 88 ? 'R32' : ROUND_FOR(mIdNum);
-        if (predWinner && actualWinner && predWinner === actualWinner && rnd && SCORING.bracketTeam[rnd]) {
-          return {
-            name: p,
-            pts: total + SCORING.bracketTeam[rnd],
-            base: total,
-            bracket: SCORING.bracketTeam[rnd],
-            exact: !!breakdown.exactBonus,
-            correctResult: !!(breakdown.correctResult || breakdown.correctDraw),
-            pred
-          };
-        }
-      }
-      return {
-        name: p,
-        pts: total * mult,
-        base: total,
-        mult,
-        exact: !!breakdown.exactBonus,
-        correctResult: !!(breakdown.correctResult || breakdown.correctDraw),
-        noPred: false,
-        pred
-      };
-    }) : [];
-    const exacters = matchStats.filter(s => s.exact).sort((a, b) => b.pts - a.pts);
-    const correctOnes = matchStats.filter(s => !s.exact && s.correctResult).sort((a, b) => b.pts - a.pts);
-    const missed = matchStats.filter(s => !s.exact && !s.correctResult && !s.noPred);
-    const noPred = matchStats.filter(s => s.noPred);
-    const topScorer = matchStats.filter(s => !s.noPred).sort((a, b) => b.pts - a.pts)[0];
-    const ah = actual ? parseInt(actual.h) : 0,
-      aa = actual ? parseInt(actual.a) : 0;
-
-    // Deterministic speech based on match id
-    const speech = SPEECHES[mIdNum % SPEECHES.length];
-    const generateText = () => {
-      if (!actual || !homeTeam) return '';
-      const flag = t => TEAM_FLAGS[t] || '🏳';
-      const lines = [];
-      lines.push(`⚽ *WC 2026 Match Shoutout — ${matchLabel}*`);
-      lines.push(`${flag(homeTeam)} *${homeTeam}* ${ah}–${aa} *${awayTeam}* ${flag(awayTeam)}`);
-      lines.push('');
-      if (exacters.length > 0) {
-        lines.push(`🎯 *Exact Score* (${ah}-${aa}):`);
-        exacters.forEach(s => lines.push(`   👏 ${s.name} (+${s.pts} pts)`));
-        lines.push('');
-      }
-      if (correctOnes.length > 0) {
-        lines.push(`✅ *Correct Result*:`);
-        correctOnes.forEach(s => lines.push(`   ${s.name} (+${s.pts} pts)`));
-        lines.push('');
-      }
-      if (missed.length > 0) {
-        lines.push(`😬 *Missed this one*: ${missed.map(s => s.name).join(', ')}`);
-        lines.push('');
-      }
-      if (topScorer && topScorer.pts > 0) {
-        lines.push(`🏅 *Match MVP: ${topScorer.name}* with ${topScorer.pts} pts — well played!`);
-        lines.push('');
-      }
-      lines.push(`💬 _"${speech[0]}"_`);
-      lines.push(`🚀 _"${speech[1]}"_`);
-      return lines.join('\n');
-    };
-    const text = generateText();
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 16,
-        maxWidth: 600
-      }
-    }, /*#__PURE__*/React.createElement("h3", {
-      className: "display",
-      style: {
-        fontSize: 20,
-        fontWeight: 700,
-        margin: '0 0 4px'
-      }
-    }, "📣 Match Shoutout Generator"), /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: 13,
-        color: 'var(--ink-soft)',
-        margin: '0 0 16px'
-      }
-    }, "Pick a match → copy the WhatsApp-ready shoutout to send to your group."), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: 10,
-        alignItems: 'center',
-        marginBottom: 16,
-        flexWrap: 'wrap'
-      }
-    }, /*#__PURE__*/React.createElement("select", {
-      value: selMatchId,
-      onChange: e => {
-        setSelMatchId(e.target.value);
-        setCopied(false);
-      },
-      style: {
-        padding: '8px 12px',
-        fontSize: 13,
-        border: '1px solid var(--line)',
-        borderRadius: 4,
-        background: 'white',
-        fontFamily: 'inherit',
-        flex: '1 1 260px',
-        maxWidth: 360
-      }
-    }, allPlayedMatches.map(m => {
-      const isKoM = m.id >= 73;
-      const r = isKoM ? results.ko?.[m.id] : results.group?.[m.id];
-      const h = r ? r.h : '?',
-        a = r ? r.a : '?';
-      const lbl = isKoM ? `M${m.id}` : `M${m.id} — Grp ${m.group}${m.matchday} | ${m.home} vs ${m.away}`;
-      return /*#__PURE__*/React.createElement("option", {
-        key: m.id,
-        value: String(m.id)
-      }, lbl, " (", h, "–", a, ")");
-    })), /*#__PURE__*/React.createElement("button", {
-      onClick: () => {
-        if (!text) return;
-        navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2500);
-        });
-      },
-      className: "btn btn-green",
-      style: {
-        padding: '8px 20px',
-        fontSize: 13,
-        flexShrink: 0
-      }
-    }, copied ? '✅ Copied!' : '📋 Copy')), text && /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: 'var(--cream2)',
-        border: '1px solid var(--line)',
-        borderRadius: 8,
-        padding: 16
-      }
-    }, /*#__PURE__*/React.createElement("pre", {
-      style: {
-        margin: 0,
-        fontFamily: 'inherit',
-        fontSize: 13,
-        lineHeight: 1.7,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-        color: 'var(--ink)'
-      }
-    }, text)), !text && selMatchId && /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: 'var(--ink-soft)',
-        fontSize: 13
-      }
-    }, "No result data for this match yet."));
-  })(), section === 'users' && /*#__PURE__*/React.createElement("div", {
+  }), section === 'shoutout' && /*#__PURE__*/React.createElement(ShoutoutPanel, {
+    results: results,
+    participants: participants,
+    allPredictions: allPredictions,
+    kickoffTimes: kickoffTimes
+  }), section === 'users' && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 16
     }
