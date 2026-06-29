@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-064'; // bump this on every deploy
+const APP_VERSION = 'v20260629-065'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -21681,11 +21681,11 @@ function App() {
               const ftMatches = matches.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
                 const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
-                const stored = resSnap?.exists ? JSON.parse(resSnap.data().value || '{}') : {
-                  group: {},
-                  ko: {},
-                  bonus: {}
-                };
+                // SAFETY: if Firestore read failed, abort — never overwrite real data with empty fallback
+                if (!resSnap || !resSnap.exists) return;
+                const stored = JSON.parse(resSnap.data().value || '{}');
+                // SAFETY: if stored group results look suspiciously empty, abort
+                const storedGroupCount = Object.keys(stored.group || {}).length;
                 const newGR = {
                   ...(stored.group || {})
                 };
@@ -21766,6 +21766,8 @@ function App() {
                     changed++;
                   }
                 });
+                // SAFETY: never write if newGR has fewer group results than what was stored (would be data loss)
+                if (Object.keys(newGR).length < storedGroupCount) return;
                 if (changed > 0) {
                   const newResults = {
                     ...stored,
@@ -21958,11 +21960,11 @@ function App() {
               const ftMatches = all.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
                 const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
-                const stored = resSnap?.exists ? JSON.parse(resSnap.data().value || '{}') : {
-                  group: {},
-                  ko: {},
-                  bonus: {}
-                };
+                // SAFETY: if Firestore read failed, abort — never overwrite real data with empty fallback
+                if (!resSnap || !resSnap.exists) return;
+                const stored = JSON.parse(resSnap.data().value || '{}');
+                // SAFETY: if stored group results look suspiciously empty, abort
+                const storedGroupCount = Object.keys(stored.group || {}).length;
                 const newGR = {
                   ...(stored.group || {})
                 };
@@ -22026,6 +22028,8 @@ function App() {
                     changed++;
                   }
                 });
+                // SAFETY: never write if newGR has fewer group results than what was stored (would be data loss)
+                if (Object.keys(newGR).length < storedGroupCount) return;
                 if (changed > 0) {
                   const newResults = {
                     ...stored,
