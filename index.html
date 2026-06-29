@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-059'; // bump this on every deploy
+const APP_VERSION = 'v20260629-060'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -14824,7 +14824,225 @@ const AdminView = ({
     style: {
       marginTop: 16
     }
-  }, (() => {
+  }, isSuperAdmin && (() => {
+    const [mergeFrom, setMergeFrom] = useState('');
+    const [mergeTo, setMergeTo] = useState('');
+    const [mergeStatus, setMergeStatus] = useState(null);
+    const [mergeOpen, setMergeOpen] = useState(false);
+    const handleMerge = async () => {
+      if (!mergeFrom || !mergeTo) {
+        setMergeStatus({
+          ok: false,
+          msg: 'Select both accounts.'
+        });
+        return;
+      }
+      if (mergeFrom === mergeTo) {
+        setMergeStatus({
+          ok: false,
+          msg: 'Source and target must differ.'
+        });
+        return;
+      }
+      const srcPreds = allPredictions[mergeFrom] || {};
+      const dstPreds = allPredictions[mergeTo] || {};
+      // Merge: dst fields WIN unless dst is blank/empty for that field
+      const merged = {
+        group: {
+          ...(srcPreds.group || {}),
+          ...(dstPreds.group || {})
+        },
+        ko: {
+          ...(srcPreds.ko || {}),
+          ...(dstPreds.ko || {})
+        },
+        bonus: {
+          ...(srcPreds.bonus || {}),
+          ...(dstPreds.bonus || {})
+        },
+        joker: dstPreds.joker?.team || dstPreds.joker?.group ? dstPreds.joker : srcPreds.joker || {},
+        jokerHistory: [...(srcPreds.jokerHistory || []), ...(dstPreds.jokerHistory || [])].sort((a, b) => (a.ts || 0) - (b.ts || 0)),
+        jokerLockHistory: {
+          ...(srcPreds.jokerLockHistory || {}),
+          ...(dstPreds.jokerLockHistory || {})
+        }
+      };
+      const srcScore = scores.find(s => s.name === mergeFrom);
+      const dstScore = scores.find(s => s.name === mergeTo);
+      if (!window.confirm(`⚠️ MERGE ACCOUNT — SUPERADMIN ONLY\n\nCopy all predictions from:\n  SOURCE: ${mergeFrom} (${srcScore?.total || 0} pts)\n  TARGET: ${mergeTo} (${dstScore?.total || 0} pts)\n\nTarget wins on any overlap (existing picks not overwritten).\nAfter merge, "${mergeFrom}" will be deleted.\n\nThis cannot be undone. Proceed?`)) return;
+      try {
+        // 1. Save merged predictions to target
+        await storage.setJSON(`pred-${mergeTo}`, merged, true);
+        setAllPredictions(prev => ({
+          ...prev,
+          [mergeTo]: merged
+        }));
+        // 2. Delete source account fully
+        const np = participants.filter(p => p !== mergeFrom);
+        const npins = {
+          ...userPins
+        };
+        delete npins[mergeFrom];
+        setParticipants(np);
+        setUserPins(npins);
+        const na = {
+          ...allPredictions
+        };
+        delete na[mergeFrom];
+        setAllPredictions(na);
+        await Promise.all([db.collection('wc26').doc('participants').set({
+          value: JSON.stringify(np)
+        }), db.collection('wc26').doc('pins').set({
+          value: JSON.stringify(npins)
+        }), db.collection('wc26').doc(`pred-${mergeFrom}`).delete().catch(() => {})]);
+        auditLog('MERGE_ACCOUNT', mergeFrom, {
+          into: mergeTo
+        });
+        setMergeStatus({
+          ok: true,
+          msg: `✅ Merged "${mergeFrom}" → "${mergeTo}" and deleted source account.`
+        });
+        setMergeFrom('');
+        setMergeTo('');
+      } catch (e) {
+        setMergeStatus({
+          ok: false,
+          msg: `❌ Failed: ${e.message}`
+        });
+      }
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 16,
+        border: '1px solid var(--line)',
+        borderRadius: 8,
+        overflow: 'hidden'
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setMergeOpen(o => !o),
+      style: {
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '12px 16px',
+        background: 'var(--cream2)',
+        border: 'none',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        fontWeight: 700,
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "🔀 Merge Duplicate Account — Superadmin Only"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)'
+      }
+    }, mergeOpen ? '▲' : '▼')), mergeOpen && /*#__PURE__*/React.createElement("div", {
+      className: "fadein",
+      style: {
+        padding: '14px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: 'var(--ink-soft)',
+        lineHeight: 1.6
+      }
+    }, "Copies all predictions from ", /*#__PURE__*/React.createElement("strong", null, "Source"), " into ", /*#__PURE__*/React.createElement("strong", null, "Target"), " (target's existing picks win on overlap), then permanently deletes the Source account."), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 10,
+        flexWrap: 'wrap',
+        alignItems: 'flex-end'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 160
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 600,
+        color: 'var(--ink-soft)',
+        marginBottom: 4
+      }
+    }, "SOURCE (account to delete)"), /*#__PURE__*/React.createElement("select", {
+      value: mergeFrom,
+      onChange: e => setMergeFrom(e.target.value),
+      style: {
+        width: '100%',
+        padding: '8px 10px',
+        fontSize: 13,
+        border: '1px solid var(--burgundy)',
+        borderRadius: 4,
+        fontFamily: 'inherit',
+        background: 'white'
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "— select —"), [...participants].sort((a, b) => a.localeCompare(b)).map(p => /*#__PURE__*/React.createElement("option", {
+      key: p,
+      value: p
+    }, p)))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 160
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 600,
+        color: 'var(--ink-soft)',
+        marginBottom: 4
+      }
+    }, "TARGET (account to keep)"), /*#__PURE__*/React.createElement("select", {
+      value: mergeTo,
+      onChange: e => setMergeTo(e.target.value),
+      style: {
+        width: '100%',
+        padding: '8px 10px',
+        fontSize: 13,
+        border: '1px solid var(--forest)',
+        borderRadius: 4,
+        fontFamily: 'inherit',
+        background: 'white'
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "— select —"), [...participants].sort((a, b) => a.localeCompare(b)).map(p => /*#__PURE__*/React.createElement("option", {
+      key: p,
+      value: p
+    }, p)))), /*#__PURE__*/React.createElement("button", {
+      onClick: handleMerge,
+      disabled: !mergeFrom || !mergeTo || mergeFrom === mergeTo,
+      style: {
+        padding: '9px 18px',
+        borderRadius: 4,
+        border: 'none',
+        background: !mergeFrom || !mergeTo || mergeFrom === mergeTo ? 'var(--line)' : 'var(--burgundy)',
+        color: 'white',
+        fontWeight: 700,
+        fontSize: 12,
+        cursor: !mergeFrom || !mergeTo || mergeFrom === mergeTo ? 'not-allowed' : 'pointer',
+        fontFamily: 'inherit',
+        whiteSpace: 'nowrap'
+      }
+    }, "🔀 Merge & Delete Source")), mergeStatus && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        color: mergeStatus.ok ? 'var(--forest)' : 'var(--burgundy)',
+        padding: '8px 12px',
+        background: mergeStatus.ok ? 'rgba(27,94,63,.07)' : 'rgba(159,27,27,.07)',
+        borderRadius: 4
+      }
+    }, mergeStatus.msg)));
+  })(), (() => {
     const total = participants.length;
     const hasGroupPred = p => {
       const d = allPredictions[p] || {};
