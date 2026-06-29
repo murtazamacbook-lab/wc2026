@@ -112,7 +112,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-062'; // bump this on every deploy
+const APP_VERSION = 'v20260629-063'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -717,6 +717,82 @@ const MATCHDAY_CUTOFFS = {
   2: new Date('2026-06-19T19:00:00Z').getTime(),
   // first MD2 kickoff (June 19 19:00 UTC)
   3: new Date('2026-06-24T18:00:00Z').getTime() // first MD3 kickoff (June 24 — Groups B/C start first)
+};
+// Hardcoded group stage match dates (verified from official WC 2026 schedule)
+// Used as guaranteed fallback in daily scoring so no match ever falls into the wrong day
+const MATCH_DATES = {
+  'A-1': '2026-06-11',
+  'A-2': '2026-06-11',
+  'A-3': '2026-06-18',
+  'A-4': '2026-06-18',
+  'A-5': '2026-06-24',
+  'A-6': '2026-06-24',
+  'B-1': '2026-06-12',
+  'B-2': '2026-06-13',
+  'B-3': '2026-06-18',
+  'B-4': '2026-06-18',
+  'B-5': '2026-06-24',
+  'B-6': '2026-06-24',
+  'C-1': '2026-06-13',
+  'C-2': '2026-06-13',
+  'C-3': '2026-06-19',
+  'C-4': '2026-06-19',
+  'C-5': '2026-06-24',
+  'C-6': '2026-06-24',
+  'D-1': '2026-06-12',
+  'D-2': '2026-06-13',
+  'D-3': '2026-06-19',
+  'D-4': '2026-06-19',
+  'D-5': '2026-06-25',
+  'D-6': '2026-06-25',
+  'E-1': '2026-06-14',
+  'E-2': '2026-06-14',
+  'E-3': '2026-06-20',
+  'E-4': '2026-06-20',
+  'E-5': '2026-06-25',
+  'E-6': '2026-06-25',
+  'F-1': '2026-06-14',
+  'F-2': '2026-06-14',
+  'F-3': '2026-06-20',
+  'F-4': '2026-06-20',
+  'F-5': '2026-06-25',
+  'F-6': '2026-06-25',
+  'G-1': '2026-06-15',
+  'G-2': '2026-06-15',
+  'G-3': '2026-06-21',
+  'G-4': '2026-06-21',
+  'G-5': '2026-06-26',
+  'G-6': '2026-06-26',
+  'H-1': '2026-06-15',
+  'H-2': '2026-06-15',
+  'H-3': '2026-06-21',
+  'H-4': '2026-06-21',
+  'H-5': '2026-06-26',
+  'H-6': '2026-06-26',
+  'I-1': '2026-06-16',
+  'I-2': '2026-06-16',
+  'I-3': '2026-06-22',
+  'I-4': '2026-06-22',
+  'I-5': '2026-06-26',
+  'I-6': '2026-06-26',
+  'J-1': '2026-06-16',
+  'J-2': '2026-06-16',
+  'J-3': '2026-06-22',
+  'J-4': '2026-06-22',
+  'J-5': '2026-06-27',
+  'J-6': '2026-06-27',
+  'K-1': '2026-06-17',
+  'K-2': '2026-06-17',
+  'K-3': '2026-06-23',
+  'K-4': '2026-06-23',
+  'K-5': '2026-06-27',
+  'K-6': '2026-06-27',
+  'L-1': '2026-06-17',
+  'L-2': '2026-06-17',
+  'L-3': '2026-06-23',
+  'L-4': '2026-06-23',
+  'L-5': '2026-06-27',
+  'L-6': '2026-06-27'
 };
 // Option B: from this date onwards, joker must be locked daily to apply.
 // Group stage (before this) keeps old always-on behaviour so existing scores are unchanged.
@@ -8484,8 +8560,8 @@ const ScoreHistoryView = React.memo(({
       const r = results.group?.[m.id];
       if (!r || r.h === '' || r.h == null) return;
       // Prefer live kickoffTimes map, fall back to stored kickoff on the result, then default
-      const ms = kickoffTimes.get(m.id) || (r.kickoff ? new Date(r.kickoff).getTime() : null);
-      let ds = ms ? new Date(ms).toLocaleDateString('sv') : '2026-06-19';
+      const ms = kickoffTimes.get(m.id) || (r.kickoff ? new Date(r.kickoff).getTime() : null) || (MATCH_DATES[m.id] ? new Date(MATCH_DATES[m.id] + 'T12:00:00').getTime() : null);
+      let ds = ms ? new Date(ms).toLocaleDateString('sv') : MATCH_DATES[m.id] || '2026-06-19';
       if (ds < '2026-06-19') ds = '2026-06-19'; // clamp timezone artifacts
       if (!dayMap[ds]) dayMap[ds] = [];
       dayMap[ds].push(m.id);
