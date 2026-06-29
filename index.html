@@ -11840,7 +11840,12 @@ const ShoutoutPanel = ({
       lines.push('');
     }
     if (topScorer && topScorer.pts > 0) {
-      lines.push(`🏅 *Match MVP: ${topScorer.name}* with ${topScorer.pts} pts — well played!`);
+      const mvps = matchStats.filter(s => s.pts === topScorer.pts && !s.noPred);
+      if (mvps.length === 1) {
+        lines.push(`🏅 *Match MVP: ${topScorer.name}* with ${topScorer.pts} pts — well played!`);
+      } else {
+        lines.push(`🏅 *Match MVPs* (tied at ${topScorer.pts} pts): ${mvps.map(s => s.name).join(', ')} — outstanding!`);
+      }
       lines.push('');
     }
     lines.push(`💬 _"${speech[0]}"_`);
