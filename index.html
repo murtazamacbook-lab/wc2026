@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-066'; // bump this on every deploy
+const APP_VERSION = 'v20260629-067'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -11715,6 +11715,9 @@ const AdminView = ({
   const [clearPreview, setClearPreview] = useState(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState(null); // {name, pin, score}
   const [deleteStatus, setDeleteStatus] = useState(null); // {ok:bool, msg:string}
+  // ── Results backup/restore ──
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [restoreStatus, setRestoreStatus] = useState(null);
   // ── Merge account ──
   const [mergeFrom, setMergeFrom] = useState('');
   const [mergeTo, setMergeTo] = useState('');
@@ -15120,6 +15123,169 @@ const AdminView = ({
         borderRadius: 4
       }
     }, mergeStatus.msg)));
+  })(), isSuperAdmin && (() => {
+    const doDownload = () => {
+      const grp = results.group || {};
+      const ko = results.ko || {};
+      const blob = new Blob([JSON.stringify({
+        group: grp,
+        ko,
+        exportedAt: new Date().toISOString()
+      }, null, 2)], {
+        type: 'application/json'
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wc26-results-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+    const doRestore = async e => {
+      const file = e.target.files?.[0];
+      if (!file) {
+        return;
+      }
+      e.target.value = '';
+      setRestoreStatus({
+        ok: null,
+        msg: 'Reading file…'
+      });
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (!parsed.group || typeof parsed.group !== 'object') throw new Error('Invalid backup file — missing "group" key.');
+        const groupCount = Object.keys(parsed.group).length;
+        const koCount = Object.keys(parsed.ko || {}).length;
+        if (!window.confirm(`Restore ${groupCount} group results and ${koCount} KO results from "${file.name}"?\n\nThis will OVERWRITE current Firestore results. Are you sure?`)) {
+          setRestoreStatus(null);
+          return;
+        }
+        // Merge with existing — never drop KO results not in the backup
+        const existing = results || {
+          group: {},
+          ko: {},
+          bonus: {}
+        };
+        const merged = {
+          ...existing,
+          group: {
+            ...existing.group,
+            ...parsed.group
+          },
+          ko: {
+            ...existing.ko,
+            ...(parsed.ko || {})
+          }
+        };
+        await saveResults(merged);
+        auditLog('RESTORE_BACKUP', file.name, {
+          groupCount,
+          koCount
+        });
+        setRestoreStatus({
+          ok: true,
+          msg: `✅ Restored ${groupCount} group + ${koCount} KO results from backup.`
+        });
+      } catch (err) {
+        setRestoreStatus({
+          ok: false,
+          msg: `❌ Restore failed: ${err.message}`
+        });
+      }
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 16,
+        border: '1px solid var(--line)',
+        borderRadius: 8,
+        overflow: 'hidden'
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setBackupOpen(o => !o),
+      style: {
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '12px 16px',
+        background: 'var(--cream2)',
+        border: 'none',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        fontWeight: 700,
+        fontSize: 13
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "💾 Results Backup / Restore — Superadmin Only"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)'
+      }
+    }, backupOpen ? '▲' : '▼')), backupOpen && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '14px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: 'var(--ink-soft)'
+      }
+    }, "Download a full backup of all results (group + KO) to your device. Use the restore button to re-upload if results ever get wiped."), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 10,
+        flexWrap: 'wrap',
+        alignItems: 'center'
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: doDownload,
+      style: {
+        padding: '8px 18px',
+        background: 'var(--forest)',
+        color: '#fff',
+        border: 'none',
+        borderRadius: 6,
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer'
+      }
+    }, "⬇️ Download Backup JSON"), /*#__PURE__*/React.createElement("label", {
+      style: {
+        padding: '8px 18px',
+        background: 'var(--burgundy)',
+        color: '#fff',
+        border: 'none',
+        borderRadius: 6,
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer'
+      }
+    }, "⬆️ Restore from Backup", /*#__PURE__*/React.createElement("input", {
+      type: "file",
+      accept: ".json",
+      style: {
+        display: 'none'
+      },
+      onChange: doRestore
+    }))), restoreStatus && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        color: restoreStatus.ok ? 'var(--forest)' : restoreStatus.ok === false ? 'var(--burgundy)' : 'var(--ink-soft)',
+        padding: '8px 12px',
+        background: restoreStatus.ok ? 'rgba(27,94,63,.07)' : restoreStatus.ok === false ? 'rgba(159,27,27,.07)' : 'var(--cream2)',
+        borderRadius: 4
+      }
+    }, restoreStatus.msg), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--ink-soft)',
+        fontStyle: 'italic'
+      }
+    }, "Tip: download a fresh backup after every set of results you enter.")));
   })(), (() => {
     const total = participants.length;
     const hasGroupPred = p => {
