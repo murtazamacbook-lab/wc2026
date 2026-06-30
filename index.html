@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-077'; // bump this on every deploy
+const APP_VERSION = 'v20260629-078'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -10770,6 +10770,21 @@ const LiveDataView = React.memo(({
         const hs = m.homeScore ?? m.home_score ?? m.score?.home ?? m.goalsHome ?? '–';
         const as_ = m.awayScore ?? m.away_score ?? m.score?.away ?? m.goalsAway ?? '–';
         const grp = m.group ?? m.round ?? m._groupKey ?? '';
+        // Look up pkWinner from results.ko when score is a draw
+        const isDraw = String(hs) === String(as_) && hs !== '–' && as_ !== '–';
+        let pkWin = null;
+        if (isDraw && results?.ko) {
+          const {
+            bracket: ab
+          } = buildActualBracket(results.group || {}, results.ko || {});
+          const koEntry = Object.entries(ab).find(([, bm]) => {
+            if (!bm?.home || !bm?.away) return false;
+            const r = results.ko[bm.id];
+            if (!r?.pkWinner) return false;
+            return tn(bm.home) === home && tn(bm.away) === away || tn(bm.home) === away && tn(bm.away) === home;
+          });
+          if (koEntry) pkWin = results.ko[koEntry[1].id]?.pkWinner;
+        }
         return /*#__PURE__*/React.createElement("div", {
           key: i,
           style: {
@@ -10811,7 +10826,14 @@ const LiveDataView = React.memo(({
             color: 'var(--forest)',
             letterSpacing: 2
           }
-        }, hs, "–", as_), grp && /*#__PURE__*/React.createElement("span", {
+        }, hs, "–", as_), pkWin && /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 9,
+            fontWeight: 700,
+            color: 'var(--burgundy)',
+            letterSpacing: .3
+          }
+        }, "pens: ", teamShort(pkWin)), !pkWin && grp && /*#__PURE__*/React.createElement("span", {
           style: {
             fontSize: 9,
             color: 'var(--ink-soft)',
