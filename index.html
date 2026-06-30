@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://unpkg.com" crossorigin />
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
   <!-- Firebase 8 -->
@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-084'; // bump this on every deploy
+const APP_VERSION = 'v20260629-085'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -1619,21 +1619,17 @@ const Flag = ({
 }) => {
   const em = TEAM_FLAGS[team];
   if (!em) return null;
-  // Convert emoji to twemoji image URL for consistent cross-platform rendering
-  // (Windows doesn't render country flag emojis natively)
-  const cp = [...em].map(c => c.codePointAt(0).toString(16)).filter(x => x !== '200d').join('-');
-  const src = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${cp}.svg`;
-  return /*#__PURE__*/React.createElement("img", {
-    src: src,
-    alt: em,
+  // Render emoji natively — avoids CDN requests blocked by Edge Tracking Prevention
+  return /*#__PURE__*/React.createElement("span", {
     style: {
-      width: size,
-      height: size,
+      fontSize: size,
+      lineHeight: 1,
       verticalAlign: 'middle',
-      display: 'inline-block'
+      display: 'inline-block',
+      fontFamily: 'Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif'
     },
-    draggable: false
-  });
+    "aria-label": team
+  }, em);
 };
 
 // ── AVATAR COMPONENT ─────────────────────────────────────────────
