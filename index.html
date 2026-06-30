@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-079'; // bump this on every deploy
+const APP_VERSION = 'v20260629-080'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -21537,6 +21537,11 @@ function App() {
     ko: {},
     bonus: {}
   });
+  const resultsRef = useRef({
+    group: {},
+    ko: {},
+    bonus: {}
+  }); // always mirrors results state — readable in async daemons
   const [config, setConfig] = useState({
     locked: false
   });
@@ -21562,6 +21567,7 @@ function App() {
   const [adminRole, setAdminRole] = useState(null); // 'superadmin' | 'subadmin'
   const adminRoleRef = useRef(null); // kept in sync below for use inside ESPN daemon closures
   adminRoleRef.current = adminRole; // sync on every render so daemon closures always see current value
+  resultsRef.current = results; // sync so daemons can read latest in-memory pkWinner values
   const [adminPws, setAdminPws] = useState({
     super: DEFAULT_SUPER_PW,
     sub: DEFAULT_SUB_PW
@@ -22185,6 +22191,16 @@ function App() {
                       };
                     }
                   });
+                  // Also merge from in-memory state — covers admin saves not yet committed to Firestore
+                  const memKO = resultsRef.current?.ko || {};
+                  Object.keys(memKO).forEach(id => {
+                    if (memKO[id]?.pkWinner) {
+                      newKO[id] = {
+                        ...(newKO[id] || {}),
+                        pkWinner: memKO[id].pkWinner
+                      };
+                    }
+                  });
                   const newResults = {
                     ...stored,
                     group: newGR,
@@ -22453,6 +22469,16 @@ function App() {
                       newKO[id] = {
                         ...(newKO[id] || {}),
                         pkWinner: freshKO2[id].pkWinner
+                      };
+                    }
+                  });
+                  // Also merge from in-memory state — covers admin saves not yet committed to Firestore
+                  const memKO2 = resultsRef.current?.ko || {};
+                  Object.keys(memKO2).forEach(id => {
+                    if (memKO2[id]?.pkWinner) {
+                      newKO[id] = {
+                        ...(newKO[id] || {}),
+                        pkWinner: memKO2[id].pkWinner
                       };
                     }
                   });
