@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-072'; // bump this on every deploy
+const APP_VERSION = 'v20260629-073'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -21531,6 +21531,8 @@ function App() {
   const [predsReady, setPredsReady] = useState(false);
   const [adminAuthed, setAdminAuthed] = useState(false);
   const [adminRole, setAdminRole] = useState(null); // 'superadmin' | 'subadmin'
+  const adminRoleRef = useRef(null); // kept in sync below for use inside ESPN daemon closures
+  adminRoleRef.current = adminRole; // sync on every render so daemon closures always see current value
   const [adminPws, setAdminPws] = useState({
     super: DEFAULT_SUPER_PW,
     sub: DEFAULT_SUB_PW
@@ -22043,8 +22045,8 @@ function App() {
             })
           }).catch(() => {});
           // Auto-import FT/PEN results into results.group + results.ko (ESPN as source of truth)
-          // Only the designated fetcher does this — no duplicate writes from other clients
-          if (FB_ON) {
+          // ADMIN-ONLY: only superadmin/subadmin clients write results — regular users never touch Firestore results
+          if (FB_ON && (adminRoleRef.current === 'superadmin' || adminRoleRef.current === 'subadmin')) {
             try {
               const ftMatches = matches.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
@@ -22329,7 +22331,8 @@ function App() {
             })
           }).catch(() => {});
           // Auto-import FT/PEN results into results.group + results.ko (ESPN as source of truth)
-          if (FB_ON) {
+          // ADMIN-ONLY: only superadmin/subadmin clients write results — regular users never touch Firestore results
+          if (FB_ON && (adminRoleRef.current === 'superadmin' || adminRoleRef.current === 'subadmin')) {
             try {
               const ftMatches = all.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
