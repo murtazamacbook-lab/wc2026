@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-082'; // bump this on every deploy
+const APP_VERSION = 'v20260629-083'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -22897,7 +22897,11 @@ function App() {
       } catch (_e) {}
     }
     setResults(newRes);
-    await storage.setJSON('results', newRes, true);
+    lsSet('results', newRes); // immediate localStorage
+    // Await the Firestore write directly — fire-and-forget causes out-of-order writes that wipe pkWinner
+    if (FB_ON) await db.collection('wc26').doc('results').set({
+      value: JSON.stringify(newRes)
+    }).catch(() => {});
     // Always keep a backup copy — restores instantly if main doc gets corrupted
     if (FB_ON) db.collection('wc26').doc('results-backup').set({
       value: JSON.stringify(newRes),
