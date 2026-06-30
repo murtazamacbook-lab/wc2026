@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-070'; // bump this on every deploy
+const APP_VERSION = 'v20260629-071'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -22099,14 +22099,16 @@ function App() {
                   const nh = String(swap ? fm.awayScore : fm.homeScore);
                   const na = String(swap ? fm.homeScore : fm.awayScore);
                   // Penalty winner: ESPN marks competitor.winner=true on the shootout winner
-                  const pkWinner = fm.status === 'PEN' ? swap ? fm.away : fm.home : undefined;
+                  // Only set pkWinner from ESPN if it's a PEN result; otherwise preserve any manually-set pkWinner
+                  const espnPkWinner = fm.status === 'PEN' ? swap ? fm.away : fm.home : undefined;
                   const ex = newKO[koId];
-                  if (!ex || ex.h !== nh || ex.a !== na || ex.pkWinner !== pkWinner) {
+                  const preservedPkWinner = espnPkWinner || ex?.pkWinner || undefined;
+                  if (!ex || ex.h !== nh || ex.a !== na || ex.pkWinner !== preservedPkWinner) {
                     newKO[koId] = {
                       h: nh,
                       a: na,
-                      ...(pkWinner ? {
-                        pkWinner
+                      ...(preservedPkWinner ? {
+                        pkWinner: preservedPkWinner
                       } : {}),
                       ...(fm.kickoff ? {
                         kickoff: fm.kickoff
