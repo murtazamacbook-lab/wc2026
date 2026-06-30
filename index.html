@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-074'; // bump this on every deploy
+const APP_VERSION = 'v20260629-075'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -5194,7 +5194,7 @@ const LeaderboardView = React.memo(({
       className: "mono"
     }, s.groupPoints)), /*#__PURE__*/React.createElement("span", null, "KO: ", /*#__PURE__*/React.createElement("strong", {
       className: "mono"
-    }, s.koPoints)), s.bonusPoints > 0 && /*#__PURE__*/React.createElement("span", {
+    }, s.koPoints + s.bracketPoints)), s.bonusPoints > 0 && /*#__PURE__*/React.createElement("span", {
       style: {
         color: 'var(--amber)'
       }
