@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-073'; // bump this on every deploy
+const APP_VERSION = 'v20260629-074'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -22145,6 +22145,17 @@ function App() {
                 // SAFETY: never write if newGR has fewer group results than what was stored (would be data loss)
                 if (Object.keys(newGR).length < storedGroupCount) return;
                 if (changed > 0) {
+                  // Fresh read right before write -- picks up any pkWinner manually set since initial read
+                  const freshSnap = await db.collection('wc26').doc('results').get().catch(() => null);
+                  const freshKO = freshSnap?.exists ? JSON.parse(freshSnap.data().value || '{}').ko || {} : {};
+                  Object.keys(freshKO).forEach(id => {
+                    if (freshKO[id]?.pkWinner) {
+                      newKO[id] = {
+                        ...(newKO[id] || {}),
+                        pkWinner: freshKO[id].pkWinner
+                      };
+                    }
+                  });
                   const newResults = {
                     ...stored,
                     group: newGR,
@@ -22337,10 +22348,8 @@ function App() {
               const ftMatches = all.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
                 const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
-                // SAFETY: if Firestore read failed, abort — never overwrite real data with empty fallback
                 if (!resSnap || !resSnap.exists) return;
                 const stored = JSON.parse(resSnap.data().value || '{}');
-                // SAFETY: if stored group results look suspiciously empty, abort
                 const storedGroupCount = Object.keys(stored.group || {}).length;
                 const newGR = {
                   ...(stored.group || {})
@@ -22357,7 +22366,7 @@ function App() {
                   if (gm) {
                     if (gm.matchday < COMP_START_MATCHDAY) {
                       return;
-                    } // skip pre-competition matches
+                    }
                     const swap = gm.home === fm.away;
                     const nh = String(swap ? fm.awayScore : fm.homeScore);
                     const na = String(swap ? fm.homeScore : fm.awayScore);
@@ -22405,9 +22414,19 @@ function App() {
                     changed++;
                   }
                 });
-                // SAFETY: never write if newGR has fewer group results than what was stored (would be data loss)
                 if (Object.keys(newGR).length < storedGroupCount) return;
                 if (changed > 0) {
+                  // Fresh read right before write — picks up any pkWinner manually set since initial read
+                  const freshSnap2 = await db.collection('wc26').doc('results').get().catch(() => null);
+                  const freshKO2 = freshSnap2?.exists ? JSON.parse(freshSnap2.data().value || '{}').ko || {} : {};
+                  Object.keys(freshKO2).forEach(id => {
+                    if (freshKO2[id]?.pkWinner) {
+                      newKO[id] = {
+                        ...(newKO[id] || {}),
+                        pkWinner: freshKO2[id].pkWinner
+                      };
+                    }
+                  });
                   const newResults = {
                     ...stored,
                     group: newGR,
