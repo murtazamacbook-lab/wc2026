@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-081'; // bump this on every deploy
+const APP_VERSION = 'v20260629-082'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -13106,7 +13106,7 @@ const AdminView = ({
       marginTop: 16,
       flexWrap: 'wrap'
     }
-  }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['jokers', '🃏 Joker Picks', true], ['sync', '🔄 Auto-Sync', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.values(onlineUsers).filter(v => {
+  }, [['group', 'Group Results', true], ['ko', 'Knockout Results', true], ['bonus', 'Bonus Results', true], ['jokers', '🃏 Joker Picks', true], ['liveoverride', '🔴 Live Override', true], ['commentary', '📝 Commentary', true], ['users', `Users (${participants.length})${Object.values(pendingUsers || {}).filter(p => p.status === 'pending').length > 0 ? ' 🔔' : ''}`, true], ['online', `🟢 Online (${Object.values(onlineUsers).filter(v => {
     const ts = typeof v === 'object' ? v.ts : v;
     return ts && Date.now() - ts < 3 * 60 * 1000;
   }).length})`, true], ['settings', 'Settings', true], ['faq', '❓ Admin FAQ', true], ['audit', '📋 Audit Log', isSuperAdmin || adminRole === 'subadmin'], ['shoutout', '📣 Shoutout', true], ['qa', `❓ Q&A${(qaItems || []).filter(q => !q.answer).length > 0 ? ' (' + (qaItems || []).filter(q => !q.answer).length + ')' : ''}`, true]].filter(([,, allowed]) => allowed).map(([k, l]) => /*#__PURE__*/React.createElement("button", {
@@ -13935,112 +13935,6 @@ const AdminView = ({
     className: "card",
     style: {
       padding: 18,
-      marginBottom: 14
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "micro-caps",
-    style: {
-      marginBottom: 6
-    }
-  }, "Your RapidAPI Key"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    type: "password",
-    value: syncKey,
-    onChange: e => setSyncKey(e.target.value),
-    placeholder: "Paste key here…",
-    style: {
-      flex: 1,
-      padding: '10px 12px',
-      fontSize: 13,
-      border: '1px solid var(--line)',
-      borderRadius: 4,
-      fontFamily: 'JetBrains Mono,monospace',
-      background: 'white',
-      color: 'var(--ink)'
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "btn",
-    onClick: () => handleSync(false),
-    disabled: syncing || !syncKey.trim(),
-    style: {
-      whiteSpace: 'nowrap',
-      background: 'var(--forest)'
-    }
-  }, syncing ? '⏳ Fetching…' : '🔄 Fetch & Preview')), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--ink-soft)',
-      marginTop: 6
-    }
-  }, "Key is saved in your browser only — never sent anywhere except api-football.com.")), syncPreview && /*#__PURE__*/React.createElement("div", {
-    className: "card fadein",
-    style: {
-      padding: 18,
-      marginBottom: 14,
-      borderColor: 'var(--forest)'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "display",
-    style: {
-      fontWeight: 700,
-      fontSize: 16,
-      marginBottom: 4,
-      color: 'var(--forest)'
-    }
-  }, "Preview — ", syncPreview.log.filter(l => l.startsWith('✅')).length, " results ready to import"), /*#__PURE__*/React.createElement("div", {
-    className: "scrollbar",
-    style: {
-      maxHeight: 200,
-      overflowY: 'auto',
-      background: 'var(--cream2)',
-      borderRadius: 4,
-      padding: '10px 12px',
-      marginBottom: 12,
-      fontFamily: 'JetBrains Mono,monospace',
-      fontSize: 11,
-      lineHeight: 1.8,
-      whiteSpace: 'pre-wrap'
-    }
-  }, syncPreview.log.join('\n') || 'No matches found.'), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-green",
-    onClick: () => handleSync(true),
-    disabled: syncing
-  }, "✅ Import All Results"), /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-ghost",
-    onClick: () => setSyncPreview(null)
-  }, "Cancel"))), syncLog && !syncPreview && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 14,
-      background: 'var(--cream2)'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: 'JetBrains Mono,monospace',
-      fontSize: 12,
-      lineHeight: 1.7,
-      whiteSpace: 'pre-wrap',
-      color: syncLog.startsWith('❌') ? 'var(--burgundy)' : syncLog.startsWith('✅') ? 'var(--forest)' : 'var(--ink)'
-    }
-  }, syncLog)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 12,
-      fontSize: 12,
-      color: 'var(--ink-soft)'
-    }
-  }, /*#__PURE__*/React.createElement("strong", null, "Tip:"), " Run this once after every matchday. The free plan (100 req/day) is more than enough — each sync uses 1 request."), /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      padding: 18,
       marginTop: 16,
       borderColor: '#cc0000',
       background: 'rgba(204,0,0,.03)'
@@ -14132,7 +14026,7 @@ const AdminView = ({
       color: 'var(--ink-soft)',
       marginTop: 8
     }
-  }, "⚠️ ESPN only shows ", /*#__PURE__*/React.createElement("strong", null, "today\\'s"), " matches. For historical results use the RapidAPI sync above.")), /*#__PURE__*/React.createElement("div", {
+  }, "⚠️ ESPN only shows ", /*#__PURE__*/React.createElement("strong", null, "today\\'s"), " matches. For older results, enter them manually in the KO Results tab.")), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 24
     }
@@ -14189,7 +14083,7 @@ const AdminView = ({
   }) => /*#__PURE__*/React.createElement("button", {
     key: key,
     onClick: () => key === 'standings' ? handleFetchStandings() : fetchPanel(key, ep, params),
-    disabled: loadingPanel === key || key === 'standings' && (standingsLoading || standingsLocked) || !syncKey.trim() && !FUNC_BASE,
+    disabled: loadingPanel === key || key === 'standings' && (standingsLoading || standingsLocked),
     style: {
       background: loadingPanel === key || key === 'standings' && standingsLoading ? '#888' : bg,
       color: 'white',
@@ -14200,7 +14094,6 @@ const AdminView = ({
       fontWeight: 700,
       cursor: standingsLocked && key === 'standings' ? 'not-allowed' : 'pointer',
       fontFamily: 'inherit',
-      opacity: !syncKey.trim() && !FUNC_BASE || standingsLocked && key === 'standings' ? 0.5 : 1,
       whiteSpace: 'nowrap'
     }
   }, loadingPanel === key || key === 'standings' && standingsLoading ? '⏳ Loading…' : label))), (() => {
