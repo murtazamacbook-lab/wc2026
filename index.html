@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-083'; // bump this on every deploy
+const APP_VERSION = 'v20260629-084'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -21980,10 +21980,23 @@ function App() {
             try {
               const ftMatches = matches.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
-                const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
+                // ALWAYS capture current pkWinner values from memory FIRST — absolute safety net
+                const protectedPkWinners = {};
+                const memKOSnap = resultsRef.current?.ko || {};
+                Object.keys(memKOSnap).forEach(id => {
+                  if (memKOSnap[id]?.pkWinner) protectedPkWinners[id] = memKOSnap[id].pkWinner;
+                });
+                // Force server read to bypass Firestore local cache
+                const resSnap = await db.collection('wc26').doc('results').get({
+                  source: 'server'
+                }).catch(() => db.collection('wc26').doc('results').get().catch(() => null));
                 // SAFETY: if Firestore read failed, abort — never overwrite real data with empty fallback
                 if (!resSnap || !resSnap.exists) return;
                 const stored = JSON.parse(resSnap.data().value || '{}');
+                // Merge any pkWinners from the server read into protected map
+                Object.keys(stored.ko || {}).forEach(id => {
+                  if (stored.ko[id]?.pkWinner) protectedPkWinners[id] = stored.ko[id].pkWinner;
+                });
                 // SAFETY: if stored group results look suspiciously empty, abort
                 const storedGroupCount = Object.keys(stored.group || {}).length;
                 const newGR = {
@@ -22075,8 +22088,10 @@ function App() {
                 // SAFETY: never write if newGR has fewer group results than what was stored (would be data loss)
                 if (Object.keys(newGR).length < storedGroupCount) return;
                 if (changed > 0) {
-                  // Fresh read right before write -- picks up any pkWinner manually set since initial read
-                  const freshSnap = await db.collection('wc26').doc('results').get().catch(() => null);
+                  // Force server read — bypass Firestore local cache
+                  const freshSnap = await db.collection('wc26').doc('results').get({
+                    source: 'server'
+                  }).catch(() => db.collection('wc26').doc('results').get().catch(() => null));
                   const freshKO = freshSnap?.exists ? JSON.parse(freshSnap.data().value || '{}').ko || {} : {};
                   Object.keys(freshKO).forEach(id => {
                     if (freshKO[id]?.pkWinner) {
@@ -22086,7 +22101,6 @@ function App() {
                       };
                     }
                   });
-                  // Also merge from in-memory state — covers admin saves not yet committed to Firestore
                   const memKO = resultsRef.current?.ko || {};
                   Object.keys(memKO).forEach(id => {
                     if (memKO[id]?.pkWinner) {
@@ -22095,6 +22109,13 @@ function App() {
                         pkWinner: memKO[id].pkWinner
                       };
                     }
+                  });
+                  // FINAL PASS: absolute protection — protected map captured at daemon start
+                  Object.keys(protectedPkWinners).forEach(id => {
+                    newKO[id] = {
+                      ...(newKO[id] || {}),
+                      pkWinner: protectedPkWinners[id]
+                    };
                   });
                   const newResults = {
                     ...stored,
@@ -22287,9 +22308,22 @@ function App() {
             try {
               const ftMatches = all.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
               if (ftMatches.length > 0) {
-                const resSnap = await db.collection('wc26').doc('results').get().catch(() => null);
+                // ALWAYS capture current pkWinner values from memory FIRST — absolute safety net
+                const protectedPkWinners2 = {};
+                const memKOSnap2 = resultsRef.current?.ko || {};
+                Object.keys(memKOSnap2).forEach(id => {
+                  if (memKOSnap2[id]?.pkWinner) protectedPkWinners2[id] = memKOSnap2[id].pkWinner;
+                });
+                // Force server read to bypass Firestore local cache
+                const resSnap = await db.collection('wc26').doc('results').get({
+                  source: 'server'
+                }).catch(() => db.collection('wc26').doc('results').get().catch(() => null));
                 if (!resSnap || !resSnap.exists) return;
                 const stored = JSON.parse(resSnap.data().value || '{}');
+                // Merge any pkWinners from the server read into protected map
+                Object.keys(stored.ko || {}).forEach(id => {
+                  if (stored.ko[id]?.pkWinner) protectedPkWinners2[id] = stored.ko[id].pkWinner;
+                });
                 const storedGroupCount = Object.keys(stored.group || {}).length;
                 const newGR = {
                   ...(stored.group || {})
@@ -22356,8 +22390,10 @@ function App() {
                 });
                 if (Object.keys(newGR).length < storedGroupCount) return;
                 if (changed > 0) {
-                  // Fresh read right before write — picks up any pkWinner manually set since initial read
-                  const freshSnap2 = await db.collection('wc26').doc('results').get().catch(() => null);
+                  // Force server read — bypass Firestore local cache
+                  const freshSnap2 = await db.collection('wc26').doc('results').get({
+                    source: 'server'
+                  }).catch(() => db.collection('wc26').doc('results').get().catch(() => null));
                   const freshKO2 = freshSnap2?.exists ? JSON.parse(freshSnap2.data().value || '{}').ko || {} : {};
                   Object.keys(freshKO2).forEach(id => {
                     if (freshKO2[id]?.pkWinner) {
@@ -22367,7 +22403,6 @@ function App() {
                       };
                     }
                   });
-                  // Also merge from in-memory state — covers admin saves not yet committed to Firestore
                   const memKO2 = resultsRef.current?.ko || {};
                   Object.keys(memKO2).forEach(id => {
                     if (memKO2[id]?.pkWinner) {
@@ -22376,6 +22411,13 @@ function App() {
                         pkWinner: memKO2[id].pkWinner
                       };
                     }
+                  });
+                  // FINAL PASS: absolute protection — protected map captured at daemon start
+                  Object.keys(protectedPkWinners2).forEach(id => {
+                    newKO[id] = {
+                      ...(newKO[id] || {}),
+                      pkWinner: protectedPkWinners2[id]
+                    };
                   });
                   const newResults = {
                     ...stored,
