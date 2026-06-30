@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-076'; // bump this on every deploy
+const APP_VERSION = 'v20260629-077'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -3775,7 +3775,7 @@ const BracketCard = ({
         color: 'var(--ink-soft)',
         marginTop: 1
       }
-    }, "FT: ", /*#__PURE__*/React.createElement("span", {
+    }, actual.pkWinner ? 'FT+P:' : 'FT:', " ", /*#__PURE__*/React.createElement("span", {
       className: "mono"
     }, actual.h, "–", actual.a), actual.pkWinner && /*#__PURE__*/React.createElement("span", null, " (pk:", teamShort(actual.pkWinner), ")")), koPts + bracketPts > 0 && /*#__PURE__*/React.createElement("span", {
       style: {
@@ -3794,7 +3794,7 @@ const BracketCard = ({
       fontSize: 9,
       color: 'var(--ink-soft)'
     }
-  }, "FT: ", /*#__PURE__*/React.createElement("span", {
+  }, actual.pkWinner ? 'FT+P:' : 'FT:', " ", /*#__PURE__*/React.createElement("span", {
     className: "mono"
   }, actual.h, "–", actual.a), actual.pkWinner && /*#__PURE__*/React.createElement("span", null, " (pk:", teamShort(actual.pkWinner), ")")))));
 };
@@ -4453,7 +4453,7 @@ const BracketView = ({
             color: 'var(--forest)',
             fontWeight: 600
           }
-        }, "FT: ", /*#__PURE__*/React.createElement("span", {
+        }, r.pkWinner ? 'FT+P:' : 'FT:', " ", /*#__PURE__*/React.createElement("span", {
           className: "mono"
         }, r.h, "–", r.a), r.pkWinner && /*#__PURE__*/React.createElement("span", {
           style: {
