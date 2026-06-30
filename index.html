@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-085'; // bump this on every deploy
+const APP_VERSION = 'v20260629-086'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -22899,6 +22899,7 @@ function App() {
   const saveResults = useCallback(async newRes => {
     lastLocalWriteRef.current = Date.now();
     lastWriteResultsRef.current = Date.now();
+    resultsRef.current = newRes; // update immediately — don't wait for re-render
     // Detect newly-entered results that have exact score predictors → fire shoutout
     if (FB_ON) {
       try {
@@ -23306,9 +23307,19 @@ function App() {
     }, () => {});
     const unsubResults = db.collection('wc26').doc('results').onSnapshot(snap => {
       try {
-        if (Date.now() - lastWriteResultsRef.current < 2000) return;
+        if (Date.now() - lastWriteResultsRef.current < 10000) return; // 10s suppression — Firestore can deliver out-of-order delayed snapshots
         const res = parse(snap, null);
         if (res && typeof res === 'object') {
+          // NEVER let an incoming snapshot wipe pkWinner values we already have in memory
+          const currentKO = resultsRef.current?.ko || {};
+          Object.keys(currentKO).forEach(id => {
+            if (currentKO[id]?.pkWinner && res.ko && !res.ko[id]?.pkWinner) {
+              res.ko[id] = {
+                ...(res.ko[id] || {}),
+                pkWinner: currentKO[id].pkWinner
+              };
+            }
+          });
           setResults(res);
           lsSet('results', res);
         }
