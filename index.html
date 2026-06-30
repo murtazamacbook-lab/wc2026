@@ -113,7 +113,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-080'; // bump this on every deploy
+const APP_VERSION = 'v20260629-081'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -12506,12 +12506,14 @@ const AdminView = ({
               const swap = m.home === away,
                 pk = isPen ? pkHome > pkAway ? home : away : null;
               const koKickoff = f.kickoff || f.datetime || f.matchDate || f.date || f.scheduled || null;
+              const existingPkWinner = results.ko?.[mId]?.pkWinner;
+              const finalPk = pk || existingPkWinner || undefined;
               newKoResults[mId] = {
                 h: String(swap ? aG : hG),
                 a: String(swap ? hG : aG),
                 homeTeam: m.home,
                 awayTeam: m.away,
-                pkWinner: pk || undefined,
+                pkWinner: finalPk,
                 kickoff: koKickoff || undefined
               };
               log.push('✅ [KO M' + mId + '] ' + m.home + ' ' + (swap ? aG : hG) + '–' + (swap ? hG : aG) + ' ' + m.away + (pk ? ' (PK:' + pk + ')' : ''));
