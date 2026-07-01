@@ -114,7 +114,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260701-089'; // bump this on every deploy
+const APP_VERSION = 'v20260701-090'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -11612,6 +11612,15 @@ const CommentaryPanel = ({
 };
 
 // ── ONLINE PANEL (proper component so hooks are legal) ────────
+const VIEW_LABELS = {
+  'predictions': 'My Picks',
+  'leaderboard': 'Leaderboard',
+  'fanpicks': 'Fan Picks',
+  'ko': 'KO Bracket',
+  'bonuspicks': 'Bonus Picks',
+  'profile': 'Profile',
+  'admin': 'Admin'
+};
 const OnlinePanel = ({
   onlineUsers = {},
   currentUser,
@@ -11627,7 +11636,8 @@ const OnlinePanel = ({
   const list = Object.entries(onlineUsers).map(([name, v]) => ({
     name,
     ts: typeof v === 'object' ? v.ts : v,
-    mob: typeof v === 'object' ? !!v.mob : false
+    mob: typeof v === 'object' ? !!v.mob : false,
+    view: typeof v === 'object' ? v.view || null : null
   })).filter(({
     ts
   }) => ts && now - ts < 3 * 60 * 1000).sort((a, b) => b.ts - a.ts);
@@ -11681,10 +11691,12 @@ const OnlinePanel = ({
   }, "No active users right now.") : /*#__PURE__*/React.createElement("div", null, list.map(({
     name,
     ts,
-    mob
+    mob,
+    view
   }, i) => {
     const secsAgo = Math.floor((now - ts) / 1000);
     const ago = secsAgo < 60 ? `${secsAgo}s ago` : secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago` : `${Math.floor(secsAgo / 3600)}h ago`;
+    const pageLabel = view ? VIEW_LABELS[view] || view : null;
     return /*#__PURE__*/React.createElement("div", {
       key: name,
       style: {
@@ -11707,11 +11719,15 @@ const OnlinePanel = ({
     }), /*#__PURE__*/React.createElement(Avatar, {
       name: name,
       size: 26
-    }), /*#__PURE__*/React.createElement("span", {
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
       style: {
         fontWeight: 600,
-        fontSize: 13,
-        flex: 1
+        fontSize: 13
       }
     }, name, (name === currentUser || adminRole === 'superadmin' && name === '[SuperAdmin]' || adminRole === 'subadmin' && name === '[SubAdmin]') && /*#__PURE__*/React.createElement("span", {
       style: {
@@ -11719,7 +11735,13 @@ const OnlinePanel = ({
         color: 'var(--ink-soft)',
         marginLeft: 6
       }
-    }, "(you)")), /*#__PURE__*/React.createElement("span", {
+    }, "(you)")), pageLabel && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--ink-soft)',
+        marginTop: 1
+      }
+    }, "📄 ", pageLabel)), /*#__PURE__*/React.createElement("span", {
       title: mob ? 'Mobile' : 'Desktop',
       style: {
         fontSize: 14
@@ -23668,7 +23690,8 @@ function App() {
       db.collection('wc26').doc('online-users').set({
         [identity]: {
           ts: Date.now(),
-          mob: isMob
+          mob: isMob,
+          view: view || 'predictions'
         }
       }, {
         merge: true
@@ -23680,7 +23703,7 @@ function App() {
     return () => {
       clearInterval(t);
     };
-  }, [currentUser, adminRole]);
+  }, [currentUser, adminRole, view]);
 
   // ── ONLINE USERS LISTENER: admin reads the heartbeat doc ────────────────
   useEffect(() => {
@@ -23701,10 +23724,12 @@ function App() {
           if (!v) return;
           if (typeof v === 'object' && v.ts) merged[name] = {
             ts: v.ts,
-            mob: !!v.mob
+            mob: !!v.mob,
+            view: v.view || null
           };else if (typeof v === 'number') merged[name] = {
             ts: v,
-            mob: false
+            mob: false,
+            view: null
           }; // legacy
         });
         return merged;
