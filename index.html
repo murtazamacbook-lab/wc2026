@@ -10,6 +10,7 @@
   
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css" />
   <!-- Firebase 8 -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -113,7 +114,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260629-086'; // bump this on every deploy
+const APP_VERSION = 'v20260630-088'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -471,55 +472,57 @@ const SCORING = {
   },
   halfMultiplier: 0.5
 };
+
+// ISO 3166-1 alpha-2 codes for flag-icons CSS library (renders SVG flags — works on Windows)
 const TEAM_FLAGS = {
-  'Mexico': '🇲🇽',
-  'South Africa': '🇿🇦',
-  'South Korea': '🇰🇷',
-  'Czech Republic': '🇨🇿',
-  'Canada': '🇨🇦',
-  'Bosnia & Herz.': '🇧🇦',
-  'Qatar': '🇶🇦',
-  'Switzerland': '🇨🇭',
-  'Brazil': '🇧🇷',
-  'Morocco': '🇲🇦',
-  'Haiti': '🇭🇹',
-  'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
-  'United States': '🇺🇸',
-  'Paraguay': '🇵🇾',
-  'Australia': '🇦🇺',
-  'Turkiye': '🇹🇷',
-  'Germany': '🇩🇪',
-  'Curacao': '🇨🇼',
-  'Ivory Coast': '🇨🇮',
-  'Ecuador': '🇪🇨',
-  'Netherlands': '🇳🇱',
-  'Japan': '🇯🇵',
-  'Sweden': '🇸🇪',
-  'Tunisia': '🇹🇳',
-  'Belgium': '🇧🇪',
-  'Egypt': '🇪🇬',
-  'Iran': '🇮🇷',
-  'New Zealand': '🇳🇿',
-  'Spain': '🇪🇸',
-  'Cape Verde': '🇨🇻',
-  'Saudi Arabia': '🇸🇦',
-  'Uruguay': '🇺🇾',
-  'France': '🇫🇷',
-  'Senegal': '🇸🇳',
-  'Iraq': '🇮🇶',
-  'Norway': '🇳🇴',
-  'Argentina': '🇦🇷',
-  'Algeria': '🇩🇿',
-  'Austria': '🇦🇹',
-  'Jordan': '🇯🇴',
-  'Portugal': '🇵🇹',
-  'DR Congo': '🇨🇩',
-  'Uzbekistan': '🇺🇿',
-  'Colombia': '🇨🇴',
-  'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-  'Croatia': '🇭🇷',
-  'Ghana': '🇬🇭',
-  'Panama': '🇵🇦'
+  'Mexico': 'mx',
+  'South Africa': 'za',
+  'South Korea': 'kr',
+  'Czech Republic': 'cz',
+  'Canada': 'ca',
+  'Bosnia & Herz.': 'ba',
+  'Qatar': 'qa',
+  'Switzerland': 'ch',
+  'Brazil': 'br',
+  'Morocco': 'ma',
+  'Haiti': 'ht',
+  'Scotland': 'gb-sct',
+  'United States': 'us',
+  'Paraguay': 'py',
+  'Australia': 'au',
+  'Turkiye': 'tr',
+  'Germany': 'de',
+  'Curacao': 'cw',
+  'Ivory Coast': 'ci',
+  'Ecuador': 'ec',
+  'Netherlands': 'nl',
+  'Japan': 'jp',
+  'Sweden': 'se',
+  'Tunisia': 'tn',
+  'Belgium': 'be',
+  'Egypt': 'eg',
+  'Iran': 'ir',
+  'New Zealand': 'nz',
+  'Spain': 'es',
+  'Cape Verde': 'cv',
+  'Saudi Arabia': 'sa',
+  'Uruguay': 'uy',
+  'France': 'fr',
+  'Senegal': 'sn',
+  'Iraq': 'iq',
+  'Norway': 'no',
+  'Argentina': 'ar',
+  'Algeria': 'dz',
+  'Austria': 'at',
+  'Jordan': 'jo',
+  'Portugal': 'pt',
+  'DR Congo': 'cd',
+  'Uzbekistan': 'uz',
+  'Colombia': 'co',
+  'England': 'gb-eng',
+  'Croatia': 'hr',
+  'Ghana': 'gh',
+  'Panama': 'pa'
 };
 const teamShort = t => ({
   'United States': 'USA',
@@ -1612,24 +1615,25 @@ const TrendingUp = p => /*#__PURE__*/React.createElement(Ic, {
 });
 
 // ── FLAG COMPONENT ───────────────────────────────────────────────
-// Renders flag emoji natively — no CDN requests, no tracking-prevention warnings
+// Uses flag-icons CSS library (SVG-based, works on Windows, no tracking CDN)
 const Flag = ({
   team,
   size = 16
 }) => {
-  const em = TEAM_FLAGS[team];
-  if (!em) return null;
-  // Render emoji natively — avoids CDN requests blocked by Edge Tracking Prevention
+  const iso = TEAM_FLAGS[team];
+  if (!iso) return null;
   return /*#__PURE__*/React.createElement("span", {
+    className: `fi fi-${iso}`,
     style: {
-      fontSize: size,
-      lineHeight: 1,
-      verticalAlign: 'middle',
+      width: size * 1.33,
+      height: size,
       display: 'inline-block',
-      fontFamily: 'Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif'
+      verticalAlign: 'middle',
+      flexShrink: 0,
+      borderRadius: 2
     },
     "aria-label": team
-  }, em);
+  });
 };
 
 // ── AVATAR COMPONENT ─────────────────────────────────────────────
@@ -1808,11 +1812,10 @@ const TeamSearchInput = ({
       setOpen(true);
       setQ('');
     }
-  }, value ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 16
-    }
-  }, TEAM_FLAGS[value] || '⚽'), /*#__PURE__*/React.createElement("span", {
+  }, value ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Flag, {
+    team: value,
+    size: 16
+  }), /*#__PURE__*/React.createElement("span", {
     style: {
       flex: 1,
       fontSize: 14,
@@ -1880,11 +1883,10 @@ const TeamSearchInput = ({
       gap: 10,
       borderBottom: i < filtered.length - 1 ? '1px solid var(--line-soft)' : 'none'
     }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 18
-    }
-  }, TEAM_FLAGS[t] || '⚽'), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement(Flag, {
+    team: t,
+    size: 18
+  }), /*#__PURE__*/React.createElement("span", {
     style: {
       fontWeight: 500,
       fontSize: 14
@@ -2789,7 +2791,10 @@ const MobilePredictionsView = ({
       color: 'var(--ink)',
       lineHeight: 1.5
     }
-  }, uiJoker.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[uiJoker.team] || '', " ", /*#__PURE__*/React.createElement("strong", null, uiJoker.team), uiJoker.group ? ' · ' : ''), uiJoker.group && /*#__PURE__*/React.createElement("span", null, "Group ", /*#__PURE__*/React.createElement("strong", null, uiJoker.group)), isTriple && /*#__PURE__*/React.createElement("span", {
+  }, uiJoker.team && /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement(Flag, {
+    team: uiJoker.team,
+    size: 13
+  }), " ", /*#__PURE__*/React.createElement("strong", null, uiJoker.team), uiJoker.group ? ' · ' : ''), uiJoker.group && /*#__PURE__*/React.createElement("span", null, "Group ", /*#__PURE__*/React.createElement("strong", null, uiJoker.group)), isTriple && /*#__PURE__*/React.createElement("span", {
     style: {
       marginLeft: 6,
       fontSize: 10,
@@ -2830,7 +2835,10 @@ const MobilePredictionsView = ({
       color: 'var(--ink-soft)',
       marginTop: 3
     }
-  }, TEAM_FLAGS[uiJoker.team], " plays in ", /*#__PURE__*/React.createElement("strong", null, "Group ", jTeamGroup))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Flag, {
+    team: uiJoker.team,
+    size: 13
+  }), " plays in ", /*#__PURE__*/React.createElement("strong", null, "Group ", jTeamGroup))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       fontWeight: 700,
@@ -2871,7 +2879,10 @@ const MobilePredictionsView = ({
       fontWeight: 700,
       color: isTriple ? 'var(--burgundy)' : 'var(--amber)'
     }
-  }, isTriple ? `🃏 TRIPLE — ${uiJoker.team} matches score 3×` : `${uiJoker.team ? `${TEAM_FLAGS[uiJoker.team] || ''} ${uiJoker.team} → 2×` : ''} ${uiJoker.group ? `Group ${uiJoker.group} → 2×` : ''}`), /*#__PURE__*/React.createElement("div", {
+  }, isTriple ? `🃏 TRIPLE — ${uiJoker.team} matches score 3×` : null, !isTriple && uiJoker.team && /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement(Flag, {
+    team: uiJoker.team,
+    size: 12
+  }), " ", uiJoker.team, " → 2×", uiJoker.group ? ` · Group ${uiJoker.group} → 2×` : ''), !isTriple && !uiJoker.team && uiJoker.group && `Group ${uiJoker.group} → 2×`), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)',
@@ -3261,7 +3272,10 @@ const PredictionsView = ({
       color: 'var(--ink-soft)',
       marginTop: 3
     }
-  }, uiJoker.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[uiJoker.team] || '', " ", /*#__PURE__*/React.createElement("strong", null, uiJoker.team), " (team)", uiJoker.group ? ' · ' : ''), uiJoker.group && /*#__PURE__*/React.createElement("span", null, "Group ", /*#__PURE__*/React.createElement("strong", null, uiJoker.group), " (group)"), isTriple && /*#__PURE__*/React.createElement("span", {
+  }, uiJoker.team && /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement(Flag, {
+    team: uiJoker.team,
+    size: 13
+  }), " ", /*#__PURE__*/React.createElement("strong", null, uiJoker.team), " (team)", uiJoker.group ? ' · ' : ''), uiJoker.group && /*#__PURE__*/React.createElement("span", null, "Group ", /*#__PURE__*/React.createElement("strong", null, uiJoker.group), " (group)"), isTriple && /*#__PURE__*/React.createElement("span", {
     style: {
       marginLeft: 8,
       fontSize: 11,
@@ -3298,7 +3312,10 @@ const PredictionsView = ({
       color: 'var(--ink-soft)',
       marginTop: 4
     }
-  }, TEAM_FLAGS[uiJoker.team], " plays in ", /*#__PURE__*/React.createElement("strong", null, "Group ", uiJTeamGroup))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Flag, {
+    team: uiJoker.team,
+    size: 13
+  }), " plays in ", /*#__PURE__*/React.createElement("strong", null, "Group ", uiJTeamGroup))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "micro-caps",
     style: {
       marginBottom: 6
@@ -3335,7 +3352,10 @@ const PredictionsView = ({
       fontWeight: 600,
       color: isTriple ? 'var(--burgundy)' : 'var(--amber)'
     }
-  }, isTriple ? `🃏 TRIPLE: ${uiJoker.team} matches score 3×` : `${uiJoker.team ? `${TEAM_FLAGS[uiJoker.team] || ''} ${uiJoker.team} matches → 2×` : ''} ${uiJoker.group ? `All Group ${uiJoker.group} matches → 2×` : ''}`), /*#__PURE__*/React.createElement("div", {
+  }, isTriple ? `🃏 TRIPLE: ${uiJoker.team} matches score 3×` : null, !isTriple && uiJoker.team && /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement(Flag, {
+    team: uiJoker.team,
+    size: 12
+  }), " ", uiJoker.team, " → 2×", uiJoker.group ? ` · Group ${uiJoker.group} → 2×` : ''), !isTriple && !uiJoker.team && uiJoker.group && `Group ${uiJoker.group} → 2×`), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--ink-soft)',
@@ -4733,11 +4753,10 @@ const BonusView = ({
         fontSize: 12,
         color: 'var(--ink-soft)'
       }
-    }, "Actual:"), isTeam && TEAM_FLAGS[actual] && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 16
-      }
-    }, TEAM_FLAGS[actual]), /*#__PURE__*/React.createElement("span", {
+    }, "Actual:"), isTeam && TEAM_FLAGS[actual] && /*#__PURE__*/React.createElement(Flag, {
+      team: actual,
+      size: 16
+    }), /*#__PURE__*/React.createElement("span", {
       style: {
         fontWeight: 700,
         color: correct ? 'var(--forest)' : 'var(--ink)'
@@ -6957,7 +6976,10 @@ const BrowseView = React.memo(({
           fontWeight: 600,
           flex: 1
         }
-      }, e.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[e.team] || '⚽', " ", e.team), e.team && e.group && /*#__PURE__*/React.createElement("span", {
+      }, e.team && /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement(Flag, {
+        team: e.team,
+        size: 13
+      }), " ", e.team), e.team && e.group && /*#__PURE__*/React.createElement("span", {
         style: {
           color: 'var(--ink-soft)'
         }
@@ -11829,7 +11851,7 @@ const ShoutoutPanel = ({
   const speech = SPEECHES[mIdNum % SPEECHES.length];
   const generateText = () => {
     if (!actual || !homeTeam) return '';
-    const flag = t => TEAM_FLAGS[t] || '🏳';
+    const flag = () => ''; // flags not available in plain text (WhatsApp shoutout)
     const lines = [];
     lines.push(`⚽ *WC 2026 Match Shoutout — ${matchLabel}*`);
     lines.push(`${flag(homeTeam)} *${homeTeam}* ${ah}–${aa} *${awayTeam}* ${flag(awayTeam)}`);
@@ -12898,16 +12920,28 @@ const AdminView = ({
       }
     });
   };
-  const setKoPk = (mId, team) => onSave({
-    ...results,
-    ko: {
-      ...results.ko,
-      [mId]: {
-        ...results.ko?.[mId],
-        pkWinner: team
+  const setKoPk = (mId, team) => {
+    onSave({
+      ...results,
+      ko: {
+        ...results.ko,
+        [mId]: {
+          ...results.ko?.[mId],
+          pkWinner: team
+        }
       }
-    }
-  });
+    });
+    // Also write to dedicated isolated doc — immune to all daemon/snapshot writes
+    if (FB_ON && team) db.collection('wc26').doc('ko-pkwinners').get().then(snap => {
+      const existing = snap.exists ? JSON.parse(snap.data().value || '{}') : {};
+      db.collection('wc26').doc('ko-pkwinners').set({
+        value: JSON.stringify({
+          ...existing,
+          [mId]: team
+        })
+      }).catch(() => {});
+    }).catch(() => {});
+  };
   const setBonus = (k, v) => onSave({
     ...results,
     bonus: {
@@ -13814,7 +13848,10 @@ const AdminView = ({
         fontSize: 12,
         fontWeight: 600
       }
-    }, joker.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[joker.team] || '⚽', " ", joker.team), joker.team && joker.group && /*#__PURE__*/React.createElement("span", {
+    }, joker.team && /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement(Flag, {
+      team: joker.team,
+      size: 13
+    }), " ", joker.team), joker.team && joker.group && /*#__PURE__*/React.createElement("span", {
       style: {
         color: 'var(--ink-soft)'
       }
@@ -13867,7 +13904,10 @@ const AdminView = ({
         style: {
           fontSize: 12
         }
-      }, ej.team && /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[ej.team] || '⚽', " ", ej.team), ej.team && ej.group && /*#__PURE__*/React.createElement("span", {
+      }, ej.team && /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement(Flag, {
+        team: ej.team,
+        size: 13
+      }), " ", ej.team), ej.team && ej.group && /*#__PURE__*/React.createElement("span", {
         style: {
           color: 'var(--ink-soft)'
         }
@@ -19054,7 +19094,10 @@ const LiveMatchBanner = ({
         alignItems: 'center',
         gap: 5
       }
-    }, /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[h] || '⚽'), teamBtn(h), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement(Flag, {
+      team: h,
+      size: 14
+    }), teamBtn(h), /*#__PURE__*/React.createElement("span", {
       style: {
         fontFamily: 'monospace',
         fontWeight: 900,
@@ -19062,7 +19105,10 @@ const LiveMatchBanner = ({
         margin: '0 4px',
         fontSize: 15
       }
-    }, hs, "–", as_), teamBtn(a), /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[a] || '⚽'), statusLabel && /*#__PURE__*/React.createElement("span", {
+    }, hs, "–", as_), teamBtn(a), /*#__PURE__*/React.createElement(Flag, {
+      team: a,
+      size: 14
+    }), statusLabel && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 9,
         color: '#e74c3c',
@@ -19162,12 +19208,18 @@ const LiveMatchBanner = ({
           fontSize: 12,
           flexShrink: 0
         }
-      }, /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[h] || '⚽'), teamBtn(h), /*#__PURE__*/React.createElement("span", {
+      }, /*#__PURE__*/React.createElement(Flag, {
+        team: h,
+        size: 14
+      }), teamBtn(h), /*#__PURE__*/React.createElement("span", {
         style: {
           color: 'rgba(255,255,255,.5)',
           margin: '0 2px'
         }
-      }, "vs"), teamBtn(a), /*#__PURE__*/React.createElement("span", null, TEAM_FLAGS[a] || '⚽'), /*#__PURE__*/React.createElement(BannerCountdown, {
+      }, "vs"), teamBtn(a), /*#__PURE__*/React.createElement(Flag, {
+        team: a,
+        size: 14
+      }), /*#__PURE__*/React.createElement(BannerCountdown, {
         kickoffRaw: kickoffOf(m),
         displayTime: displayTime,
         isLocal: isLocal
@@ -21236,9 +21288,16 @@ function FireworksOverlay({
       fontSize: 26,
       fontWeight: 900,
       color: 'white',
-      marginTop: 4
+      marginTop: 4,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      justifyContent: 'center'
     }
-  }, notif.flag, " ", notif.team), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Flag, {
+    team: notif.team,
+    size: 28
+  }), notif.team), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 22,
       fontWeight: 700,
@@ -21433,6 +21492,7 @@ function App() {
     ko: {},
     bonus: {}
   }); // always mirrors results state — readable in async daemons
+  const knownPkWinnersRef = useRef({}); // one-way ratchet: {matchId:team} — NEVER cleared, only grows
   const [config, setConfig] = useState({
     locked: false
   });
@@ -21738,11 +21798,9 @@ function App() {
         if (scored) {
           if (hs > old.hs) setGoalNotif({
             team: h,
-            flag: TEAM_FLAGS[h] || '⚽',
             score: `${hs}–${as_}`
           });else if (as_ > old.as_) setGoalNotif({
             team: a,
-            flag: TEAM_FLAGS[a] || '⚽',
             score: `${hs}–${as_}`
           });
         }
@@ -22746,6 +22804,29 @@ function App() {
             ...pws
           }));
         }
+        // Load dedicated pkWinners doc and merge into results + ratchet
+        try {
+          const pkSnap = await fbTimeout(db.collection('wc26').doc('ko-pkwinners').get()).catch(() => null);
+          if (pkSnap?.exists) {
+            const pk = JSON.parse(pkSnap.data().value || '{}');
+            if (typeof pk === 'object') {
+              Object.keys(pk).forEach(id => {
+                if (pk[id]) knownPkWinnersRef.current[id] = pk[id];
+              });
+              if (vals['results'] && vals['results'].ko) {
+                Object.keys(pk).forEach(id => {
+                  vals['results'].ko[id] = {
+                    ...(vals['results'].ko[id] || {}),
+                    pkWinner: pk[id]
+                  };
+                });
+                setResults({
+                  ...vals['results']
+                });
+              }
+            }
+          }
+        } catch (_e) {}
         // Pins: load separately with auto-migration from plaintext → SHA-256
         try {
           const pinsSnap = await fbTimeout(db.collection('wc26').doc('pins').get()).catch(() => null);
@@ -23310,19 +23391,52 @@ function App() {
         if (Date.now() - lastWriteResultsRef.current < 10000) return; // 10s suppression — Firestore can deliver out-of-order delayed snapshots
         const res = parse(snap, null);
         if (res && typeof res === 'object') {
-          // NEVER let an incoming snapshot wipe pkWinner values we already have in memory
-          const currentKO = resultsRef.current?.ko || {};
-          Object.keys(currentKO).forEach(id => {
-            if (currentKO[id]?.pkWinner && res.ko && !res.ko[id]?.pkWinner) {
-              res.ko[id] = {
-                ...(res.ko[id] || {}),
-                pkWinner: currentKO[id].pkWinner
-              };
-            }
+          // Apply knownPkWinners ratchet — once a pkWinner is known it can NEVER be removed by any snapshot
+          const known = knownPkWinnersRef.current;
+          if (res.ko) Object.keys(res.ko).forEach(id => {
+            if (res.ko[id]?.pkWinner) known[id] = res.ko[id].pkWinner;
+          });
+          Object.keys(known).forEach(id => {
+            if (res.ko) res.ko[id] = {
+              ...(res.ko[id] || {}),
+              pkWinner: known[id]
+            };
           });
           setResults(res);
           lsSet('results', res);
         }
+      } catch (_e) {}
+    }, () => {});
+    // Subscribe to dedicated pkWinners doc — isolated from all daemon writes
+    const unsubPkWinners = db.collection('wc26').doc('ko-pkwinners').onSnapshot(snap => {
+      try {
+        if (!snap.exists) return;
+        const pk = JSON.parse(snap.data().value || '{}');
+        if (typeof pk !== 'object') return;
+        // Merge into ratchet and apply to current results state
+        const known = knownPkWinnersRef.current;
+        Object.keys(pk).forEach(id => {
+          if (pk[id]) known[id] = pk[id];
+        });
+        setResults(prev => {
+          if (!Object.keys(known).length) return prev;
+          const ko = {
+            ...(prev.ko || {})
+          };
+          Object.keys(known).forEach(id => {
+            ko[id] = {
+              ...(ko[id] || {}),
+              pkWinner: known[id]
+            };
+          });
+          const next = {
+            ...prev,
+            ko
+          };
+          resultsRef.current = next;
+          lsSet('results', next);
+          return next;
+        });
       } catch (_e) {}
     }, () => {});
     const unsubConfig = db.collection('wc26').doc('config').onSnapshot(snap => {
@@ -23347,6 +23461,7 @@ function App() {
       unsubParts();
       unsubPins();
       unsubResults();
+      unsubPkWinners();
       unsubConfig();
       unsubCredits();
     };
