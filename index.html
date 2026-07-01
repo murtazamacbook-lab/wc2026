@@ -114,7 +114,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260630-088'; // bump this on every deploy
+const APP_VERSION = 'v20260701-089'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -7245,6 +7245,9 @@ const CrowdView = React.memo(({
     for (let mId = 73; mId <= 104; mId++) {
       const bm = actualBracket[mId];
       if (!bm?.home || !bm?.away) continue;
+      // Only include upcoming matches (no result entered yet)
+      const actual = results.ko?.[mId];
+      if (actual && actual.h != null && actual.h !== '') continue;
       participants.forEach(p => {
         const pred = (allPredictions[p] || {}).ko?.[mId];
         if (!pred || pred.h == null || pred.h === '') return;
@@ -7256,7 +7259,7 @@ const CrowdView = React.memo(({
       });
     }
     return Object.entries(teamCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [actualBracket, participants, allPredictions]);
+  }, [actualBracket, participants, allPredictions, results.ko]);
 
   // Summary stats
   const totalMatches = matchStats.length;
@@ -7654,7 +7657,7 @@ const CrowdView = React.memo(({
     style: {
       marginBottom: 8
     }
-  }, "🏆 Most Backed To Win"), /*#__PURE__*/React.createElement("div", {
+  }, "🏆 Most Backed To Win — Upcoming Matches"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
