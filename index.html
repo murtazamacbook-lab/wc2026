@@ -114,7 +114,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260702-093'; // bump this on every deploy
+const APP_VERSION = 'v20260702-094'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -134,7 +134,17 @@ const lsSet = (key, val) => {
   } catch {}
 };
 // PIN security: SHA-256 hash using built-in Web Crypto (no deps, works in all modern browsers)
-const hashPin = async pin => {
+// hashPin: salted with username so same PIN hashes differently per user (rainbow table resistant)
+const hashPin = async (pin, username = '') => {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(username + '::' + String(pin) + '::wc26'));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return String(pin);
+  }
+};
+// hashPinLegacy: old unsalted hash — used only during migration at login
+const hashPinLegacy = async pin => {
   try {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -12600,7 +12610,7 @@ const AdminView = ({
       alert('Enter at least a 3-character PIN.');
       return;
     }
-    const hashedNewPin = await hashPin(newPin);
+    const hashedNewPin = await hashPin(newPin, n);
     const np = [...participants, n],
       npins = {
         ...userPins,
@@ -12722,7 +12732,7 @@ const AdminView = ({
     }
     const npins = {
       ...userPins,
-      [name]: await hashPin(pin)
+      [name]: await hashPin(pin, name)
     };
     setUserPins(npins);
     lsSet('pins', npins);
@@ -22886,14 +22896,15 @@ function App() {
             let finalPins = rawPins;
             if (needsMigration) {
               const migrated = {};
+              // Migrate plaintext PINs to salted SHA-256 (unsalted hashes stay as-is — migrate at login)
               await Promise.all(Object.entries(rawPins).map(async ([k, v]) => {
-                migrated[k] = isHashed(v) ? v : await hashPin(v);
+                migrated[k] = isHashed(v) ? v : await hashPin(v, k);
               }));
               finalPins = migrated;
               db.collection('wc26').doc('pins').set({
                 value: JSON.stringify(migrated)
               }).catch(() => {});
-              console.log('[pins] migrated', Object.keys(migrated).length, 'PINs to SHA-256');
+              console.log('[pins] migrated', Object.keys(migrated).length, 'PINs to salted SHA-256');
             }
             setUserPins(finalPins);
             lsSet('pins', finalPins);
@@ -23110,7 +23121,7 @@ function App() {
     const rawApprovePin = pendingUsers[name].pin;
     const newPins = {
       ...freshPins,
-      [name]: isHashed(rawApprovePin) ? rawApprovePin : await hashPin(rawApprovePin)
+      [name]: isHashed(rawApprovePin) ? rawApprovePin : await hashPin(rawApprovePin, name)
     };
     setParticipants(newParts);
     setUserPins(newPins);
@@ -23215,12 +23226,27 @@ function App() {
     if (existing) {
       const storedPin = userPins[resolvedName] || userPins[name];
       if (storedPin) {
-        const enteredHash = await hashPin(pin);
-        // Support both hashed (new) and plaintext (legacy pre-migration) PINs
-        const valid = isHashed(storedPin) ? enteredHash === storedPin : pin === storedPin;
-        if (!valid) {
+        const saltedHash = await hashPin(pin, resolvedName);
+        const legacyHash = await hashPinLegacy(pin);
+        // Support: salted hash (new), legacy unsalted hash, or plaintext (very old)
+        const validSalted = isHashed(storedPin) && saltedHash === storedPin;
+        const validLegacy = isHashed(storedPin) && legacyHash === storedPin;
+        const validPlain = !isHashed(storedPin) && pin === storedPin;
+        if (!validSalted && !validLegacy && !validPlain) {
           alert('Incorrect PIN. Try again.');
           return;
+        }
+        // Auto-migrate: if matched via legacy hash, re-save with salted hash transparently
+        if ((validLegacy || validPlain) && FB_ON) {
+          const migratedPins = {
+            ...userPins,
+            [resolvedName]: saltedHash
+          };
+          setUserPins(migratedPins);
+          lsSet('pins', migratedPins);
+          db.collection('wc26').doc('pins').set({
+            value: JSON.stringify(migratedPins)
+          }).catch(() => {});
         }
       }
     } else {
@@ -23235,7 +23261,7 @@ function App() {
         if (existingEntry?.status === 'pending') {
           // Use stored hashed PIN from pendingUsers (not raw entered pin)
           setPendingName(existingEntry.name);
-          setPendingPin(existingEntry.pin || (await hashPin(pin)));
+          setPendingPin(existingEntry.pin || (await hashPin(pin, resolvedName)));
           setPendingStatus('waiting');
           return;
         }
@@ -23250,7 +23276,7 @@ function App() {
           return;
         }
         // Submit new pending request — store hashed PIN
-        const hashedPendingPin = await hashPin(pin);
+        const hashedPendingPin = await hashPin(pin, resolvedName);
         const updated = {
           ...pendingUsers,
           [resolvedName]: {
@@ -23273,7 +23299,7 @@ function App() {
       finalParts = [...liveParticipants, name];
       const newPins = {
         ...livePins,
-        [name]: await hashPin(pin)
+        [name]: await hashPin(pin, name)
       };
       setParticipants(finalParts);
       setUserPins(newPins);
@@ -23623,7 +23649,7 @@ function App() {
         const finalParts = [...participants, pendingName];
         const newPins = {
           ...userPins,
-          [pendingName]: isHashed(pendingPin) ? pendingPin : await hashPin(pendingPin)
+          [pendingName]: isHashed(pendingPin) ? pendingPin : await hashPin(pendingPin, pendingName)
         };
         setParticipants(finalParts);
         setUserPins(newPins);
@@ -23821,11 +23847,12 @@ function App() {
     }
     const stored = userPins[currentUser];
     if (stored) {
-      const enteredHash = await hashPin(oldPin);
-      const valid = isHashed(stored) ? enteredHash === stored : oldPin === stored;
+      const enteredHash = await hashPin(oldPin, currentUser);
+      const legacyHash = await hashPinLegacy(oldPin);
+      const valid = isHashed(stored) ? enteredHash === stored || legacyHash === stored : oldPin === stored;
       if (!valid) return 'Current PIN is incorrect.';
     }
-    const newHash = await hashPin(newPin1.trim());
+    const newHash = await hashPin(newPin1.trim(), currentUser);
     const npins = {
       ...userPins,
       [currentUser]: newHash
