@@ -114,7 +114,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260702-095'; // bump this on every deploy
+const APP_VERSION = 'v20260702-096'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -10733,33 +10733,33 @@ const LiveDataView = React.memo(({
       const kb = parseKickoff(b.kickoff ?? b.datetime ?? b.date ?? b.matchDate ?? b.time ?? '');
       return (isNaN(ka) ? Infinity : ka) - (isNaN(kb) ? Infinity : kb);
     });
-    return /*#__PURE__*/React.createElement("div", {
-      className: "card fadein",
-      style: {
-        marginBottom: 12,
-        overflow: 'hidden',
-        borderColor: '#d4890a'
-      }
-    }, /*#__PURE__*/React.createElement(PanelHdr, {
-      bg: "#d4890a",
-      title: "📅 Upcoming Matches",
-      count: arr.length,
-      panelKey: "upcoming"
-    }), arr.length === 0 ? /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: 16,
-        textAlign: 'center',
-        color: 'var(--ink-soft)',
-        fontSize: 12,
-        fontStyle: 'italic'
-      }
-    }, "No upcoming matches found.") : /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))',
-        gap: 0
-      }
-    }, arr.map((m, i) => {
+    // Split into Today vs Tomorrow+
+    const localDateStr = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const todayStr = localDateStr(new Date());
+    const tomorrowStr = localDateStr(new Date(now + 86400000));
+    const todayGames = arr.filter(m => {
+      const {
+        date
+      } = formatMatchTime(m.kickoff ?? m.datetime ?? m.matchDate ?? m.date ?? m.time ?? '');
+      return date === 'Today';
+    });
+    const tomorrowGames = arr.filter(m => {
+      const {
+        date
+      } = formatMatchTime(m.kickoff ?? m.datetime ?? m.matchDate ?? m.date ?? m.time ?? '');
+      return date === 'Tomorrow';
+    });
+    const otherGames = arr.filter(m => {
+      const {
+        date
+      } = formatMatchTime(m.kickoff ?? m.datetime ?? m.matchDate ?? m.date ?? m.time ?? '');
+      return date !== 'Today' && date !== 'Tomorrow';
+    });
+    const MatchRow = ({
+      m,
+      i,
+      bg
+    }) => {
       const home = tn(m.home || m.homeTeam || m.home_team || m.team_home);
       const away = tn(m.away || m.awayTeam || m.away_team || m.team_away);
       const raw = m.kickoff ?? m.datetime ?? m.matchDate ?? m.date ?? m.time ?? '';
@@ -10770,25 +10770,15 @@ const LiveDataView = React.memo(({
       } = formatMatchTime(raw);
       const grp = m.group ?? m.round ?? '';
       return /*#__PURE__*/React.createElement("div", {
-        key: i,
         style: {
           display: 'flex',
           alignItems: 'center',
           gap: 8,
           padding: '10px 14px',
           borderBottom: '1px solid var(--line-soft)',
-          borderRight: '1px solid var(--line-soft)',
-          background: i % 2 === 0 ? 'var(--paper)' : 'var(--cream2)'
+          background: bg
         }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 11,
-          color: 'var(--ink-soft)',
-          minWidth: 18,
-          textAlign: 'right',
-          flexShrink: 0
-        }
-      }, i + 1), /*#__PURE__*/React.createElement("div", {
+      }, /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',
@@ -10823,19 +10813,18 @@ const LiveDataView = React.memo(({
           color: 'var(--amber)',
           whiteSpace: 'nowrap'
         }
-      }, time), date && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 9,
-          color: 'var(--ink-soft)',
-          whiteSpace: 'nowrap'
-        }
-      }, date, local ? ' 🕐' : ''), grp && /*#__PURE__*/React.createElement("span", {
+      }, time), grp && /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 9,
           color: 'var(--ink-soft)',
           fontWeight: 600
         }
-      }, grp)), /*#__PURE__*/React.createElement("div", {
+      }, grp), local && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 9,
+          color: 'var(--forest)'
+        }
+      }, "🕐 local")), /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',
@@ -10857,7 +10846,102 @@ const LiveDataView = React.memo(({
         team: away,
         size: 14
       })));
-    })));
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      className: "card fadein",
+      style: {
+        marginBottom: 12,
+        overflow: 'hidden',
+        borderColor: '#d4890a'
+      }
+    }, /*#__PURE__*/React.createElement(PanelHdr, {
+      bg: "#d4890a",
+      title: "📅 Upcoming Matches",
+      count: arr.length,
+      panelKey: "upcoming"
+    }), arr.length === 0 ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 16,
+        textAlign: 'center',
+        color: 'var(--ink-soft)',
+        fontSize: 12,
+        fontStyle: 'italic'
+      }
+    }, "No upcoming matches found.") : /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        borderRight: '2px solid var(--line)'
+      }
+    }, todayGames.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '5px 14px',
+        background: 'rgba(214,137,42,.1)',
+        borderBottom: '1px solid var(--line-soft)',
+        fontSize: 9,
+        fontWeight: 800,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: 'var(--amber)'
+      }
+    }, "📅 Today"), todayGames.map((m, i) => /*#__PURE__*/React.createElement(MatchRow, {
+      key: i,
+      m: m,
+      i: i,
+      bg: i % 2 === 0 ? 'var(--paper)' : 'var(--cream2)'
+    })), otherGames.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '5px 14px',
+        background: 'var(--cream2)',
+        borderBottom: '1px solid var(--line-soft)',
+        fontSize: 9,
+        fontWeight: 800,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: 'var(--ink-soft)'
+      }
+    }, "Later"), otherGames.map((m, i) => /*#__PURE__*/React.createElement(MatchRow, {
+      key: i,
+      m: m,
+      i: i,
+      bg: i % 2 === 0 ? 'var(--paper)' : 'var(--cream2)'
+    }))), todayGames.length === 0 && otherGames.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 16,
+        textAlign: 'center',
+        color: 'var(--ink-soft)',
+        fontSize: 11,
+        fontStyle: 'italic'
+      }
+    }, "No games today")), /*#__PURE__*/React.createElement("div", null, tomorrowGames.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '5px 14px',
+        background: 'rgba(52,152,219,.08)',
+        borderBottom: '1px solid var(--line-soft)',
+        fontSize: 9,
+        fontWeight: 800,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: '#2980b9'
+      }
+    }, "📅 Tomorrow"), tomorrowGames.map((m, i) => /*#__PURE__*/React.createElement(MatchRow, {
+      key: i,
+      m: m,
+      i: i,
+      bg: i % 2 === 0 ? 'var(--paper)' : 'var(--cream2)'
+    })), tomorrowGames.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 16,
+        textAlign: 'center',
+        color: 'var(--ink-soft)',
+        fontSize: 11,
+        fontStyle: 'italic'
+      }
+    }, "No games tomorrow"))));
   })(), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
