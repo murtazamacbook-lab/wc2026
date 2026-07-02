@@ -114,7 +114,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260702-091'; // bump this on every deploy
+const APP_VERSION = 'v20260702-093'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -10098,6 +10098,10 @@ const LiveDataView = React.memo(({
     setEspnPreview(null);
     try {
       if (isStandings) {
+        if (standingsLocked) {
+          alert('Standings are locked. Unlock first to overwrite.');
+          return;
+        }
         setLiveStandings(payload);
         const cEntry = {
           data: payload,
@@ -10216,7 +10220,7 @@ const LiveDataView = React.memo(({
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
-      maxWidth: 900,
+      maxWidth: 1300,
       margin: '0 auto',
       padding: '24px 16px'
     }
@@ -10702,7 +10706,15 @@ const LiveDataView = React.memo(({
         }
       }, grp));
     })))));
-  })(), liveData.results && (() => {
+  })(), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))',
+      gap: 12,
+      marginBottom: 14,
+      alignItems: 'start'
+    }
+  }, liveData.results && (() => {
     const all = flatten(liveData.results);
     // Filter to last 7 days
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -10740,7 +10752,6 @@ const LiveDataView = React.memo(({
     return /*#__PURE__*/React.createElement("div", {
       className: "card fadein",
       style: {
-        marginBottom: 14,
         overflow: 'hidden',
         borderColor: '#27ae60'
       }
@@ -10759,8 +10770,11 @@ const LiveDataView = React.memo(({
       }
     }, "No results in the last 7 days.") : /*#__PURE__*/React.createElement("div", {
       style: {
+        maxHeight: 340,
+        overflowY: 'auto',
         padding: '8px 14px 14px'
-      }
+      },
+      className: "scrollbar"
     }, sortedDates.map(dk => {
       const matches = byDate[dk];
       return /*#__PURE__*/React.createElement("div", {
@@ -10888,7 +10902,6 @@ const LiveDataView = React.memo(({
     return /*#__PURE__*/React.createElement("div", {
       className: "card fadein",
       style: {
-        marginBottom: 14,
         overflow: 'hidden',
         borderColor: '#d4890a'
       }
@@ -10908,7 +10921,7 @@ const LiveDataView = React.memo(({
     }, "No upcoming matches found.") : /*#__PURE__*/React.createElement("div", {
       style: {
         overflowX: 'auto',
-        maxHeight: 360,
+        maxHeight: 340,
         overflowY: 'auto'
       },
       className: "scrollbar"
@@ -10923,7 +10936,7 @@ const LiveDataView = React.memo(({
         background: 'var(--cream2)',
         borderBottom: '1px solid var(--line)'
       }
-    }, ['#', 'Home', 'Away', 'Kick-off (local)', 'Group'].map(h => /*#__PURE__*/React.createElement("th", {
+    }, ['#', 'Home', 'Away', 'Kick-off', 'Grp'].map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: {
         padding: '6px 8px',
@@ -11003,7 +11016,125 @@ const LiveDataView = React.memo(({
         }
       }, grp));
     })))));
-  })(), (liveStandings || standingsLoading) && /*#__PURE__*/React.createElement("div", {
+  })(), liveData.scorers && (() => {
+    const raw = flatten(liveData.scorers);
+    const cleanName = s => {
+      let n = String(s ?? '').trim();
+      while (n.length > 0 && (n.charCodeAt(0) === 123 || n.charCodeAt(0) === 34)) n = n.slice(1);
+      while (n.length > 0 && (n.charCodeAt(n.length - 1) === 125 || n.charCodeAt(n.length - 1) === 34)) n = n.slice(0, -1);
+      return n.replace(/\s+\d+\u0027?\s*$/, '').trim();
+    };
+    // Aggregate: group by player+team, sum goals
+    const map = new Map();
+    raw.forEach(p => {
+      const name = cleanName(p.player ?? p.playerName ?? p.name ?? p.fullName ?? '') || '-';
+      const team = tn(p.team ?? p.teamName ?? p.club ?? p.national_team ?? '');
+      const key = name + '|' + team;
+      const goals = Number(p.goals ?? p.goal ?? p.totalGoals ?? 1) || 1;
+      const assists = Number(p.assists ?? p.assist ?? 0) || 0;
+      if (map.has(key)) {
+        map.get(key).goals += goals;
+        map.get(key).assists += assists;
+        map.get(key).entries++;
+      } else map.set(key, {
+        name,
+        team,
+        goals,
+        assists,
+        entries: 1
+      });
+    });
+    const arr = [...map.values()].sort((a, b) => b.goals - a.goals || b.assists - a.assists);
+    return /*#__PURE__*/React.createElement("div", {
+      className: "card fadein",
+      style: {
+        overflow: 'hidden',
+        borderColor: '#6c3483'
+      }
+    }, /*#__PURE__*/React.createElement(PanelHdr, {
+      bg: "#6c3483",
+      title: "⚽ Top Goal Scorers",
+      count: arr.length,
+      panelKey: "scorers"
+    }), arr.length === 0 ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 16,
+        textAlign: 'center',
+        color: 'var(--ink-soft)',
+        fontSize: 12,
+        fontStyle: 'italic'
+      }
+    }, "No scorer data.") : /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: 'auto',
+        maxHeight: 340,
+        overflowY: 'auto'
+      },
+      className: "scrollbar"
+    }, /*#__PURE__*/React.createElement("table", {
+      style: {
+        width: '100%',
+        fontSize: 12,
+        borderCollapse: 'collapse'
+      }
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+      style: {
+        background: 'var(--cream2)',
+        borderBottom: '1px solid var(--line)'
+      }
+    }, ['#', 'Player', 'Team', '⚽', 'Ast'].map(h => /*#__PURE__*/React.createElement("th", {
+      key: h,
+      style: {
+        padding: '6px 8px',
+        fontWeight: 700,
+        fontSize: 10,
+        textAlign: h === '⚽' || h === 'Ast' || h === '#' ? 'center' : 'left',
+        color: 'var(--ink-soft)'
+      }
+    }, h)))), /*#__PURE__*/React.createElement("tbody", null, arr.map((p, i) => {
+      const medal = i === 0 ? '#d4af37' : i === 1 ? '#a8a9ad' : i === 2 ? '#cd7f32' : 'var(--ink-soft)';
+      return /*#__PURE__*/React.createElement("tr", {
+        key: i,
+        style: {
+          borderBottom: '1px solid var(--line-soft)',
+          background: i % 2 ? 'var(--cream2)' : ''
+        }
+      }, /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: '6px 8px',
+          textAlign: 'center',
+          fontWeight: 700,
+          color: medal
+        }
+      }, i + 1), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: '6px 8px',
+          fontWeight: 600
+        }
+      }, p.name), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: '6px 8px'
+        }
+      }, /*#__PURE__*/React.createElement(Flag, {
+        team: p.team,
+        size: 13
+      }), " ", p.team), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: '6px 8px',
+          textAlign: 'center',
+          fontWeight: 800,
+          color: 'var(--forest)',
+          fontSize: 15
+        }
+      }, p.goals), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: '6px 8px',
+          textAlign: 'center',
+          color: 'var(--ink-soft)'
+        }
+      }, p.assists || 0));
+    })))));
+  })()), (liveStandings || standingsLoading) && /*#__PURE__*/React.createElement("div", {
     className: "card fadein",
     style: {
       marginBottom: 14,
@@ -11161,126 +11292,7 @@ const LiveDataView = React.memo(({
         }
       }, t.points ?? t.pts ?? t.point ?? '—'));
     }))));
-  })))), liveData.scorers && (() => {
-    const raw = flatten(liveData.scorers);
-    const cleanName = s => {
-      let n = String(s ?? '').trim();
-      while (n.length > 0 && (n.charCodeAt(0) === 123 || n.charCodeAt(0) === 34)) n = n.slice(1);
-      while (n.length > 0 && (n.charCodeAt(n.length - 1) === 125 || n.charCodeAt(n.length - 1) === 34)) n = n.slice(0, -1);
-      return n.replace(/\s+\d+\u0027?\s*$/, '').trim();
-    };
-    // Aggregate: group by player+team, sum goals
-    const map = new Map();
-    raw.forEach(p => {
-      const name = cleanName(p.player ?? p.playerName ?? p.name ?? p.fullName ?? '') || '-';
-      const team = tn(p.team ?? p.teamName ?? p.club ?? p.national_team ?? '');
-      const key = name + '|' + team;
-      const goals = Number(p.goals ?? p.goal ?? p.totalGoals ?? 1) || 1;
-      const assists = Number(p.assists ?? p.assist ?? 0) || 0;
-      if (map.has(key)) {
-        map.get(key).goals += goals;
-        map.get(key).assists += assists;
-        map.get(key).entries++;
-      } else map.set(key, {
-        name,
-        team,
-        goals,
-        assists,
-        entries: 1
-      });
-    });
-    const arr = [...map.values()].sort((a, b) => b.goals - a.goals || b.assists - a.assists);
-    return /*#__PURE__*/React.createElement("div", {
-      className: "card fadein",
-      style: {
-        marginBottom: 14,
-        overflow: 'hidden',
-        borderColor: '#6c3483'
-      }
-    }, /*#__PURE__*/React.createElement(PanelHdr, {
-      bg: "#6c3483",
-      title: "⚽ Top Goal Scorers",
-      count: arr.length,
-      panelKey: "scorers"
-    }), arr.length === 0 ? /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: 16,
-        textAlign: 'center',
-        color: 'var(--ink-soft)',
-        fontSize: 12,
-        fontStyle: 'italic'
-      }
-    }, "No scorer data.") : /*#__PURE__*/React.createElement("div", {
-      style: {
-        overflowX: 'auto',
-        maxHeight: 400,
-        overflowY: 'auto'
-      },
-      className: "scrollbar"
-    }, /*#__PURE__*/React.createElement("table", {
-      style: {
-        width: '100%',
-        fontSize: 12,
-        borderCollapse: 'collapse'
-      }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
-      style: {
-        background: 'var(--cream2)',
-        borderBottom: '1px solid var(--line)'
-      }
-    }, ['#', 'Player', 'Team', 'Goals', 'Assists'].map(h => /*#__PURE__*/React.createElement("th", {
-      key: h,
-      style: {
-        padding: '6px 8px',
-        fontWeight: 700,
-        fontSize: 10,
-        textAlign: h === 'Goals' || h === 'Assists' || h === '#' ? 'center' : 'left',
-        color: 'var(--ink-soft)'
-      }
-    }, h)))), /*#__PURE__*/React.createElement("tbody", null, arr.map((p, i) => {
-      const medal = i === 0 ? '#d4af37' : i === 1 ? '#a8a9ad' : i === 2 ? '#cd7f32' : 'var(--ink-soft)';
-      return /*#__PURE__*/React.createElement("tr", {
-        key: i,
-        style: {
-          borderBottom: '1px solid var(--line-soft)',
-          background: i % 2 ? 'var(--cream2)' : ''
-        }
-      }, /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: '6px 8px',
-          textAlign: 'center',
-          fontWeight: 700,
-          color: medal
-        }
-      }, i + 1), /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: '6px 8px',
-          fontWeight: 600
-        }
-      }, p.name), /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: '6px 8px'
-        }
-      }, /*#__PURE__*/React.createElement(Flag, {
-        team: p.team,
-        size: 13
-      }), " ", p.team), /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: '6px 8px',
-          textAlign: 'center',
-          fontWeight: 800,
-          color: 'var(--forest)',
-          fontSize: 15
-        }
-      }, p.goals), /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: '6px 8px',
-          textAlign: 'center',
-          color: 'var(--ink-soft)'
-        }
-      }, p.assists || 0));
-    })))));
-  })());
+  })))));
 });
 
 // ── COMMENTARY PANEL (proper component — hooks must not be in IIFE) ──
@@ -21897,9 +21909,21 @@ function App() {
           points: r.Pts
         }));
       });
+      // Preserve the locked flag — never let an auto-push clear a manually set lock
+      let wasLocked = false;
+      try {
+        const existingSnap = FB_ON ? await db.collection('wc26').doc('live-cache-standings').get().catch(() => null) : null;
+        if (existingSnap?.exists) {
+          const ex = JSON.parse(existingSnap.data().value || '{}');
+          wasLocked = !!ex.locked;
+        }
+      } catch {}
       const cEntry = {
         data: standings,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        ...(wasLocked ? {
+          locked: true
+        } : {})
       };
       if (FB_ON) await storage.setJSON('live-cache-standings', cEntry, true);
       lsSet('live-cache-standings', cEntry);
