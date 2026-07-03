@@ -16265,9 +16265,7 @@ const AdminView = ({
       padding: '8px 12px',
       background: 'var(--cream2)',
       borderBottom: '1px solid var(--line)',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
+      position: 'relative',
       minWidth: 1000
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -16279,8 +16277,7 @@ const AdminView = ({
       fontWeight: 700,
       color: 'var(--ink-soft)',
       textTransform: 'uppercase',
-      letterSpacing: '.05em',
-      flex: 1
+      letterSpacing: '.05em'
     }
   }, /*#__PURE__*/React.createElement("span", null, "Name"), /*#__PURE__*/React.createElement("span", {
     style: {
@@ -16299,7 +16296,10 @@ const AdminView = ({
     disabled: refreshingUsers,
     title: "Reload user list from Firebase",
     style: {
-      flexShrink: 0,
+      position: 'absolute',
+      top: '50%',
+      right: 12,
+      transform: 'translateY(-50%)',
       background: 'none',
       border: '1px solid var(--line)',
       borderRadius: 4,
