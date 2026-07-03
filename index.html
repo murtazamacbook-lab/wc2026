@@ -12341,6 +12341,12 @@ const AdminView = ({
       const [parts, pins] = await Promise.all([storage.getShared('participants'), storage.getShared('pins')]);
       if (Array.isArray(parts)) setParticipants(parts);
       if (pins && typeof pins === 'object') setUserPins(pins);
+      // Also re-fetch pending-users so Account Created dates are current
+      if (FB_ON) {
+        const pendingSnap = await db.collection('wc26').doc('pending-users').get();
+        const data = pendingSnap.exists ? JSON.parse(pendingSnap.data().value || '{}') : {};
+        setPendingUsers(data);
+      }
     } catch (_e) {}
     setRefreshingUsers(false);
   };
@@ -16263,6 +16269,7 @@ const AdminView = ({
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '8px 12px',
+      paddingRight: 105,
       background: 'var(--cream2)',
       borderBottom: '1px solid var(--line)',
       position: 'relative',
@@ -16603,7 +16610,9 @@ const AdminView = ({
         lineHeight: 1.4
       }
     }, (() => {
-      const pu = pendingUsers?.[s.name];
+      // Case-insensitive lookup in case name casing differs
+      const puKey = Object.keys(pendingUsers || {}).find(k => k.toLowerCase() === s.name.toLowerCase());
+      const pu = puKey ? pendingUsers[puKey] : undefined;
       const ts = pu?.approvedAt || pu?.requestedAt || null;
       if (!ts) return /*#__PURE__*/React.createElement("span", {
         style: {
