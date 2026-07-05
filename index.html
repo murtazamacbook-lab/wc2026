@@ -253,15 +253,15 @@
   }[t]||t);
 
   const FIFA_RANKINGS = {
-    'France':1,'Spain':2,'Argentina':3,'England':4,'Portugal':5,'Brazil':6,
-    'Netherlands':7,'Morocco':8,'Belgium':9,'Germany':10,'Croatia':11,
-    'Colombia':13,'Senegal':14,'Mexico':15,'United States':16,'Uruguay':17,
-    'Japan':18,'Switzerland':19,'Iran':21,'Turkiye':22,'Ecuador':23,'Austria':24,
-    'South Korea':25,'Australia':27,'Algeria':28,'Egypt':29,'Canada':30,
-    'Norway':31,'Panama':33,'Ivory Coast':34,'Sweden':38,'Paraguay':40,
-    'Czech Republic':41,'Scotland':43,'Tunisia':44,'DR Congo':46,'Uzbekistan':50,
-    'Qatar':55,'Iraq':57,'South Africa':60,'Saudi Arabia':61,'Jordan':63,
-    'Bosnia & Herz.':65,'Cape Verde':69,'Ghana':74,'Curacao':82,'Haiti':83,'New Zealand':85,
+    'France':1,'Argentina':2,'Spain':3,'England':4,'Brazil':5,'Morocco':6,
+    'Portugal':7,'Netherlands':8,'Belgium':9,'Mexico':10,'Germany':11,'Italy':12,
+    'Croatia':13,'Japan':14,'United States':16,'Senegal':17,'Switzerland':18,'Colombia':19,
+    'Uruguay':20,'South Korea':21,'Denmark':22,'Austria':23,'Australia':24,
+    'Ecuador':25,'Canada':26,'Norway':29,'Ivory Coast':30,'Panama':32,
+    'Sweden':36,'Paraguay':38,'Czech Republic':41,'Scotland':43,'Tunisia':44,
+    'Algeria':39,'Egypt':38,'Ghana':31,'Qatar':32,'Saudi Arabia':34,'South Africa':37,
+    'Iran':36,'DR Congo':46,'Uzbekistan':50,'Iraq':57,'Jordan':63,
+    'Bosnia & Herz.':65,'Cape Verde':69,'Curacao':82,'Haiti':83,'New Zealand':85,
   };
 
   // Maps FIFA WC 2026 Live Data API team names → app team names
@@ -8569,11 +8569,25 @@
     const prevLiveScoresRef=useRef(new Map());
     const[liveMatches,setLiveMatches]=useState([]); // live + today's upcoming matches
     const[manualLiveRows,setManualLiveRows]=useState([]); // admin manual override rows
+    const[rankingsLoaded,setRankingsLoaded]=useState(false); // triggers re-render after live rankings load
     const[liveLoading,setLiveLoading]=useState(false);
     const[jumpToGroup,setJumpToGroup]=useState(null); // group letter to jump to in PredictionsView
     // Tick every 30 s so lockedMatchIds recomputes near kickoff even if liveMatches hasn't changed
     const[nowMs,setNowMs]=useState(()=>Date.now());
     useEffect(()=>{ const t=setInterval(()=>{ if(document.visibilityState!=='hidden') setNowMs(Date.now()); },30000); return()=>clearInterval(t); },[]);
+
+    // Fetch live FIFA rankings from Vercel API route (server-side proxy, no CORS)
+    useEffect(()=>{
+      fetch('/api/rankings')
+        .then(r=>r.json())
+        .then(({rankings})=>{
+          if(rankings&&typeof rankings==='object'&&Object.keys(rankings).length>=10){
+            Object.assign(FIFA_RANKINGS,rankings);
+            setRankingsLoaded(true);
+          }
+        })
+        .catch(()=>{}); // silently keep hardcoded fallback
+    },[]);
 
     // When config loads from Firestore and phase is 'ko', switch non-admin users to bracket
     const prevPhaseRef=useRef(null);
