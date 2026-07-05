@@ -2259,10 +2259,99 @@
   const HeritageView = () => (
     <div style={{maxWidth:960,margin:'0 auto',padding:'24px 16px'}}>
       <SectionHeader kicker="Event Details" title="Heritage" subtitle="History, venues, and tournament details."/>
-      <div className="card" style={{padding:48,textAlign:'center',color:'var(--ink-soft)',marginTop:16}}>
-        <div style={{fontSize:56,marginBottom:16}}>🏛️</div>
-        <div style={{fontSize:20,fontWeight:700,color:'var(--ink)',marginBottom:8}}>Heritage &amp; Event Details</div>
-        <div style={{fontSize:14}}>Content coming soon.</div>
+
+      {/* QF Thursday — Special Event Card */}
+      <div style={{marginTop:16,borderRadius:14,overflow:'hidden',background:'linear-gradient(135deg,#0f0c29,#302b63,#24243e)',color:'white',boxShadow:'0 8px 40px rgba(0,0,0,.4)',border:'1px solid rgba(255,255,255,.08)'}}>
+        {/* Header strip */}
+        <div style={{padding:'6px 20px',background:'linear-gradient(90deg,#003189,#C1272D)',fontSize:11,fontWeight:800,letterSpacing:'.12em',textTransform:'uppercase',color:'white',display:'flex',alignItems:'center',gap:8}}>
+          <span>⚡</span><span>Special Side Competition — Still Ongoing</span><span>⚡</span>
+        </div>
+        {/* Main content */}
+        <div style={{padding:'28px 28px 24px'}}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:16,marginBottom:20}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:'.1em',color:'rgba(255,255,255,.5)',textTransform:'uppercase',marginBottom:6}}>Quarter-Final Prediction Clash</div>
+              <h2 style={{fontSize:32,fontWeight:900,margin:0,letterSpacing:'-.02em',lineHeight:1.1}}>QF Thursday 🏆</h2>
+              <div style={{marginTop:8,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:13,color:'rgba(255,255,255,.75)'}}>🗓 Thu, Jul 9 2026 · 4:00 PM EDT</span>
+                <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:13,color:'rgba(255,255,255,.75)'}}>📍 Gillette Stadium, Foxborough MA</span>
+              </div>
+            </div>
+            {/* Live flag matchup */}
+            <div style={{display:'flex',alignItems:'center',gap:12,background:'rgba(255,255,255,.06)',borderRadius:12,padding:'12px 18px',border:'1px solid rgba(255,255,255,.1)'}}>
+              <div style={{textAlign:'center'}}>
+                <Flag team="France" size={36}/>
+                <div style={{fontSize:11,fontWeight:700,color:'#6b9fff',marginTop:4}}>France</div>
+                <div style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>FIFA #2</div>
+              </div>
+              <div style={{fontSize:22,fontWeight:900,color:'rgba(255,255,255,.3)',padding:'0 4px'}}>VS</div>
+              <div style={{textAlign:'center'}}>
+                <Flag team="Morocco" size={36}/>
+                <div style={{fontSize:11,fontWeight:700,color:'#ff8a80',marginTop:4}}>Morocco</div>
+                <div style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>FIFA #14</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Description */}
+          <p style={{fontSize:14,lineHeight:1.75,color:'rgba(255,255,255,.8)',margin:'0 0 20px',maxWidth:680}}>
+            Alongside the main WC26 pool, a dedicated <strong style={{color:'white'}}>Quarter-Final Thursday</strong> competition was launched for the France vs Morocco QF clash. 
+            Predict the exact scoreline, bonus outcomes, and react live as the match unfolds — with a real-time fan reaction feed, flying emojis, and a live leaderboard.
+            Same crew, bigger intensity. Pick your team. Cast your prediction. May the best fan win. 🔥
+          </p>
+
+          {/* Feature pills */}
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:22}}>
+            {[
+              ['⚽','Score Prediction'],
+              ['🎯','Exact Score Bonus'],
+              ['🏆','QF Winner Pick'],
+              ['⭐','Bonus Picks'],
+              ['🔴','Live Reactions'],
+              ['📊','Real-time Leaderboard'],
+              ['🃏','Goal Details'],
+            ].map(([icon,label])=>(
+              <span key={label} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,fontWeight:700,color:'rgba(255,255,255,.85)',background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.12)',borderRadius:20,padding:'4px 11px',letterSpacing:'.02em'}}>{icon} {label}</span>
+            ))}
+          </div>
+
+          {/* Stats row */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10,marginBottom:24}}>
+            {[
+              {icon:'🗓',label:'Match Date',val:'9 Jul 2026'},
+              {icon:'⏰',label:'Kickoff',val:'4:00 PM EDT'},
+              {icon:'🏟',label:'Venue',val:'Gillette Stadium'},
+              {icon:'🌍',label:'Round',val:'Quarter-Final'},
+              {icon:'🔒',label:'Deadline',val:'Kickoff'},
+              {icon:'🆓',label:'Entry',val:'Open to all'},
+            ].map(({icon,label,val})=>(
+              <div key={label} style={{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:8,padding:'10px 12px'}}>
+                <div style={{fontSize:16,marginBottom:3}}>{icon}</div>
+                <div style={{fontSize:10,color:'rgba(255,255,255,.45)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em'}}>{label}</div>
+                <div style={{fontSize:13,fontWeight:700,color:'white',marginTop:2}}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA button */}
+          <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <a href="https://qf-thursday.vercel.app/" target="_blank" rel="noopener noreferrer"
+              style={{display:'inline-flex',alignItems:'center',gap:8,padding:'12px 24px',borderRadius:10,
+                background:'linear-gradient(135deg,#003189,#1a5ccc)',color:'white',fontWeight:800,fontSize:14,
+                textDecoration:'none',letterSpacing:'.02em',boxShadow:'0 4px 20px rgba(0,49,137,.5)',
+                border:'1px solid rgba(255,255,255,.15)',transition:'opacity .15s'}}>
+              🚀 Join QF Thursday &nbsp;→
+            </a>
+            <span style={{fontSize:11,color:'rgba(255,255,255,.4)'}}>qf-thursday.vercel.app</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Placeholder for future heritage content */}
+      <div className="card" style={{padding:36,textAlign:'center',color:'var(--ink-soft)',marginTop:16}}>
+        <div style={{fontSize:40,marginBottom:12}}>🏛️</div>
+        <div style={{fontSize:16,fontWeight:700,color:'var(--ink)',marginBottom:6}}>Tournament Heritage &amp; Venue Details</div>
+        <div style={{fontSize:13}}>More content coming soon — venue history, host cities, and WC2026 facts.</div>
       </div>
     </div>
   );
@@ -4915,6 +5004,44 @@
         setJokerCopyStatus({ok:false,msg:`❌ Failed: ${e.message}`});
       }
     };
+    const [diagResult,setDiagResult]=useState(null);
+    const [diagRunning,setDiagRunning]=useState(false);
+    const handleDiagnose=async()=>{
+      if(!FB_ON){setDiagResult({error:'Firebase not available.'});return;}
+      setDiagRunning(true); setDiagResult(null);
+      try{
+        const [collSnap,partsSnap,pinsSnap,pendingSnap]=await Promise.all([
+          db.collection('wc26').get(),
+          db.collection('wc26').doc('participants').get(),
+          db.collection('wc26').doc('pins').get(),
+          db.collection('wc26').doc('pending-users').get(),
+        ]);
+        // Source A: pred-* docs
+        const predNames=new Set(collSnap.docs.map(d=>d.id).filter(id=>id.startsWith('pred-')).map(id=>id.slice(5)).filter(n=>n));
+        // Source B: participants list
+        const partsList=new Set(partsSnap.exists?JSON.parse(partsSnap.data().value||'[]'):[]);
+        // Source C: pins doc
+        const pinsObj=pinsSnap.exists?JSON.parse(pinsSnap.data().value||'{}'):{};
+        const pinNames=new Set(Object.keys(pinsObj));
+        // Source D: pending-users (approved)
+        const pendingObj=pendingSnap.exists?JSON.parse(pendingSnap.data().value||'{}'):{};
+        const approvedNames=new Set(Object.values(pendingObj).filter(p=>p.status==='approved').map(p=>p.name));
+        // Union of all known names
+        const allKnown=new Set([...predNames,...partsList,...pinNames,...approvedNames]);
+        const rows=[...allKnown].sort().map(name=>({
+          name,
+          inParts:partsList.has(name),
+          hasPred:predNames.has(name),
+          hasPin:pinNames.has(name),
+          inApproved:approvedNames.has(name),
+        }));
+        const missingFromParts=rows.filter(r=>!r.inParts);
+        setDiagResult({rows,missingFromParts,
+          counts:{parts:partsList.size,pred:predNames.size,pins:pinNames.size,approved:approvedNames.size,total:allKnown.size}
+        });
+      }catch(e){setDiagResult({error:e.message});}
+      setDiagRunning(false);
+    };
     const handleRebuildFromPreds=async()=>{
       if(!FB_ON){setRebuildLog('Firebase not available.');return;}
       setRebuilding(true); setRebuildLog('Scanning Firestore for pred-* documents…');
@@ -4934,6 +5061,7 @@
         setParticipants(merged);
         const added=merged.filter(n=>!currentParts.includes(n));
         setRebuildLog(`✅ Done! ${merged.length} total participants. Added back: ${added.length>0?added.join(', '):'none (already complete)'}`);
+        auditLog('REBUILD_PARTICIPANTS','participants',{before:currentParts.length,after:merged.length,added:added.join(', ')||'none'});
       }catch(e){setRebuildLog(`❌ Error: ${e.message}`);}
       setRebuilding(false);
     };
@@ -4961,6 +5089,7 @@
         ]);
         setParticipants(newParts); setUserPins(newPins);
         setRecoverLog(`✅ Recovered ${missing.length} user(s): ${missing.map(p=>p.name).join(', ')}`);
+        auditLog('RECOVER_APPROVED_USERS','participants',{recovered:missing.length,names:missing.map(p=>p.name).join(', ')});
       }catch(e){ setRecoverLog(`❌ Error: ${e.message}`); }
       setRecovering(false);
     };
@@ -5258,6 +5387,7 @@
       const updatedPending={...pendingUsers,[n]:{name:n,pin:hashedNewPin,requestedAt:Date.now(),status:'approved',approvedBy:'Admin (manual)',approvedAt:Date.now()}};
       setPendingUsers(updatedPending);
       if(FB_ON) db.collection('wc26').doc('pending-users').set({value:JSON.stringify(updatedPending)}).catch(()=>{});
+      auditLog('ADD_USER',n,{addedBy:adminRole,totalAfter:np.length});
       setNewName('');setNewPin('');
     };
     const handleDeleteUser=async(name)=>{
@@ -5470,7 +5600,7 @@
             ['online',`🟢 Online (${Object.values(onlineUsers).filter(v=>{const ts=typeof v==='object'?v.ts:v;return ts&&Date.now()-ts<3*60*1000;}).length})`,true],
             ['settings','Settings',true],
             ['faq','❓ Admin FAQ',true],
-            ['audit','📋 Audit Log',isSuperAdmin||adminRole==='subadmin'],
+            ['audit','📋 Audit Log',isSuperAdmin],
             ['shoutout','📣 Shoutout',true],
             ['qa',`❓ Q&A${(qaItems||[]).filter(q=>!q.answer).length>0?' ('+((qaItems||[]).filter(q=>!q.answer).length)+')':''}`,true],
           ].filter(([,, allowed])=>allowed).map(([k,l])=>(
@@ -6454,8 +6584,8 @@
                 </div>
               );
             })()}
-            {/* Add user — superadmin and subadmin */}
-            {(isSuperAdmin||adminRole==='subadmin')&&(
+            {/* Add user — superadmin only */}
+            {isSuperAdmin&&(
             <div className="card" style={{padding:18,marginBottom:16,maxWidth:520}}>
               <div className="display" style={{fontWeight:700,fontSize:16,marginBottom:12}}>➕ Pre-register a User</div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,alignItems:'end'}}>
@@ -6469,6 +6599,67 @@
                 </div>
                 <button className="btn btn-green" onClick={handleAddUser} style={{whiteSpace:'nowrap'}}>Add User</button>
               </div>
+            </div>
+            )}
+            {/* Diagnose missing users */}
+            {isSuperAdmin&&(
+            <div className="card" style={{marginBottom:12,padding:'14px 16px',background:'rgba(142,68,173,.05)',borderColor:'rgba(142,68,173,.3)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                <div style={{flex:1,minWidth:200}}>
+                  <div style={{fontSize:13,fontWeight:700}}>🔍 Cross-Source User Audit</div>
+                  <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:2}}>Compares participants list vs <code>pred-*</code> docs, <code>pins</code> doc and <code>pending-users</code> to find anyone missing from the active list.</div>
+                </div>
+                <button onClick={handleDiagnose} disabled={diagRunning} style={{background:'#8e44ad',color:'white',border:'none',borderRadius:4,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',opacity:diagRunning?0.6:1}}>
+                  {diagRunning?'⏳ Scanning…':'🔍 Run Audit'}
+                </button>
+              </div>
+              {diagResult&&(diagResult.error
+                ?<div style={{marginTop:8,fontSize:12,color:'var(--burgundy)',fontWeight:600}}>❌ {diagResult.error}</div>
+                :<div style={{marginTop:10}}>
+                  {/* Summary counts */}
+                  <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                    {[
+                      ['Participants list',diagResult.counts.parts,'var(--forest)'],
+                      ['pred-* docs',diagResult.counts.pred,'#2980b9'],
+                      ['Pins doc',diagResult.counts.pins,'var(--amber)'],
+                      ['Approved',diagResult.counts.approved,'#8e44ad'],
+                      ['Total unique',diagResult.counts.total,'var(--ink)'],
+                    ].map(([l,v,c])=>(
+                      <div key={l} style={{background:'var(--cream2)',border:'1px solid var(--line)',borderRadius:6,padding:'4px 10px',fontSize:11}}>
+                        <span style={{color:'var(--ink-soft)'}}>{l}: </span><strong style={{color:c}}>{v}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Missing from participants */}
+                  {diagResult.missingFromParts.length===0
+                    ?<div style={{fontSize:12,color:'var(--forest)',fontWeight:600}}>✅ Everyone is in the participants list — no gaps found.</div>
+                    :<div>
+                      <div style={{fontSize:12,fontWeight:700,color:'var(--burgundy)',marginBottom:6}}>⚠️ {diagResult.missingFromParts.length} name(s) found in other sources but NOT in participants list:</div>
+                      <div style={{overflowX:'auto'}}>
+                        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                          <thead>
+                            <tr style={{background:'var(--cream2)'}}>
+                              {['Name','pred-* doc','Pin','Approved'].map(h=>(
+                                <th key={h} style={{padding:'4px 8px',textAlign:'left',fontWeight:700,borderBottom:'1px solid var(--line)',color:'var(--ink-soft)',letterSpacing:'.04em'}}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {diagResult.missingFromParts.map(r=>(
+                              <tr key={r.name} style={{borderBottom:'1px solid var(--line)'}}>
+                                <td style={{padding:'4px 8px',fontWeight:600}}>{r.name}</td>
+                                <td style={{padding:'4px 8px',color:r.hasPred?'var(--forest)':'var(--burgundy)'}}>{r.hasPred?'✅':'❌'}</td>
+                                <td style={{padding:'4px 8px',color:r.hasPin?'var(--forest)':'var(--burgundy)'}}>{r.hasPin?'✅':'❌'}</td>
+                                <td style={{padding:'4px 8px',color:r.inApproved?'var(--forest)':'var(--burgundy)'}}>{r.inApproved?'✅':'❌'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  }
+                </div>
+              )}
             </div>
             )}
             {/* Rebuild from pred-* docs */}
@@ -6492,9 +6683,12 @@
                 <div style={{fontSize:11,color:'var(--ink-soft)',marginTop:2}}>If approved users are missing from the list, click to re-sync them from the pending-users table in Firebase.</div>
                 {recoverLog&&<div style={{marginTop:6,fontSize:11,fontWeight:600,color:recoverLog.startsWith('✅')?'var(--forest)':recoverLog.startsWith('❌')?'var(--burgundy)':'var(--ink-soft)'}}>{recoverLog}</div>}
               </div>
-              <button onClick={handleRecoverApproved} disabled={recovering} style={{background:'var(--amber)',color:'white',border:'none',borderRadius:4,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',opacity:recovering?0.6:1}}>
-                {recovering?'⏳ Recovering…':'⚡ Recover Now'}
-              </button>
+              {isSuperAdmin
+                ?<button onClick={handleRecoverApproved} disabled={recovering} style={{background:'var(--amber)',color:'white',border:'none',borderRadius:4,padding:'8px 16px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',opacity:recovering?0.6:1}}>
+                  {recovering?'⏳ Recovering…':'⚡ Recover Now'}
+                </button>
+                :<span style={{fontSize:11,color:'var(--burgundy)',fontWeight:600}}>🔒 Super Admin only</span>
+              }
             </div>
             )}
             {(isSuperAdmin||adminRole==='subadmin')&&(
@@ -6855,6 +7049,7 @@
                     <button onClick={()=>doRestore('Match Results (group + KO)',async bk=>{
                       await db.collection('wc26').doc('results').set({value:JSON.stringify(bk.results||{})});
                       setResults(bk.results||{}); lsSet('results',bk.results||{});
+                      auditLog('RESTORE_RESULTS','results',{group:Object.keys((bk.results||{}).group||{}).length,ko:Object.keys((bk.results||{}).ko||{}).length});
                       alert(`✅ Results restored.\n${Object.keys((bk.results||{}).group||{}).length} group + ${Object.keys((bk.results||{}).ko||{}).length} KO results.`);
                     })} style={{padding:'9px 16px',borderRadius:6,border:'1px solid var(--amber)',background:'rgba(214,137,42,.08)',color:'var(--amber)',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
                       ♻️ Restore Match Results &nbsp;<span style={{fontWeight:400,fontSize:11}}>(group scores + KO scores)</span>
@@ -6867,6 +7062,7 @@
                       ]);
                       setParticipants(bk.participants||[]); lsSet('participants',bk.participants||[]);
                       setUserPins(bk.pins||{}); lsSet('pins',bk.pins||{});
+                      auditLog('RESTORE_PARTICIPANTS','participants',{count:(bk.participants||[]).length,names:(bk.participants||[]).join(', ')});
                       alert(`✅ Participants restored.\n${(bk.participants||[]).length} users.`);
                     })} style={{padding:'9px 16px',borderRadius:6,border:'1px solid var(--amber)',background:'rgba(214,137,42,.08)',color:'var(--amber)',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
                       ♻️ Restore Participants &amp; PINs &nbsp;<span style={{fontWeight:400,fontSize:11}}>(user list + passwords)</span>
@@ -6876,6 +7072,7 @@
                       const preds=bk.predictions||{};
                       await Promise.all(Object.entries(preds).map(([u,p])=>db.collection('wc26').doc(`pred-${u}`).set({value:JSON.stringify(p)})));
                       setAllPredictions(prev=>({...prev,...preds}));
+                      auditLog('RESTORE_PREDICTIONS','predictions',{users:Object.keys(preds).length});
                       alert(`✅ Predictions restored for ${Object.keys(preds).length} users.`);
                     })} style={{padding:'9px 16px',borderRadius:6,border:'1px solid var(--amber)',background:'rgba(214,137,42,.08)',color:'var(--amber)',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
                       ♻️ Restore User Predictions &nbsp;<span style={{fontWeight:400,fontSize:11}}>(all picks, jokers, bonus)</span>
@@ -6884,6 +7081,7 @@
                     <button onClick={()=>doRestore('App Config/Settings',async bk=>{
                       await db.collection('wc26').doc('config').set({value:JSON.stringify(bk.config||{})});
                       setConfig(bk.config||{}); lsSet('config',bk.config||{});
+                      auditLog('RESTORE_CONFIG','config',{});
                       alert('✅ Config/settings restored.');
                     })} style={{padding:'9px 16px',borderRadius:6,border:'1px solid var(--amber)',background:'rgba(214,137,42,.08)',color:'var(--amber)',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
                       ♻️ Restore Config/Settings &nbsp;<span style={{fontWeight:400,fontSize:11}}>(phase, locks, approval settings)</span>
@@ -6903,6 +7101,7 @@
                       setUserPins(bk.pins||{}); lsSet('pins',bk.pins||{});
                       setConfig(bk.config||{}); lsSet('config',bk.config||{});
                       setAllPredictions(prev=>({...prev,...preds}));
+                      auditLog('RESTORE_EVERYTHING','all',{users:(bk.participants||[]).length,groupResults:Object.keys((bk.results||{}).group||{}).length,predictions:Object.keys(preds).length});
                       alert(`✅ Full restore complete.\n${(bk.participants||[]).length} users · ${Object.keys((bk.results||{}).group||{}).length} group results · ${Object.keys(preds).length} prediction sets restored.`);
                     })} style={{padding:'9px 16px',borderRadius:6,border:'none',background:'var(--burgundy)',color:'white',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
                       ♻️ Restore EVERYTHING &nbsp;<span style={{fontWeight:400,fontSize:11}}>(results + users + predictions + settings)</span>
@@ -7077,7 +7276,7 @@
             ))}
           </div>
         )}
-        {section==='audit'&&(isSuperAdmin||adminRole==='subadmin')&&(
+        {section==='audit'&&isSuperAdmin&&(
           <div style={{marginTop:16,maxWidth:720}}>
             <div className="card" style={{padding:20,marginBottom:14,background:'linear-gradient(135deg,rgba(30,80,160,.04) 0%,var(--paper) 60%)'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
@@ -7100,23 +7299,52 @@
             )}
             {auditLogs.map(log=>{
               const d=new Date(log.ts);
-              const actionColors={RESET_PICKS:'#e67e22',DELETE_USER:'var(--burgundy)',JOKER_RESTORE:'var(--amber)',ADD_USER:'var(--forest)'};
-              const col=actionColors[log.action]||'var(--ink)';
+              const actionMeta={
+                RESET_PICKS:        {col:'#e67e22', label:'Reset Picks'},
+                PARTIAL_RESET_PICKS:{col:'#e67e22', label:'Partial Reset'},
+                DELETE_USER:        {col:'var(--burgundy)', label:'Delete User'},
+                ADD_USER:           {col:'var(--forest)', label:'Add User'},
+                APPROVE_USER:       {col:'#27ae60', label:'Approve User'},
+                REJECT_USER:        {col:'#c0392b', label:'Reject User'},
+                RESTORE_PARTICIPANTS:{col:'#c0392b', label:'⚠️ Restore Participants'},
+                RESTORE_EVERYTHING: {col:'#c0392b', label:'⚠️ Restore EVERYTHING'},
+                RESTORE_RESULTS:    {col:'#e67e22', label:'Restore Results'},
+                RESTORE_PREDICTIONS:{col:'#e67e22', label:'Restore Predictions'},
+                RESTORE_CONFIG:     {col:'#e67e22', label:'Restore Config'},
+                RESTORE_BACKUP:     {col:'var(--amber)', label:'Restore Backup'},
+                REBUILD_PARTICIPANTS:{col:'#2980b9', label:'Rebuild Participants'},
+                RECOVER_APPROVED_USERS:{col:'#2980b9', label:'Recover Users'},
+                JOKER_RESTORE:      {col:'var(--amber)', label:'Joker Restore'},
+                JOKER_BACKUP_RESTORE:{col:'var(--amber)', label:'Joker Backup Restore'},
+                JOKER_COPY:         {col:'var(--amber)', label:'Joker Copy'},
+                MERGE_ACCOUNT:      {col:'#8e44ad', label:'Merge Account'},
+              };
+              const meta=actionMeta[log.action]||{col:'var(--ink)',label:log.action};
+              const isDestructive=log.action.startsWith('RESTORE_')||log.action==='DELETE_USER'||log.action==='REBUILD_PARTICIPANTS';
               return(
-                <div key={log.id} style={{display:'grid',gridTemplateColumns:'120px 120px 1fr 1fr',gap:8,alignItems:'start',padding:'10px 14px',borderRadius:6,background:'var(--paper)',border:'1px solid var(--line)',marginBottom:6,fontSize:12}}>
+                <div key={log.id} style={{display:'grid',gridTemplateColumns:'100px 160px 1fr 1fr',gap:8,alignItems:'start',padding:'10px 14px',borderRadius:6,background:isDestructive?'rgba(192,57,43,.04)':'var(--paper)',border:`1px solid ${isDestructive?'rgba(192,57,43,.25)':'var(--line)'}`,marginBottom:6,fontSize:12}}>
                   <div style={{color:'var(--ink-soft)',lineHeight:1.4}}>
-                    <div>{d.toLocaleDateString([],{day:'2-digit',month:'short'})}</div>
-                    <div>{d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                    <div style={{fontWeight:600}}>{d.toLocaleDateString([],{day:'2-digit',month:'short',year:'numeric'})}</div>
+                    <div>{d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>
                   </div>
-                  <div style={{fontWeight:800,color:col,wordBreak:'break-word'}}>{log.action}</div>
+                  <div style={{fontWeight:800,color:meta.col,wordBreak:'break-word',fontSize:11}}>{meta.label}</div>
                   <div>
                     <div style={{fontWeight:700}}>{log.target}</div>
-                    <div style={{color:'var(--ink-soft)',fontSize:11}}>by {log.by}</div>
+                    <div style={{color:'var(--ink-soft)',fontSize:11}}>by <strong>{log.by||'unknown'}</strong>{log.role?` (${log.role})`:''}</div>
                   </div>
-                  <div style={{color:'var(--ink-soft)',wordBreak:'break-word'}}>
+                  <div style={{color:'var(--ink-soft)',wordBreak:'break-word',fontSize:11}}>
                     {log.action==='RESET_PICKS'&&`Was ${log.prevTotal||0} pts`}
-                    {log.action==='DELETE_USER'&&`Score was ${log.score||0} pts`}
-                    {log.action==='JOKER_RESTORE'&&`${log.team||''}${log.team&&log.group?' + ':''}${log.group?`Grp ${log.group}`:''} @ ${new Date(log.setAt||0).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}`}
+                    {log.action==='DELETE_USER'&&`Score: ${log.score||0} pts`}
+                    {log.action==='ADD_USER'&&`Total after: ${log.totalAfter||'?'}`}
+                    {log.action==='APPROVE_USER'&&`Total: ${log.totalParticipants||'?'}`}
+                    {log.action==='REBUILD_PARTICIPANTS'&&`${log.before||0}→${log.after||0} users. Added: ${log.added||'none'}`}
+                    {log.action==='RECOVER_APPROVED_USERS'&&`+${log.recovered||0}: ${log.names||''}`}
+                    {log.action==='RESTORE_PARTICIPANTS'&&`${log.count||0} users: ${(log.names||'').slice(0,80)}${(log.names||'').length>80?'…':''}`}
+                    {log.action==='RESTORE_EVERYTHING'&&`${log.users||0} users · ${log.groupResults||0} results · ${log.predictions||0} pred sets`}
+                    {log.action==='RESTORE_RESULTS'&&`${log.group||0} group + ${log.ko||0} KO`}
+                    {log.action==='RESTORE_PREDICTIONS'&&`${log.users||0} users`}
+                    {log.action==='MERGE_ACCOUNT'&&`into ${log.into||'?'}`}
+                    {log.action==='JOKER_RESTORE'&&`${log.team||''}${log.team&&log.group?' + ':''}${log.group?`Grp ${log.group}`:''}`}
                   </div>
                 </div>
               );
@@ -9314,13 +9542,15 @@
       await storage.setJSON('participants',newParts,true);
       await storage.setJSON('pins',newPins,true);
       await savePendingUsers(updated);
-    },[pendingUsers,participants,userPins,savePendingUsers]);
+      if(FB_ON) db.collection('wc26-audit').add({action:'APPROVE_USER',target:name,by:currentUser,role:approverLabel,ts:Date.now(),totalParticipants:newParts.length}).catch(()=>{});
+    },[pendingUsers,participants,userPins,savePendingUsers,currentUser]);
 
     const onRejectPending=useCallback(async(name,approverRole)=>{
       const approverLabel=approverRole==='superadmin'?'Super Admin':'Sub Admin';
       const updated={...pendingUsers,[name]:{...pendingUsers[name],status:'rejected',rejectedBy:approverLabel,rejectedAt:Date.now()}};
       await savePendingUsers(updated);
-    },[pendingUsers,savePendingUsers]);
+      if(FB_ON) db.collection('wc26-audit').add({action:'REJECT_USER',target:name,by:currentUser,role:approverLabel,ts:Date.now()}).catch(()=>{});
+    },[pendingUsers,savePendingUsers,currentUser]);
 
     const onForceRefreshUser=useCallback(async(name)=>{
       if(!FB_ON) return;
