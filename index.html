@@ -2354,8 +2354,8 @@
           <div style={{fontSize:17,fontWeight:800,color:'var(--ink)',marginBottom:14}}>📌 Match Facts</div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
             {[
-              {label:'France FIFA Rank',value:'#2',col:'#003189'},
-              {label:'Morocco FIFA Rank',value:'#14',col:'#C1272D'},
+              {label:'France FIFA Rank',value:`#${FIFA_RANKINGS['France']||1}`,col:'#003189'},
+              {label:'Morocco FIFA Rank',value:`#${FIFA_RANKINGS['Morocco']||6}`,col:'#C1272D'},
               {label:'Date',value:'Thu Jul 9, 2026',col:'var(--ink)'},
               {label:'Kickoff (EDT)',value:'4:00 PM',col:'var(--ink)'},
               {label:'Venue',value:'Gillette Stadium',col:'var(--ink)'},
