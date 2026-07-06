@@ -119,6 +119,26 @@
   // localStorage helpers (synchronous — instant)
   const lsGet = key => { try{ const v=localStorage.getItem(`wc26_${key}`); return v?JSON.parse(v):null; }catch{ return null; } };
   const lsSet = (key, val) => { try{ localStorage.setItem(`wc26_${key}`,JSON.stringify(val)); }catch{} };
+
+  // Safe Firestore participants write — refuses to shrink the list by more than allowed
+  // Prevents accidental wipe if localStorage is cleared and empty array gets pushed to Firestore
+  const safeWriteParticipants = async (newParts) => {
+    if(!FB_ON) return;
+    if(!Array.isArray(newParts)||newParts.length===0){
+      console.warn('[wc26] safeWriteParticipants: blocked empty write');
+      return;
+    }
+    try{
+      const snap=await fbTimeout(db.collection('wc26').doc('participants').get()).catch(()=>null);
+      const current=snap?.exists?JSON.parse(snap.data().value||'[]'):[];
+      // Never shrink by more than 2 in a single operation (allows deleting 1-2 users normally)
+      if(Array.isArray(current)&&current.length>2&&newParts.length<current.length-2){
+        console.warn(`[wc26] safeWriteParticipants: blocked shrink from ${current.length} → ${newParts.length}`);
+        return;
+      }
+      await db.collection('wc26').doc('participants').set({value:JSON.stringify(newParts)});
+    }catch(e){ console.warn('[wc26] safeWriteParticipants error:',e); }
+  };
   // PIN security: SHA-256 hash using built-in Web Crypto (no deps, works in all modern browsers)
   // hashPin: salted with username so same PIN hashes differently per user (rainbow table resistant)
   const hashPin = async (pin, username='') => { try{ const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(username+'::'+String(pin)+'::wc26')); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }catch{ return String(pin); } };
@@ -5087,7 +5107,7 @@
         const partsSnap=await db.collection('wc26').doc('participants').get();
         const currentParts=partsSnap.exists?JSON.parse(partsSnap.data().value||'[]'):[];
         const merged=[...new Set([...currentParts,...predNames])];
-        await db.collection('wc26').doc('participants').set({value:JSON.stringify(merged)});
+        await safeWriteParticipants(merged);
         setParticipants(merged);
         const added=merged.filter(n=>!currentParts.includes(n));
         setRebuildLog(`✅ Done! ${merged.length} total participants. Added back: ${added.length>0?added.join(', '):'none (already complete)'}`);
@@ -5114,7 +5134,7 @@
         const newPins={...currentPins};
         missing.forEach(p=>{ if(p.pin) newPins[p.name]=p.pin; });
         await Promise.all([
-          db.collection('wc26').doc('participants').set({value:JSON.stringify(newParts)}),
+          safeWriteParticipants(newParts),
           db.collection('wc26').doc('pins').set({value:JSON.stringify(newPins)}),
         ]);
         setParticipants(newParts); setUserPins(newPins);
@@ -5452,9 +5472,10 @@
           }catch(e){console.warn('[DELETE] cleanPending failed:',e);}
         };
         await Promise.all([
-          db.collection('wc26').doc('participants').set({value:JSON.stringify(np)}),
+          safeWriteParticipants(np),
           db.collection('wc26').doc('pins').set({value:JSON.stringify(npins)}),
           db.collection('wc26').doc(`pred-${name}`).delete().catch(()=>{}),
+
           cleanPending(),
         ]);
         console.log('[DELETE] Firestore writes done ✅');
@@ -6364,7 +6385,7 @@
                   setParticipants(np);setUserPins(npins);
                   const na={...allPredictions};delete na[mergeFrom];setAllPredictions(na);
                   await Promise.all([
-                    db.collection('wc26').doc('participants').set({value:JSON.stringify(np)}),
+                    safeWriteParticipants(np),
                     db.collection('wc26').doc('pins').set({value:JSON.stringify(npins)}),
                     db.collection('wc26').doc(`pred-${mergeFrom}`).delete().catch(()=>{}),
                   ]);
@@ -7087,7 +7108,7 @@
                     {/* Restore Participants */}
                     <button onClick={()=>doRestore('Participants list + PINs',async bk=>{
                       await Promise.all([
-                        db.collection('wc26').doc('participants').set({value:JSON.stringify(bk.participants||[])}),
+                        safeWriteParticipants(bk.participants||[]),
                         db.collection('wc26').doc('pins').set({value:JSON.stringify(bk.pins||{})}),
                       ]);
                       setParticipants(bk.participants||[]); lsSet('participants',bk.participants||[]);
@@ -7121,7 +7142,7 @@
                       const preds=bk.predictions||{};
                       await Promise.all([
                         db.collection('wc26').doc('results').set({value:JSON.stringify(bk.results||{})}),
-                        db.collection('wc26').doc('participants').set({value:JSON.stringify(bk.participants||[])}),
+                        safeWriteParticipants(bk.participants||[]),
                         db.collection('wc26').doc('pins').set({value:JSON.stringify(bk.pins||{})}),
                         db.collection('wc26').doc('config').set({value:JSON.stringify(bk.config||{})}),
                         ...Object.entries(preds).map(([u,p])=>db.collection('wc26').doc(`pred-${u}`).set({value:JSON.stringify(p)})),
@@ -9367,7 +9388,10 @@
         const cfg      = lsGet('config')||{locked:false};
         const pws      = lsGet('admin-pws')||{};
         if(pws.super||pws.sub) setAdminPws(p=>({...p,...pws}));
-        setParticipants(partList); setUserPins(pins); setResults(res); setConfig(cfg);
+        // Only seed participants from localStorage if it has actual data
+        // If empty (e.g. cleared by console), leave as [] and let Phase 2 (Firestore) fill it
+        if(partList.length>0){ setParticipants(partList); setUserPins(pins); }
+        setResults(res); setConfig(cfg);
         const all={};
         partList.forEach(p=>{ const d=lsGet(`pred-${p}`); if(d) all[p]=d; });
         setAllPredictions(all);
@@ -9709,7 +9733,7 @@
         lsSet('participants',finalParts); lsSet('pins',newPins);
         if(FB_ON){
           await Promise.all([
-            db.collection('wc26').doc('participants').set({value:JSON.stringify(finalParts)}).catch(()=>{}),
+            safeWriteParticipants(finalParts),
             db.collection('wc26').doc('pins').set({value:JSON.stringify(newPins)}).catch(()=>{})
           ]);
         }
@@ -9942,7 +9966,7 @@
           lsSet('participants',finalParts); lsSet('pins',newPins);
           if(FB_ON){
             await Promise.all([
-              db.collection('wc26').doc('participants').set({value:JSON.stringify(finalParts)}).catch(()=>{}),
+              safeWriteParticipants(finalParts),
               db.collection('wc26').doc('pins').set({value:JSON.stringify(newPins)}).catch(()=>{})
             ]);
           }
