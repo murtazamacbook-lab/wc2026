@@ -668,6 +668,59 @@ const teamShort = t => ({
   'Ivory Coast': 'I.Coast',
   'Cape Verde': 'C.Verde'
 })[t] || t;
+
+// Primary team colour (national kit/flag accent) — used to tint the whole
+// site background based on whichever team is most supported by the group.
+const TEAM_COLORS = {
+  'Mexico': '#006341',
+  'South Africa': '#007749',
+  'South Korea': '#C60C30',
+  'Czech Republic': '#D7141A',
+  'Canada': '#FF0000',
+  'Bosnia & Herz.': '#002664',
+  'Qatar': '#8D1B3D',
+  'Switzerland': '#D52B1E',
+  'Brazil': '#FFDF00',
+  'Morocco': '#C1272D',
+  'Haiti': '#00209F',
+  'Scotland': '#0065BD',
+  'United States': '#002868',
+  'Paraguay': '#DA121A',
+  'Australia': '#FFCD00',
+  'Turkiye': '#E30A17',
+  'Germany': '#000000',
+  'Curacao': '#002B7F',
+  'Ivory Coast': '#F77F00',
+  'Ecuador': '#FFDD00',
+  'Netherlands': '#FF4F00',
+  'Japan': '#003DA5',
+  'Sweden': '#FECC02',
+  'Tunisia': '#E70013',
+  'Belgium': '#ED2939',
+  'Egypt': '#CE1126',
+  'Iran': '#239F40',
+  'New Zealand': '#000000',
+  'Spain': '#C60B1E',
+  'Cape Verde': '#003893',
+  'Saudi Arabia': '#006C35',
+  'Uruguay': '#75AADB',
+  'France': '#0055A4',
+  'Senegal': '#00A651',
+  'Iraq': '#CE1126',
+  'Norway': '#EF2B2D',
+  'Argentina': '#75AADB',
+  'Algeria': '#006233',
+  'Austria': '#ED2939',
+  'Jordan': '#CE1126',
+  'Portugal': '#FF0000',
+  'DR Congo': '#009739',
+  'Uzbekistan': '#0099B5',
+  'Colombia': '#FCD116',
+  'England': '#CE1124',
+  'Croatia': '#FF0000',
+  'Ghana': '#FCD116',
+  'Panama': '#DA121A'
+};
 const FIFA_RANKINGS = {
   'France': 1,
   'Argentina': 2,
@@ -1537,13 +1590,13 @@ const useMobile = () => {
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
   *{box-sizing:border-box}
-  .app{--cream:#F5F1E8;--cream2:#EDE7D6;--paper:#FBF8F0;--ink:#1A1715;--ink-soft:#6B635B;--burgundy:#9F1B1B;--forest:#1B5E3F;--amber:#D6892A;--line:#DFDAD3;--line-soft:#EDE7D6;font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--paper);min-height:100vh;overflow-x:hidden}
-  /* KO round background themes — subtle gradient on html body */
-  .ko-r32{background:linear-gradient(160deg,#f0f4ff 0%,#FBF8F0 35%) !important}
-  .ko-r16{background:linear-gradient(160deg,#f0ebff 0%,#FBF8F0 35%) !important}
-  .ko-qf{background:linear-gradient(160deg,#fff4e8 0%,#FBF8F0 35%) !important}
-  .ko-sf{background:linear-gradient(160deg,#e8f8f0 0%,#FBF8F0 35%) !important}
-  .ko-final{background:linear-gradient(160deg,#fffbe8 0%,#FDF9EE 35%) !important}
+  .app{--cream:#F5F1E8;--cream2:#EDE7D6;--paper:#FBF8F0;--ink:#1A1715;--ink-soft:#6B635B;--burgundy:#9F1B1B;--forest:#1B5E3F;--amber:#D6892A;--line:#DFDAD3;--line-soft:#EDE7D6;--team-tint:#D6892A;font-family:'DM Sans',sans-serif;color:var(--ink);background:linear-gradient(160deg,color-mix(in srgb,var(--team-tint) 32%,var(--paper)) 0%,color-mix(in srgb,var(--team-tint) 8%,var(--paper)) 45%);transition:background 1.2s ease;min-height:100vh;overflow-x:hidden}
+  /* KO round background themes — gradient tinted by the most-supported team */
+  .ko-r32{background:linear-gradient(160deg,color-mix(in srgb,var(--team-tint) 36%,#f0f4ff) 0%,color-mix(in srgb,var(--team-tint) 10%,#FBF8F0) 35%) !important}
+  .ko-r16{background:linear-gradient(160deg,color-mix(in srgb,var(--team-tint) 36%,#f0ebff) 0%,color-mix(in srgb,var(--team-tint) 10%,#FBF8F0) 35%) !important}
+  .ko-qf{background:linear-gradient(160deg,color-mix(in srgb,var(--team-tint) 36%,#fff4e8) 0%,color-mix(in srgb,var(--team-tint) 10%,#FBF8F0) 35%) !important}
+  .ko-sf{background:linear-gradient(160deg,color-mix(in srgb,var(--team-tint) 36%,#e8f8f0) 0%,color-mix(in srgb,var(--team-tint) 10%,#FBF8F0) 35%) !important}
+  .ko-final{background:linear-gradient(160deg,color-mix(in srgb,var(--team-tint) 36%,#fffbe8) 0%,color-mix(in srgb,var(--team-tint) 10%,#FDF9EE) 35%) !important}
   .display{font-family:'Fraunces',serif}
   .mono{font-family:'JetBrains Mono',monospace}
   .micro-caps{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
@@ -7813,6 +7866,8 @@ const CrowdView = React.memo(({
         const crowdRight = predicted > 0 ? Math.round(correctResult / predicted * 100) : null;
         const maxVotes = Math.max(hWin, draw, aWin);
         const crowdPick = maxVotes === 0 ? null : hWin === maxVotes ? 'H' : aWin === maxVotes ? 'A' : 'D';
+        const consensusStrength = predicted > 0 ? maxVotes / predicted : 0;
+        const isUpset = hasResult && predicted >= 3 && crowdPick && crowdPick !== aRes && consensusStrength >= 0.5;
         return {
           mId,
           home: bm.home,
@@ -7828,7 +7883,8 @@ const CrowdView = React.memo(({
           aRes,
           crowdPick,
           crowdRight,
-          exactScore
+          exactScore,
+          isUpset
         };
       }).filter(Boolean);
       return {
@@ -7860,10 +7916,20 @@ const CrowdView = React.memo(({
     return Object.entries(teamCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [actualBracket, participants, allPredictions, results.ko]);
 
-  // Summary stats
-  const totalMatches = matchStats.length;
-  const totalUpsets = matchStats.filter(s => s.isUpset).length;
-  const avgAccuracy = totalMatches > 0 ? Math.round(matchStats.reduce((s, x) => s + x.crowdRight, 0) / totalMatches) : 0;
+  // Summary stats — once in KO phase, fold in completed knockout matches too,
+  // so "Matches / Avg Accuracy / Upsets" keep updating as R32/R16/QF/SF results
+  // come in instead of staying frozen at the group-stage snapshot.
+  const koScoredFlat = useMemo(() => koMatchStats.flatMap(r => r.matches.filter(x => x.hasResult)), [koMatchStats]);
+  const combinedStats = phase === 'ko' ? [...matchStats.map(s => ({
+    crowdRight: s.crowdRight,
+    isUpset: s.isUpset
+  })), ...koScoredFlat.map(x => ({
+    crowdRight: x.crowdRight || 0,
+    isUpset: x.isUpset
+  }))] : matchStats;
+  const totalMatches = combinedStats.length;
+  const totalUpsets = combinedStats.filter(s => s.isUpset).length;
+  const avgAccuracy = totalMatches > 0 ? Math.round(combinedStats.reduce((s, x) => s + x.crowdRight, 0) / totalMatches) : 0;
   // Highlights: prefer today's matches, fall back to yesterday, then all-time
   const now = Date.now();
   const toLocalDateStr = ms => new Date(ms).toLocaleDateString('sv'); // YYYY-MM-DD in local time
@@ -23039,6 +23105,42 @@ function App() {
     const id = getSupporterId();
     return supportByUser && id && supportByUser[id] || null;
   }, [supportByUser, getSupporterId]);
+  // "Most Backed To Win" — the crowd's #1 consensus pick to win upcoming KO matches.
+  // Drives the background tint only on the Fan Picks tab.
+  const mostBackedToWinTeam = useMemo(() => {
+    if (config.phase !== 'ko') return null;
+    const {
+      bracket: ab
+    } = buildActualBracket(results.group || {}, results.ko || {});
+    const teamCount = {};
+    for (let mId = 73; mId <= 104; mId++) {
+      const bm = ab[mId];
+      if (!bm?.home || !bm?.away) continue;
+      const actual = results.ko?.[mId];
+      if (actual && actual.h != null && actual.h !== '') continue; // only upcoming matches
+      participants.forEach(p => {
+        const pred = (allPredictions[p] || {}).ko?.[mId];
+        if (!pred || pred.h == null || pred.h === '') return;
+        const ph = parseInt(pred.h),
+          pa = parseInt(pred.a);
+        let winner = null;
+        if (ph > pa) winner = bm.home;else if (pa > ph) winner = bm.away;else if (pred.pk === bm.home || pred.pk === bm.away) winner = pred.pk;
+        if (winner) teamCount[winner] = (teamCount[winner] || 0) + 1;
+      });
+    }
+    let top = null,
+      max = 0;
+    Object.entries(teamCount).forEach(([t, c]) => {
+      if (c > max) {
+        max = c;
+        top = t;
+      }
+    });
+    return top;
+  }, [config.phase, results, participants, allPredictions]);
+  // Background tint: Fan Picks tab uses the crowd's "Most Backed To Win" team;
+  // every other page uses the current user's own supported team (flag they picked).
+  const teamTint = TEAM_COLORS[view === 'crowd' ? mostBackedToWinTeam : currentSupportTeam] || '#D6892A';
   const presenceSessionStart = useRef(Date.now()); // ignore events before this session
   const autoSyncRef = useRef(null); // interval id
   const POLL_INTERVAL_MS = 3600000; // poll every 1 hour
@@ -25375,7 +25477,10 @@ function App() {
     onClick: () => setView('leaderboard')
   }, "← Back")));
   return /*#__PURE__*/React.createElement("div", {
-    className: `app${koRoundClass ? ' ' + koRoundClass : ''}`
+    className: `app${koRoundClass ? ' ' + koRoundClass : ''}`,
+    style: {
+      '--team-tint': teamTint
+    }
   }, /*#__PURE__*/React.createElement("style", null, CSS), /*#__PURE__*/React.createElement(Header, {
     user: currentUser,
     onLogout: handleLogout,
