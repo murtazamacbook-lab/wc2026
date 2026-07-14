@@ -22718,12 +22718,16 @@ function App() {
   const lastEspnSnapshotRef = useRef(0); // ts of last fresh espn-cache push received via onSnapshot
   const espnFetchingRef = useRef(false); // prevent concurrent ESPN fetches on this client
   const lastCachedRef = useRef({}); // last parsed espn-cache object, kept current by onSnapshot
+  const liveMatchesRef = useRef([]); // kept in sync with liveMatches state, read by the auto-refresh interval without re-triggering that effect
   const [onlineUsers, setOnlineUsers] = useState({}); // name→lastSeen ms, for admin online panel
   const [supportByUser, setSupportByUser] = useState({});
   const [matchCommentary, setMatchCommentary] = useState({}); // matchId → {text,author,ts,matchLabel}
   const commentarySessionStart = useRef(Date.now());
   const prevLiveScoresRef = useRef(new Map());
   const [liveMatches, setLiveMatches] = useState([]); // live + today's upcoming matches
+  useEffect(() => {
+    liveMatchesRef.current = liveMatches;
+  }, [liveMatches]);
   const [manualLiveRows, setManualLiveRows] = useState([]); // admin manual override rows
   const [rankingsLoaded, setRankingsLoaded] = useState(false); // triggers re-render after live rankings load
   const [liveLoading, setLiveLoading] = useState(false);
@@ -23555,8 +23559,41 @@ function App() {
       // so the banner/venue/kickoff data doesn't stay stuck empty forever.
       if (!espnFetchingRef.current) fetchAndWrite(lastCachedRef.current);
     });
+    // Manual "↻" refresh button + adaptive polling — single source of truth (this used to be
+    // duplicated in a separate effect with its own copy of fetchAndWrite, which caused two
+    // independent timers/fetchers per browser tab to race against each other and repeatedly
+    // overwrite the shared Firestore cache with slightly different ESPN responses, producing
+    // the banner/bracket "flicker" where match details would appear then vanish.
+    const refreshIfStale = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (Date.now() - lastEspnSnapshotRef.current < CACHE_TTL) return; // onSnapshot delivered fresh data
+      if (espnFetchingRef.current) return;
+      fetchAndWrite(lastCachedRef.current);
+    };
+    window.__refreshBanner = refreshIfStale;
+    // Adaptive interval: 60s when a match is live or starting within 90min, else 10min
+    const getInterval = () => {
+      const now = Date.now();
+      const LIVE_RE = /^(1h|2h|ht|et|pen|live|in.?progress)$/i;
+      const matches = liveMatchesRef.current;
+      const hasLive = matches.some(m => LIVE_RE.test(m.status || m.matchStatus || m.state || ''));
+      const soonKickoff = matches.some(m => {
+        const ko = m.kickoff || m.datetime || m.date || null;
+        if (!ko) return false;
+        const koMs = new Date(ko).getTime();
+        return !isNaN(koMs) && koMs - now < 90 * 60 * 1000 && koMs > now;
+      });
+      return hasLive || soonKickoff ? 60000 : 600000; // 60s active, 10min idle
+    };
+    let intervalId = setInterval(function tick() {
+      refreshIfStale();
+      clearInterval(intervalId);
+      intervalId = setInterval(tick, getInterval());
+    }, getInterval());
     return () => {
       clearTimeout(noSnapshotTimer);
+      clearInterval(intervalId);
+      delete window.__refreshBanner;
       unsub();
     };
   }, []);
@@ -23636,232 +23673,6 @@ function App() {
       }).catch(() => {});
     }
   }, [supportByUser, getSupporterId]);
-
-  // ── BANNER AUTO-REFRESH timer (triggers ESPN fetch when onSnapshot cache stale) ──
-  // No Firestore reads — uses lastEspnSnapshotRef to check staleness from onSnapshot pushes.
-  useEffect(() => {
-    const ESPN_SB = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard`;
-    const CACHE_DOC = 'espn-cache';
-    const CACHE_TTL = 55000;
-    const espnToMatch = comp => {
-      const hC = comp.competitors?.find(c => c.homeAway === 'home');
-      const aC = comp.competitors?.find(c => c.homeAway === 'away');
-      if (!hC || !aC) return null;
-      const st = comp.status?.type || {};
-      const min = parseInt(comp.status?.displayClock) || 0;
-      let status = 'scheduled';
-      if (st.name === 'STATUS_FIRST_HALF') status = '1H';else if (st.name === 'STATUS_SECOND_HALF') status = '2H';else if (st.name === 'STATUS_HALFTIME' || st.name === 'STATUS_HALFTIME_BREAK') status = 'HT';else if (st.name === 'STATUS_EXTRA_TIME') status = 'ET';else if (st.name === 'STATUS_PENALTY') status = 'PEN';else if (st.name === 'STATUS_IN_PROGRESS' || st.name === 'STATUS_ACTIVE') status = min > 45 ? '2H' : '1H';else if (st.name === 'STATUS_FULL_TIME' || st.name === 'STATUS_FINAL' || st.completed) status = 'FT';
-      const venueName = comp.venue?.fullName || null;
-      const venueCity = comp.venue?.address?.city || null;
-      const venue = venueName ? venueCity ? `${venueName}, ${venueCity}` : venueName : venueCity || null;
-      return {
-        home: normTeam(hC.team?.displayName || ''),
-        away: normTeam(aC.team?.displayName || ''),
-        homeScore: hC.score ?? '',
-        awayScore: aC.score ?? '',
-        minute: min || '',
-        status,
-        kickoff: comp.date || null,
-        venue
-      };
-    };
-    const refreshBanner = async () => {
-      if (document.visibilityState === 'hidden') return;
-      if (Date.now() - lastEspnSnapshotRef.current < CACHE_TTL) return; // onSnapshot delivered fresh data
-      if (espnFetchingRef.current) return; // another fetch already in flight
-      espnFetchingRef.current = true;
-      // Write fetchingAt claim so other clients' onSnapshot sees it and skips their fetch.
-      // Spread lastCachedRef to preserve existing matches/ts fields in the value string.
-      if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
-        value: JSON.stringify({
-          ...lastCachedRef.current,
-          fetchingAt: Date.now()
-        })
-      }).catch(() => {});
-      try {
-        const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
-        const now = new Date();
-        const from = localDateStr(new Date(now.getTime() - 60 * 86400000));
-        const to = localDateStr(new Date(now.getTime() + 86400000));
-        // ESPN silently caps results at 100 events when no limit is given — explicit
-        // high limit ensures today's/upcoming matches aren't truncated out of the response.
-        const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}&limit=1000`).then(r => r.json()).catch(() => ({}));
-        const all = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
-        if (all.length > 0) {
-          setLiveMatches(all);
-          if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
-            value: JSON.stringify({
-              matches: all,
-              ts: Date.now(),
-              fetchingAt: 0
-            })
-          }).catch(() => {});
-          // Auto-import FT/PEN results into results.group + results.ko (ESPN as source of truth)
-          // ADMIN-ONLY: only superadmin/subadmin clients write results — regular users never touch Firestore results
-          if (FB_ON && (adminRoleRef.current === 'superadmin' || adminRoleRef.current === 'subadmin')) {
-            try {
-              const ftMatches = all.filter(m => (m.status === 'FT' || m.status === 'PEN') && m.homeScore !== '' && m.awayScore !== '');
-              if (ftMatches.length > 0) {
-                // ALWAYS capture current pkWinner values from memory FIRST — absolute safety net
-                const protectedPkWinners2 = {};
-                const memKOSnap2 = resultsRef.current?.ko || {};
-                Object.keys(memKOSnap2).forEach(id => {
-                  if (memKOSnap2[id]?.pkWinner) protectedPkWinners2[id] = memKOSnap2[id].pkWinner;
-                });
-                // Force server read to bypass Firestore local cache
-                const resSnap = await db.collection('wc26').doc('results').get({
-                  source: 'server'
-                }).catch(() => db.collection('wc26').doc('results').get().catch(() => null));
-                if (!resSnap || !resSnap.exists) return;
-                const stored = JSON.parse(resSnap.data().value || '{}');
-                // Merge any pkWinners from the server read into protected map
-                Object.keys(stored.ko || {}).forEach(id => {
-                  if (stored.ko[id]?.pkWinner) protectedPkWinners2[id] = stored.ko[id].pkWinner;
-                });
-                const storedGroupCount = Object.keys(stored.group || {}).length;
-                const newGR = {
-                  ...(stored.group || {})
-                };
-                const newKO = {
-                  ...(stored.ko || {})
-                };
-                let changed = 0;
-                const {
-                  bracket
-                } = buildActualBracket(stored.group || {}, stored.ko || {});
-                ftMatches.forEach(fm => {
-                  const gm = GROUP_MATCHES.find(m => m.home === fm.home && m.away === fm.away || m.home === fm.away && m.away === fm.home);
-                  if (gm) {
-                    if (gm.matchday < COMP_START_MATCHDAY) {
-                      return;
-                    }
-                    const swap = gm.home === fm.away;
-                    const nh = String(swap ? fm.awayScore : fm.homeScore);
-                    const na = String(swap ? fm.homeScore : fm.awayScore);
-                    const ex = newGR[gm.id];
-                    const hasResult = ex && ex.h !== '' && ex.h != null && ex.a !== '' && ex.a != null;
-                    if (!hasResult) {
-                      newGR[gm.id] = {
-                        h: nh,
-                        a: na,
-                        ...(fm.kickoff ? {
-                          kickoff: fm.kickoff
-                        } : {}),
-                        enteredAt: ex?.enteredAt || Date.now()
-                      };
-                      changed++;
-                    } else if (!ex.kickoff && fm.kickoff) {
-                      newGR[gm.id] = {
-                        ...ex,
-                        kickoff: fm.kickoff
-                      };
-                      changed++;
-                    }
-                    return;
-                  }
-                  const koId = Object.keys(bracket).map(Number).find(id => {
-                    const s = bracket[id];
-                    return s && s.home && s.away && (s.home === fm.home && s.away === fm.away || s.home === fm.away && s.away === fm.home);
-                  });
-                  if (!koId) return;
-                  const exKO = newKO[koId];
-                  const hasKOResult = exKO && exKO.h !== '' && exKO.h != null && exKO.a !== '' && exKO.a != null;
-                  if (!hasKOResult) {
-                    const swap = bracket[koId].home === fm.away;
-                    const nh = String(swap ? fm.awayScore : fm.homeScore);
-                    const na = String(swap ? fm.homeScore : fm.awayScore);
-                    const pkWinner = fm.status === 'PEN' ? swap ? fm.away : fm.home : undefined;
-                    newKO[koId] = {
-                      h: nh,
-                      a: na,
-                      ...(pkWinner ? {
-                        pkWinner
-                      } : {}),
-                      enteredAt: exKO?.enteredAt || Date.now()
-                    };
-                    changed++;
-                  }
-                });
-                if (Object.keys(newGR).length < storedGroupCount) return;
-                if (changed > 0) {
-                  // Force server read — bypass Firestore local cache
-                  const freshSnap2 = await db.collection('wc26').doc('results').get({
-                    source: 'server'
-                  }).catch(() => db.collection('wc26').doc('results').get().catch(() => null));
-                  const freshKO2 = freshSnap2?.exists ? JSON.parse(freshSnap2.data().value || '{}').ko || {} : {};
-                  Object.keys(freshKO2).forEach(id => {
-                    if (freshKO2[id]?.pkWinner) {
-                      newKO[id] = {
-                        ...(newKO[id] || {}),
-                        pkWinner: freshKO2[id].pkWinner
-                      };
-                    }
-                  });
-                  const memKO2 = resultsRef.current?.ko || {};
-                  Object.keys(memKO2).forEach(id => {
-                    if (memKO2[id]?.pkWinner) {
-                      newKO[id] = {
-                        ...(newKO[id] || {}),
-                        pkWinner: memKO2[id].pkWinner
-                      };
-                    }
-                  });
-                  // FINAL PASS: absolute protection — protected map captured at daemon start
-                  Object.keys(protectedPkWinners2).forEach(id => {
-                    newKO[id] = {
-                      ...(newKO[id] || {}),
-                      pkWinner: protectedPkWinners2[id]
-                    };
-                  });
-                  const newResults = {
-                    ...stored,
-                    group: newGR,
-                    ko: newKO
-                  };
-                  lastLocalWriteRef.current = Date.now();
-                  lastWriteResultsRef.current = Date.now();
-                  db.collection('wc26').doc('results').set({
-                    value: JSON.stringify(newResults)
-                  }).catch(() => {});
-                  setResults(newResults);
-                  lsSet('results', newResults);
-                  pushComputedStandings(newGR);
-                  pushComputedResults(newGR);
-                  autoFetchScorers();
-                }
-              }
-            } catch (_e) {}
-          }
-        }
-      } catch (_e) {}
-      espnFetchingRef.current = false;
-    };
-    window.__refreshBanner = refreshBanner;
-    // Adaptive interval: 60s when a match is live or starting within 90min, else 10min
-    const getInterval = () => {
-      const now = Date.now();
-      const LIVE_RE = /^(1h|2h|ht|et|pen|live|in.?progress)$/i;
-      const hasLive = liveMatches.some(m => LIVE_RE.test(m.status || m.matchStatus || m.state || ''));
-      const soonKickoff = liveMatches.some(m => {
-        const ko = m.kickoff || m.datetime || m.date || null;
-        if (!ko) return false;
-        const koMs = new Date(ko).getTime();
-        return !isNaN(koMs) && koMs - now < 90 * 60 * 1000 && koMs > now;
-      });
-      return hasLive || soonKickoff ? 60000 : 600000; // 60s active, 10min idle
-    };
-    let t = setInterval(refreshBanner, getInterval());
-    // Re-evaluate interval whenever liveMatches changes (handled by re-mount via dep)
-    const tick = () => {
-      refreshBanner();
-      clearInterval(t);
-      t = setInterval(tick, getInterval());
-    };
-    return () => {
-      clearInterval(t);
-      delete window.__refreshBanner;
-    };
-  }, [liveMatches]);
 
   // Set of GROUP_MATCHES IDs that are live or within 5 min of kickoff
   const lockedMatchIds = useMemo(() => {
