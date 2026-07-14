@@ -23335,7 +23335,10 @@ function App() {
         // Fetch 60-day lookback + 1 day ahead to cover full tournament
         const from = localDateStr(new Date(now.getTime() - 60 * 86400000));
         const to = localDateStr(new Date(now.getTime() + 86400000));
-        const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
+        // ESPN silently caps results at 100 events when no limit is given — a wide date
+        // range then truncates the response BEFORE today's/upcoming matches are reached.
+        // Explicit high limit ensures today's and future matches are always included.
+        const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}&limit=1000`).then(r => r.json()).catch(() => ({}));
         const matches = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
         if (matches.length > 0) {
           setLiveMatches(matches);
@@ -23520,8 +23523,16 @@ function App() {
       fetchAndWrite(null);
       return;
     }
+    // Fallback: if Firestore's onSnapshot hasn't delivered anything within 5s
+    // (e.g. WebChannel blocked/dropped by a corporate network, or an outage),
+    // fetch ESPN directly so the banner/bracket still populate.
+    let gotSnapshot = false;
+    const noSnapshotTimer = setTimeout(() => {
+      if (!gotSnapshot && !espnFetchingRef.current) fetchAndWrite(lastCachedRef.current);
+    }, 5000);
     // Subscribe to cache — fires immediately with current doc, then on every write
     const unsub = db.collection('wc26').doc(CACHE_DOC).onSnapshot(snap => {
+      gotSnapshot = true;
       try {
         if (!snap.exists) {
           if (!espnFetchingRef.current) fetchAndWrite(null);
@@ -23539,8 +23550,15 @@ function App() {
           fetchAndWrite(cached); // stale & unclaimed — this client fetches
         }
       } catch (_e) {}
-    }, () => {});
-    return () => unsub();
+    }, () => {
+      // Firestore listener errored (network blocked/dropped) — fall back to direct ESPN fetch
+      // so the banner/venue/kickoff data doesn't stay stuck empty forever.
+      if (!espnFetchingRef.current) fetchAndWrite(lastCachedRef.current);
+    });
+    return () => {
+      clearTimeout(noSnapshotTimer);
+      unsub();
+    };
   }, []);
 
   // ── SUPPORT WALL LISTENER ──────────────────────────────────────
@@ -23665,7 +23683,9 @@ function App() {
         const now = new Date();
         const from = localDateStr(new Date(now.getTime() - 60 * 86400000));
         const to = localDateStr(new Date(now.getTime() + 86400000));
-        const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
+        // ESPN silently caps results at 100 events when no limit is given — explicit
+        // high limit ensures today's/upcoming matches aren't truncated out of the response.
+        const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}&limit=1000`).then(r => r.json()).catch(() => ({}));
         const all = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
         if (all.length > 0) {
           setLiveMatches(all);
