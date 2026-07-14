@@ -213,7 +213,7 @@ window.addEventListener('error', e => {
   if (!e.filename || e.filename === '' || e.filename === 'null') e.preventDefault();
 });
 window.__wc26Errors = [];
-const APP_VERSION = 'v20260702-097'; // bump this on every deploy
+const APP_VERSION = 'v20260714-099'; // bump this on every deploy
 
 // ── STORAGE (Firebase + localStorage fallback) ──────────────────
 const fbTimeout = (promise, ms = 8000) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Firebase timeout')), ms))]);
@@ -24075,7 +24075,9 @@ function App() {
           return;
         }
         // Use individual kickoff from results if available, else matchday cutoff as last resort
-        const resultKickoff = results?.group?.[m.id]?.kickoff;
+        // Read via resultsRef (always fresh) — `results` state is stale inside this closure since
+        // savePredictions only recreates when currentUser changes, not when results updates.
+        const resultKickoff = resultsRef.current?.group?.[m.id]?.kickoff;
         const kickoffMs = resultKickoff ? new Date(resultKickoff).getTime() : null;
         const lockMs = kickoffMs || null; // only lock if we have a known kickoff
         if (!lockMs || nowTs <= lockMs) return; // unknown kickoff or not yet passed — allow
@@ -24092,8 +24094,10 @@ function App() {
         ...incoming
       };
       for (let mId = 73; mId <= 104; mId++) {
-        const resultEntered = results?.ko?.[mId] && results.ko[mId].h != null && results.ko[mId].h !== '';
-        const kickoffMs = results?.ko?.[mId]?.kickoff ? new Date(results.ko[mId].kickoff).getTime() : null;
+        // Read via resultsRef (always fresh) — see comment in sanitizeGroup above.
+        const liveKo = resultsRef.current?.ko?.[mId];
+        const resultEntered = liveKo && liveKo.h != null && liveKo.h !== '';
+        const kickoffMs = liveKo?.kickoff ? new Date(liveKo.kickoff).getTime() : null;
         const pastKickoff = kickoffMs && nowTs > kickoffMs;
         if (resultEntered || pastKickoff) {
           if (existing[mId] !== undefined) out[mId] = existing[mId];else delete out[mId];
