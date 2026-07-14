@@ -6943,8 +6943,10 @@ const BrowseView = React.memo(({
   allPredictions,
   results,
   kickoffTimes = new Map(),
-  phase = 'group'
+  phase = 'group',
+  adminRole = null
 }) => {
+  const isAdminView = adminRole === 'superadmin' || adminRole === 'subadmin';
   const [selected, setSelected] = useState(null);
   const isKo = phase === 'ko';
   const [groupOpen, setGroupOpen] = useState(!isKo);
@@ -7162,7 +7164,17 @@ const BrowseView = React.memo(({
           fontSize: 10,
           color: 'var(--ink-soft)'
         }
-      }, "(", a.h, "–", a.a, ")")), /*#__PURE__*/React.createElement("div", {
+      }, "(", a.h, "–", a.a, ")"), isAdminView && viewPreds.groupTs?.[m.id] && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 9,
+          color: 'var(--ink-soft)',
+          marginTop: 2
+        },
+        title: `Last edited ${new Date(viewPreds.groupTs[m.id]).toLocaleString()}`
+      }, "\u23F1 ", new Date(viewPreds.groupTs[m.id]).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      }))), /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',
@@ -7386,7 +7398,17 @@ const BrowseView = React.memo(({
             fontSize: 10,
             color: 'var(--ink-soft)'
           }
-        }, "(", actual.h, "–", actual.a, actual.pkWinner ? ` pk:${teamShort(actual.pkWinner)}` : '', ") ")), /*#__PURE__*/React.createElement("div", {
+        }, "(", actual.h, "–", actual.a, actual.pkWinner ? ` pk:${teamShort(actual.pkWinner)}` : '', ") "), isAdminView && viewPreds.koTs?.[mId] && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 9,
+            color: 'var(--ink-soft)',
+            marginTop: 2
+          },
+          title: `Last edited ${new Date(viewPreds.koTs[mId]).toLocaleString()}`
+        }, "\u23F1 ", new Date(viewPreds.koTs[mId]).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        }))), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
             alignItems: 'center',
@@ -24079,6 +24101,23 @@ function App() {
       }
       return out;
     };
+    // Audit trail: stamp a per-match "last edited" time whenever a pick's score actually changes,
+    // so admins can later prove whether/when a participant changed a prediction.
+    const diffTimestamps = (existingMap = {}, newMap = {}, prevTs = {}) => {
+      const ts = {
+        ...prevTs
+      };
+      Object.keys(newMap).forEach(id => {
+        const before = existingMap[id];
+        const after = newMap[id];
+        const afterH = after?.h;
+        if (afterH === '' || afterH == null) return; // no pick made — nothing to stamp
+        if (!before || before.h !== after.h || before.a !== after.a) {
+          ts[id] = nowTs;
+        }
+      });
+      return ts;
+    };
     setPredictions(newPreds);
     setSaveStatus('saving');
     // Merge with latest Firestore copy so a second tab/device can't clobber the other's changes.
@@ -24111,10 +24150,20 @@ function App() {
             jokerLockHistory: {
               ...(remote.jokerLockHistory || {}),
               ...(newPreds.jokerLockHistory || {})
-            }
+            },
+            groupTs: diffTimestamps(remote.group || {}, newPreds.group || {}, remote.groupTs || {}),
+            koTs: diffTimestamps(remote.ko || {}, newPreds.ko || {}, remote.koTs || {})
           };
         }
       } catch (_e) {/* network error — write what we have */}
+    }
+    if (!toWrite.groupTs && !toWrite.koTs) {
+      // FB off, or remote doc didn't exist yet — stamp against the last-known local predictions.
+      toWrite = {
+        ...toWrite,
+        groupTs: diffTimestamps(predictions.group || {}, newPreds.group || {}, predictions.groupTs || {}),
+        koTs: diffTimestamps(predictions.ko || {}, newPreds.ko || {}, predictions.koTs || {})
+      };
     }
     await storage.setJSON(`pred-${currentUser}`, toWrite, true);
     setPredictions(toWrite);
@@ -24132,7 +24181,7 @@ function App() {
     }).catch(() => {});
     setSaveStatus('saved');
     setTimeout(() => setSaveStatus(''), 2000);
-  }, [currentUser]);
+  }, [currentUser, predictions]);
   const saveResults = useCallback(async newRes => {
     lastLocalWriteRef.current = Date.now();
     lastWriteResultsRef.current = Date.now();
@@ -25533,7 +25582,8 @@ function App() {
     allPredictions: allPredictions,
     results: results,
     kickoffTimes: kickoffTimes,
-    phase: config.phase || 'group'
+    phase: config.phase || 'group',
+    adminRole: adminRole
   }))), /*#__PURE__*/React.createElement(LazyMount, {
     active: view === 'live'
   }, /*#__PURE__*/React.createElement(ViewErrorBoundary, {
