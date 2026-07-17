@@ -23332,9 +23332,12 @@ function App() {
       try {
         const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
         const now = new Date();
-        // Fetch 60-day lookback + 30 days ahead so upcoming fixtures (e.g. semis/final)
-        // get their real kickoff time + venue well before matchday, not just the day before.
-        const from = localDateStr(new Date(now.getTime() - 60 * 86400000));
+        // ESPN's scoreboard endpoint caps responses at ~100 events (sorted chronologically
+        // ascending), so a 60-day lookback ate the whole budget on already-finished
+        // matches and never reached the upcoming Final/3rd-place fixtures. Use a short
+        // lookback (recent results only) + 30 days ahead so upcoming fixtures get their
+        // real kickoff time + venue well before matchday.
+        const from = localDateStr(new Date(now.getTime() - 10 * 86400000));
         const to = localDateStr(new Date(now.getTime() + 30 * 86400000));
         const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
         const matches = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
@@ -23664,9 +23667,12 @@ function App() {
       try {
         const localDateStr = d => d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
         const now = new Date();
-        // Fetch 60-day lookback + 30 days ahead so upcoming fixtures (e.g. semis/final)
-        // get their real kickoff time + venue well before matchday, not just the day before.
-        const from = localDateStr(new Date(now.getTime() - 60 * 86400000));
+        // ESPN's scoreboard endpoint caps responses at ~100 events (sorted chronologically
+        // ascending), so a 60-day lookback ate the whole budget on already-finished
+        // matches and never reached the upcoming Final/3rd-place fixtures. Use a short
+        // lookback (recent results only) + 30 days ahead so upcoming fixtures get their
+        // real kickoff time + venue well before matchday.
+        const from = localDateStr(new Date(now.getTime() - 10 * 86400000));
         const to = localDateStr(new Date(now.getTime() + 30 * 86400000));
         const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
         const all = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
