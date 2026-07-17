@@ -808,6 +808,21 @@ const API_TEAM_MAP = {
 };
 const normTeam = n => n ? API_TEAM_MAP[n] || n : n;
 
+// Merges a freshly-fetched ESPN match list into the previously known one, keyed by
+// home|away team pair. Fresh data overwrites the same match (score/status/kickoff
+// updates flow through normally), but a match missing from THIS fetch (transient ESPN
+// hiccup, timezone edge-case on the date-range boundary, race between multiple clients
+// writing the shared cache, etc.) is NOT dropped — it stays "sticky" using its last
+// known data. This matters because lockedMatchIds/kickoffTimes/koVenues are derived
+// straight from this array on every render with no memory of their own: a match that
+// briefly disappears from a fetch would otherwise flicker to "unlocked" mid-game.
+const mergeLiveMatches = (prev, fresh) => {
+  const map = new Map();
+  (prev || []).forEach(m => map.set((m.home || '') + '|' + (m.away || ''), m));
+  (fresh || []).forEach(m => map.set((m.home || '') + '|' + (m.away || ''), m));
+  return Array.from(map.values());
+};
+
 // Parses various API datetime formats → local HH:MM + short date label
 const formatMatchTime = raw => {
   if (!raw) return {
@@ -23342,7 +23357,7 @@ function App() {
         const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
         const matches = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
         if (matches.length > 0) {
-          setLiveMatches(matches);
+          setLiveMatches(prev => mergeLiveMatches(prev, matches));
           setLiveLoading(false);
           // Write fresh cache — triggers onSnapshot push to all subscribed clients
           if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
@@ -23533,7 +23548,7 @@ function App() {
         }
         const cached = JSON.parse(snap.data().value || '{}');
         if (cached.matches && Array.isArray(cached.matches) && cached.matches.length > 0) {
-          setLiveMatches(cached.matches);
+          setLiveMatches(prev => mergeLiveMatches(prev, cached.matches));
           setLiveLoading(false);
         }
         lastCachedRef.current = cached; // always keep latest snapshot for refreshBanner claim writes
@@ -23677,7 +23692,7 @@ function App() {
         const espnData = await fetch(`${ESPN_SB}?dates=${from}-${to}`).then(r => r.json()).catch(() => ({}));
         const all = (espnData.events || []).map(ev => espnToMatch(ev.competitions?.[0])).filter(Boolean);
         if (all.length > 0) {
-          setLiveMatches(all);
+          setLiveMatches(prev => mergeLiveMatches(prev, all));
           if (FB_ON) db.collection('wc26').doc(CACHE_DOC).set({
             value: JSON.stringify({
               matches: all,
