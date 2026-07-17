@@ -1689,6 +1689,9 @@ const CSS = `
   @keyframes koCountPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
   @keyframes goldShimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}
   @keyframes goldGlow{0%,100%{box-shadow:0 0 6px rgba(255,215,0,.5)}50%{box-shadow:0 0 20px rgba(255,215,0,.9)}}
+  @keyframes flashPop{0%{opacity:0;transform:translateY(6px) scale(.97)}10%{opacity:1;transform:translateY(0) scale(1)}88%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-6px) scale(.97)}}
+  @keyframes sparkleFloat{0%,100%{transform:translateY(0) rotate(0deg);opacity:.5}50%{transform:translateY(-6px) rotate(15deg);opacity:1}}
+  @keyframes nameBounce{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-2px) scale(1.06)}}
   @keyframes koFadeIn{from{opacity:0;transform:translate(-50%,-50%) scale(.85)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
   @keyframes koFadeOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-50%) scale(1.08)}}
   @keyframes koRingPulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(2.4);opacity:0}}
@@ -21543,6 +21546,85 @@ const LeaderboardTicker = ({
   }, "🏆 LEADERBOARD"), renderItems('b')));
 };
 
+// ── SHARPSHOOTER FLASHBACK: rotating highlight reel of exact-score predictions ──
+const SharpshooterFlashback = ({
+  moments
+}) => {
+  const [idx, setIdx] = useState(0);
+  const list = moments || [];
+  useEffect(() => {
+    if (list.length < 2) return;
+    const t = setInterval(() => setIdx(i => (i + 1) % list.length), 4500);
+    return () => clearInterval(t);
+  }, [list.length]);
+  if (list.length === 0) return null;
+  const m = list[idx % list.length];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'linear-gradient(90deg,#1a1a2e,#2b2145,#1a1a2e)',
+      borderTop: '1px solid rgba(255,215,0,.3)',
+      borderBottom: '1px solid rgba(255,215,0,.3)',
+      padding: '8px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      fontWeight: 800,
+      color: '#ffd700',
+      letterSpacing: '.06em',
+      flexShrink: 0
+    }
+  }, "📸 SHARPSHOOTER FLASHBACK"), /*#__PURE__*/React.createElement("span", {
+    key: m.key,
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: 6,
+      animation: 'flashPop 4.5s ease',
+      color: 'white',
+      fontSize: 12.5,
+      fontWeight: 600
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: '#ffd700',
+      fontWeight: 800
+    }
+  }, m.user), /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: .85
+    }
+  }, "called it exact —"), /*#__PURE__*/React.createElement(Flag, {
+    team: m.home,
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", null, m.home), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: 'monospace',
+      fontWeight: 800,
+      color: '#ffd700'
+    }
+  }, m.hScore, "-", m.aScore), /*#__PURE__*/React.createElement(Flag, {
+    team: m.away,
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", null, m.away), /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: .65,
+      fontSize: 11
+    }
+  }, "(", m.round, ")"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13
+    }
+  }, "🎯")));
+};
+
 // ── CHANGE PIN MODAL ─────────────────────────────────────────────
 const ChangePinModal = ({
   onClose,
@@ -24225,6 +24307,68 @@ function App() {
     }).sort((a, b) => b.total - a.total);
   }, [participants, allPredictions, results, kickoffTimes, predsReady]);
 
+  // ── SHARPSHOOTER MOMENTS: every exact-score prediction, for the Flashback reel ──
+  const sharpshooterMoments = useMemo(() => {
+    if (!predsReady || participants.length === 0) return [];
+    const moments = [];
+    GROUP_MATCHES.forEach(m => {
+      const actual = results.group?.[m.id];
+      if (!actual || actual.h === '' || actual.a === '' || actual.h == null) return;
+      const ah = parseInt(actual.h),
+        aa = parseInt(actual.a);
+      if (isNaN(ah) || isNaN(aa)) return;
+      participants.forEach(p => {
+        const pred = allPredictions[p]?.group?.[m.id];
+        if (!pred || pred.h === '' || pred.h == null) return;
+        const ph = parseInt(pred.h),
+          pa = parseInt(pred.a);
+        if (ph === ah && pa === aa) {
+          moments.push({
+            key: `g-${m.id}-${p}`,
+            user: p,
+            home: m.home,
+            away: m.away,
+            hScore: ah,
+            aScore: aa,
+            round: `Matchday ${m.matchday}`
+          });
+        }
+      });
+    });
+    const {
+      bracket: actualDerived
+    } = buildActualBracket(results.group || {}, results.ko || {});
+    for (let mId = 73; mId <= 104; mId++) {
+      const actual = results.ko?.[mId];
+      if (!actual || actual.h === '' || actual.a === '' || actual.h == null) continue;
+      const am = actualDerived[mId];
+      if (!am?.home || !am?.away) continue;
+      const ah = parseInt(actual.h),
+        aa = parseInt(actual.a);
+      if (isNaN(ah) || isNaN(aa)) continue;
+      const rnd = mId <= 88 ? 'R32' : ROUND_FOR(mId);
+      const roundLabel = rnd === '3rd' ? '3rd Place Playoff' : rnd === 'Final' ? 'The Final' : rnd ? `${rnd} Knockouts` : 'Knockouts';
+      participants.forEach(p => {
+        const pred = allPredictions[p]?.ko?.[mId];
+        if (!pred || pred.h === '' || pred.h == null) return;
+        const ph = parseInt(pred.h),
+          pa = parseInt(pred.a);
+        if (ph === ah && pa === aa) {
+          moments.push({
+            key: `k-${mId}-${p}`,
+            user: p,
+            home: am.home,
+            away: am.away,
+            hScore: ah,
+            aScore: aa,
+            round: roundLabel
+          });
+        }
+      });
+    }
+    return moments;
+  }, [participants, allPredictions, results, predsReady]);
+
   // ── KICKOFF COUNTDOWN: watch kickoffTimes for last-15s window ─────
   useEffect(() => {
     if (!kickoffTimes.size) return;
@@ -25820,6 +25964,8 @@ function App() {
     info: finalMatchInfo
   }), view !== 'admin' && /*#__PURE__*/React.createElement(LeaderboardTicker, {
     scores: leaderboardTickerScores
+  }), view !== 'admin' && /*#__PURE__*/React.createElement(SharpshooterFlashback, {
+    moments: sharpshooterMoments
   }), phase === 'ko' && view !== 'admin' && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--paper, #FBF8F0)',
